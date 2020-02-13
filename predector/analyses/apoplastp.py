@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Dict
-from typing import Union, Optional
+from typing import Optional
 from typing import TextIO
 from typing import Iterator
 
@@ -25,25 +24,7 @@ class ApoplastP(Analysis):
         self.name = name
         self.prediction = prediction
         self.prob = prob
-
-    def as_dict(self) -> Dict[str, Union[str, int, float, bool, None]]:
-        return {k: getattr(self, k) for k in self.columns}
-
-    @classmethod
-    def from_dict(
-        cls,
-        d: Dict[str, Union[str, int, float, bool, None]]
-    ) -> "ApoplastP":
-        # assertions appease the typechecker
-        name = d["name"]
-        assert isinstance(name, str)
-
-        prediction = d["prediction"]
-        assert isinstance(prediction, str)
-
-        prob = d["prob"]
-        assert isinstance(prob, float)
-        return cls(name, prediction, prob)
+        return
 
     @classmethod
     def from_line(cls, line: str) -> "ApoplastP":

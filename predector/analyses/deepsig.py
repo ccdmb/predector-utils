@@ -5,6 +5,7 @@ from typing import TextIO
 from typing import Iterator
 
 from predector.analyses import Analysis
+from predector.analyses import int_or_none
 from predector.analyses.parsers import ParseError, LineParseError
 from predector.analyses.parsers import (
     parse_string_not_empty,
@@ -17,6 +18,9 @@ from predector.analyses.parsers import (
 class DeepSig(Analysis):
 
     """     """
+
+    columns = ["name", "str", "prediction", "prob", "cs_prob"]
+    types = [str, str, float, int_or_none]
 
     def __init__(
         self,

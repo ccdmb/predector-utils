@@ -9,7 +9,7 @@ from typing import List
 from predector.subcommands.r2js import cli as r2js_cli
 from predector.subcommands.r2js import runner as r2js_runner
 
-from predector.parsers import ParseError
+from predector.analyses.parsers import ParseError
 from predector.exceptions import (
     EXIT_VALID, EXIT_KEYBOARD, EXIT_UNKNOWN, EXIT_CLI, EXIT_INPUT_FORMAT,
     EXIT_INPUT_NOT_FOUND, EXIT_SYSERR, EXIT_CANT_OUTPUT

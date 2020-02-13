@@ -1,44 +1,46 @@
 #!/usr/bin/env python3
 
-class TMHMM(NamedTuple):
+from typing import Optional
+from typing import TextIO
+from typing import Iterator
+
+from predector.analyses import Analysis
+from predector.analyses.parsers import ParseError, LineParseError
+from predector.analyses.parsers import (
+    parse_string_not_empty,
+    parse_float,
+    parse_int,
+    split_at_eq,
+)
+
+
+class TMHMM(Analysis):
 
     """ .
     """
 
-    name: str
-    length: int
-    exp_aa: float
-    first_60: float
-    pred_hel: int
-    topology: str
+    columns = ["name", "length", "exp_aa", "first_60", "pred_hel", "topology"]
+    types = [str, int, float, float, int, str]
 
-    def as_dict(self) -> Dict[str, Union[str, int, float, bool]]:
-        return {k: getattr(self, k) for k in self._fields}
-
-    @classmethod
-    def from_dict(cls, d: Dict[str, Union[str, int, float, bool]]) -> "TMHMM":
-        # assertions appease the typechecker
-        name = d["name"]
-        assert isinstance(name, str)
-
-        length = d["length"]
-        assert isinstance(length, int)
-
-        exp_aa = d["exp_aa"]
-        assert isinstance(exp_aa, float)
-
-        first_60 = d["first_60"]
-        assert isinstance(first_60, float)
-
-        pred_hel = d["pred_hel"]
-        assert isinstance(pred_hel, int)
-
-        topology = d["topology"]
-        assert isinstance(topology, str)
-        return cls(name, length, exp_aa, first_60, pred_hel, topology)
+    def __init__(
+        self,
+        name: str,
+        length: int,
+        exp_aa: float,
+        first_60: float,
+        pred_hel: int,
+        topology: str,
+    ) -> None:
+        self.name = name
+        self.length = length
+        self.exp_aa = exp_aa
+        self.first_60 = first_60
+        self.pred_hel = pred_hel
+        self.topology = topology
+        return
 
     @classmethod
-    def from_short_line(cls, line: str) -> "TMHMM":
+    def from_line(cls, line: str) -> "TMHMM":
         """ Parse a tmhmm line as an object. """
 
         if line == "":
@@ -71,7 +73,7 @@ class TMHMM(NamedTuple):
         )
 
     @classmethod
-    def from_short_file(cls, handle: TextIO) -> Iterator["TMHMM"]:
+    def from_file(cls, handle: TextIO) -> Iterator["TMHMM"]:
         for i, line in enumerate(handle):
             sline = line.strip()
             if sline.startswith("#"):
@@ -80,7 +82,7 @@ class TMHMM(NamedTuple):
                 continue
 
             try:
-                yield cls.from_short_line(sline)
+                yield cls.from_line(sline)
 
             except LineParseError as e:
                 if hasattr(handle, "name"):
@@ -94,4 +96,3 @@ class TMHMM(NamedTuple):
                     e.message
                 )
         return
-

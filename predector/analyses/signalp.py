@@ -1,6 +1,26 @@
 #!/usr/bin/env python3
 
-class SignalP3NN(NamedTuple):
+import sys
+
+from typing import Optional
+from typing import TextIO
+from typing import Iterator
+
+from predector.analyses import Analysis
+from predector.analyses import str_or_none
+from predector.analyses.parsers import ParseError, LineParseError
+from predector.analyses.parsers import (
+    parse_string_not_empty,
+    parse_float,
+    parse_int,
+    parse_bool,
+    MULTISPACE_REGEX,
+    is_one_of,
+    is_value
+)
+
+
+class SignalP3NN(Analysis):
 
     """ For each organism class in SignalP; Eukaryote, Gram-negative and
     Gram-positive, two different neural networks are used, one for
@@ -50,78 +70,50 @@ class SignalP3NN(NamedTuple):
     h-region, and c-region of the signal peptide, if such one is found.
     """
 
-    name: str
-    cmax: float
-    cmax_pos: int
-    cmax_decision: bool
-    ymax: float
-    ymax_pos: int
-    ymax_decision: bool
-    smax: float
-    smax_pos: int
-    smax_decision: bool
-    smean: float
-    smean_decision: bool
-    d: float
-    d_decision: bool
+    columns = [
+        "name", "cmax", "cmax_pos", "cmax_decision", "ymax", "ymax_pos",
+        "ymax_decision", "smax", "smax_pos", "smax_decision", "smean",
+        "smean_decision", "d", "d_decision"
+    ]
 
-    def as_dict(self) -> Dict[str, Union[str, int, float, bool]]:
-        return {k: getattr(self, k) for k in self._fields}
+    types = [str, float, int, bool, float, int, bool, float, int,
+             bool, float, bool, float, bool]
 
-    @classmethod
-    def from_dict(
-        cls,
-        d: Dict[str, Union[str, int, float, bool]]
-    ) -> "SignalP3NN":
-        # assertions appease the typechecker
-        name = d["name"]
-        assert isinstance(name, str)
-
-        cmax = d["cmax"]
-        assert isinstance(cmax, float)
-
-        cmax_pos = d["cmax_pos"]
-        assert isinstance(cmax_pos, int)
-
-        cmax_decision = d["cmax_decision"]
-        assert isinstance(cmax_decision, bool)
-
-        ymax = d["ymax"]
-        assert isinstance(ymax, float)
-
-        ymax_pos = d["ymax_pos"]
-        assert isinstance(ymax_pos, int)
-
-        ymax_decision = d["ymax_decision"]
-        assert isinstance(ymax_decision, bool)
-
-        smax = d["smax"]
-        assert isinstance(smax, float)
-
-        smax_pos = d["smax_pos"]
-        assert isinstance(smax_pos, int)
-
-        smax_decision = d["smax_decision"]
-        assert isinstance(smax_decision, bool)
-
-        smean = d["smean"]
-        assert isinstance(smean, float)
-
-        smean_decision = d["smean_decision"]
-        assert isinstance(smean_decision, bool)
-
-        d_ = d["d"]
-        assert isinstance(d_, float)
-
-        d_decision = d["d_decision"]
-        assert isinstance(d_decision, bool)
-
-        return cls(name, cmax, cmax_pos, cmax_decision, ymax, ymax_pos,
-                   ymax_decision, smax, smax_pos, smax_decision, smean,
-                   smean_decision, d_, d_decision)
+    def __init__(
+        self,
+        name: str,
+        cmax: float,
+        cmax_pos: int,
+        cmax_decision: bool,
+        ymax: float,
+        ymax_pos: int,
+        ymax_decision: bool,
+        smax: float,
+        smax_pos: int,
+        smax_decision: bool,
+        smean: float,
+        smean_decision: bool,
+        d: float,
+        d_decision: bool,
+    ):
+        self.name = name
+        self.cmax = cmax
+        self.cmax_pos = cmax_pos
+        self.cmax_decision = cmax_decision
+        self.ymax = ymax
+        self.ymax_pos = ymax_pos
+        self.ymax_decision = ymax_decision
+        self.smax = smax
+        self.smax_pos = smax_pos
+        self.smax_decision = smax_decision
+        self.smean = smean
+        self.smean_decision = smean_decision
+        self.d = d
+        self.d_decision = d_decision
+        return
 
     @classmethod
-    def from_short_line(cls, line: str) -> "SignalP3NN":
+    def from_line(cls, line: str) -> "SignalP3NN":
         """ Parse a short-format NN line as an object. """
 
         if line == "":
@@ -153,7 +145,7 @@ class SignalP3NN(NamedTuple):
         )
 
     @classmethod
-    def from_short_file(cls, handle: TextIO) -> Iterator["SignalP3NN"]:
+    def from_file(cls, handle: TextIO) -> Iterator["SignalP3NN"]:
         for i, line in enumerate(handle):
             sline = line.strip()
             if sline.startswith("#"):
@@ -169,7 +161,7 @@ class SignalP3NN(NamedTuple):
                 continue
 
             try:
-                yield cls.from_short_line(sline)
+                yield cls.from_line(sline)
 
             except LineParseError as e:
                 if hasattr(handle, "name"):
@@ -185,7 +177,7 @@ class SignalP3NN(NamedTuple):
         return
 
 
-class SignalP3HMM(NamedTuple):
+class SignalP3HMM(Analysis):
 
     """ For each organism class in SignalP; Eukaryote, Gram-negative and
     Gram-positive, two different neural networks are used, one for
@@ -235,48 +227,31 @@ class SignalP3HMM(NamedTuple):
     h-region, and c-region of the signal peptide, if such one is found.
     """
 
-    name: str
-    is_secreted: bool
-    cmax: float
-    cmax_pos: int
-    cmax_decision: bool
-    sprob: float
-    sprob_decision: int
+    columns = ["name", "is_secreted", "cmax", "cmax_pos", "cmax_decision",
+               "sprob", "sprob_decision"]
+    types = [str, bool, float, int, bool, float, int]
 
-    def as_dict(self) -> Dict[str, Union[str, int, float, bool]]:
-        return {k: getattr(self, k) for k in self._fields}
-
-    @classmethod
-    def from_dict(
-        cls,
-        d: Dict[str, Union[str, int, float, bool]]
-    ) -> "SignalP3HMM":
-        # assertions appease the typechecker
-        name = d["name"]
-        assert isinstance(name, str)
-
-        is_secreted = d["is_secreted"]
-        assert isinstance(is_secreted, bool)
-
-        cmax = d["cmax"]
-        assert isinstance(cmax, float)
-
-        cmax_pos = d["cmax_pos"]
-        assert isinstance(cmax_pos, int)
-
-        cmax_decision = d["cmax_decision"]
-        assert isinstance(cmax_decision, bool)
-
-        sprob = d["sprob"]
-        assert isinstance(sprob, float)
-
-        sprob_decision = d["sprob_decision"]
-        assert isinstance(sprob_decision, int)
-        return cls(name, is_secreted, cmax, cmax_pos,
-                   cmax_decision, sprob, sprob_decision)
+    def __init__(
+        self,
+        name: str,
+        is_secreted: bool,
+        cmax: float,
+        cmax_pos: int,
+        cmax_decision: bool,
+        sprob: float,
+        sprob_decision: int,
+    ) -> None:
+        self.name = name
+        self.is_secreted = is_secreted
+        self.cmax = cmax
+        self.cmax_pos = cmax_pos
+        self.cmax_decision = cmax_decision
+        self.sprob = sprob
+        self.sprob_decision = sprob_decision
+        return
 
     @classmethod
-    def from_short_line(cls, line: str) -> "SignalP3HMM":
+    def from_line(cls, line: str) -> "SignalP3HMM":
         """ Parse a short-format HMM line as an object. """
 
         if line == "":
@@ -303,7 +278,7 @@ class SignalP3HMM(NamedTuple):
         )
 
     @classmethod
-    def from_short_file(cls, handle: TextIO) -> Iterator["SignalP3HMM"]:
+    def from_file(cls, handle: TextIO) -> Iterator["SignalP3HMM"]:
         for i, line in enumerate(handle):
             sline = line.strip()
             if sline.startswith("#"):
@@ -312,7 +287,7 @@ class SignalP3HMM(NamedTuple):
                 continue
 
             try:
-                yield cls.from_short_line(sline)
+                yield cls.from_line(sline)
 
             except LineParseError as e:
                 if hasattr(handle, "name"):
@@ -328,7 +303,7 @@ class SignalP3HMM(NamedTuple):
         return
 
 
-class SignalP4(NamedTuple):
+class SignalP4(Analysis):
 
     """ The graphical output from SignalP (neural network) comprises
     three different scores, C, S and Y. Two additional scores are reported
@@ -377,68 +352,43 @@ class SignalP4(NamedTuple):
     output should ideally be very low.
    """
 
-    name: str
-    cmax: float
-    cmax_pos: int
-    ymax: float
-    ymax_pos: int
-    smax: float
-    smax_pos: int
-    smean: float
-    d: float
-    decision: bool
-    dmax_cut: float
-    networks_used: str
+    types = [float, int, float, int, float, int,
+             float, float, bool, float, str, str]
+    columns = ["name", "cmax", "cmax_pos", "ymax", "ymax_pos",
+               "smax", "smax_pos", "smean", "d", "decision", "dmax_cut",
+               "networks_used"]
 
-    def as_dict(self) -> Dict[str, Union[str, int, float, bool]]:
-        return {k: getattr(self, k) for k in self._fields}
-
-    @classmethod
-    def from_dict(
-        cls,
-        d: Dict[str, Union[str, int, float, bool]]
-    ) -> "SignalP4":
-        # assertions appease the typechecker
-        name = d["name"]
-        assert isinstance(name, str)
-
-        cmax = d["cmax"]
-        assert isinstance(cmax, float)
-
-        cmax_pos = d["cmax_pos"]
-        assert isinstance(cmax_pos, int)
-
-        ymax = d["ymax"]
-        assert isinstance(ymax, float)
-
-        ymax_pos = d["ymax_pos"]
-        assert isinstance(ymax_pos, int)
-
-        smax = d["smax"]
-        assert isinstance(smax, float)
-
-        smax_pos = d["smax_pos"]
-        assert isinstance(smax_pos, int)
-
-        smean = d["smean"]
-        assert isinstance(smean, float)
-
-        d_ = d["d"]
-        assert isinstance(d_, float)
-
-        decision = d["decision"]
-        assert isinstance(decision, bool)
-
-        dmax_cut = d["dmax_cut"]
-        assert isinstance(dmax_cut, float)
-
-        networks_used = d["networks_used"]
-        assert isinstance(networks_used, str)
-        return cls(name, cmax, cmax_pos, ymax, ymax_pos, smax,
-                   smax_pos, smean, d_, decision, dmax_cut, networks_used)
+    def __init__(
+        self,
+        name: str,
+        cmax: float,
+        cmax_pos: int,
+        ymax: float,
+        ymax_pos: int,
+        smax: float,
+        smax_pos: int,
+        smean: float,
+        d: float,
+        decision: bool,
+        dmax_cut: float,
+        networks_used: str,
+    ) -> None:
+        self.name = name
+        self.cmax = cmax
+        self.cmax_pos = cmax_pos
+        self.ymax = ymax
+        self.ymax_pos = ymax_pos
+        self.smax = smax
+        self.smax_pos = smax_pos
+        self.smean = smean
+        self.d = d
+        self.decision = decision
+        self.dmax_cut = dmax_cut
+        self.networks_used = networks_used
+        return
 
     @classmethod
-    def from_short_line(cls, line: str) -> "SignalP4":
+    def from_line(cls, line: str) -> "SignalP4":
         """ Parse a short-format signalp4 line as an object. """
 
         if line == "":
@@ -472,7 +422,7 @@ class SignalP4(NamedTuple):
         )
 
     @classmethod
-    def from_short_file(cls, handle: TextIO) -> Iterator["SignalP4"]:
+    def from_file(cls, handle: TextIO) -> Iterator["SignalP4"]:
         for i, line in enumerate(handle):
             sline = line.strip()
             if sline.startswith("#"):
@@ -481,7 +431,7 @@ class SignalP4(NamedTuple):
                 continue
 
             try:
-                yield cls.from_short_line(sline)
+                yield cls.from_line(sline)
 
             except LineParseError as e:
                 if hasattr(handle, "name"):
@@ -497,7 +447,7 @@ class SignalP4(NamedTuple):
         return
 
 
-class SignalP5(NamedTuple):
+class SignalP5(Analysis):
 
     """ One annotation is attributed to each protein, the one that has
     the highest probability. The protein can have a Sec signal peptide
@@ -518,33 +468,26 @@ class SignalP5(NamedTuple):
     prob_other: float
     cs_pos: Optional[str]
 
-    def as_dict(self) -> Dict[str, Union[str, int, float, bool]]:
-        return {k: getattr(self, k) for k in self._fields}
+    columns = ["name", "prediction", "prob_signal", "prob_other", "cs_pos"]
+    types = [str, str, float, float, str_or_none]
+
+    def __init__(
+        self,
+        name: str,
+        prediction: str,
+        prob_signal: float,
+        prob_other: float,
+        cs_pos: Optional[str],
+    ) -> None:
+        self.name = name
+        self.prediction = prediction
+        self.prob_signal = prob_signal
+        self.prob_other = prob_other
+        self.cs_pos = cs_pos
+        return
 
     @classmethod
-    def from_dict(
-        cls,
-        d: Dict[str, Union[str, int, float, bool]]
-    ) -> "SignalP5":
-        # assertions appease the typechecker
-        name = d["name"]
-        assert isinstance(name, str)
-
-        prediction = d["prediction"]
-        assert isinstance(prediction, str)
-
-        prob_signal = d["prob_signal"]
-        assert isinstance(prob_signal, float)
-
-        prob_other = d["prob_other"]
-        assert isinstance(prob_other, float)
-
-        cs_pos = d.get("cs_pos", None)
-        assert isinstance(cs_pos, str) or cs_pos is None
-        return cls(name, prediction, prob_signal, prob_other, cs_pos)
-
-    @classmethod
-    def from_short_line(cls, line: str) -> "SignalP5":
+    def from_line(cls, line: str) -> "SignalP5":
         """ Parse a short-format signalp5 line as an object. """
 
         if line == "":
@@ -575,7 +518,7 @@ class SignalP5(NamedTuple):
         )
 
     @classmethod
-    def from_short_file(cls, handle: TextIO) -> Iterator["SignalP5"]:
+    def from_file(cls, handle: TextIO) -> Iterator["SignalP5"]:
         for i, line in enumerate(handle):
             sline = line.strip()
             if sline.startswith("#"):
@@ -584,7 +527,7 @@ class SignalP5(NamedTuple):
                 continue
 
             try:
-                yield cls.from_short_line(sline)
+                yield cls.from_line(sline)
 
             except LineParseError as e:
                 if hasattr(handle, "name"):
@@ -598,4 +541,3 @@ class SignalP5(NamedTuple):
                     e.message
                 )
         return
-

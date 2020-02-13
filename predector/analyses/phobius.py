@@ -1,39 +1,36 @@
 #!/usr/bin/env python3
 
-class Phobius(NamedTuple):
+from typing import Optional
+from typing import TextIO
+from typing import Iterator
+
+from predector.analyses import Analysis
+from predector.analyses.parsers import ParseError, LineParseError
+from predector.analyses.parsers import (
+    parse_string_not_empty,
+    parse_int,
+    parse_bool,
+    MULTISPACE_REGEX
+)
+
+
+class Phobius(Analysis):
 
     """ .
     """
 
-    name: str
-    tm: int
-    sp: bool
-    topology: str
+    columns = ["name", "tm", "sp", "topology"]
+    types = [str, int, bool, str]
 
-    def as_dict(self) -> Dict[str, Union[str, int, float, bool]]:
-        return {k: getattr(self, k) for k in self._fields}
-
-    @classmethod
-    def from_dict(
-        cls,
-        d: Dict[str, Union[str, int, float, bool]]
-    ) -> "Phobius":
-        # assertions appease the typechecker
-        name = d["name"]
-        assert isinstance(name, str)
-
-        tm = d["tm"]
-        assert isinstance(tm, int)
-
-        sp = d["sp"]
-        assert isinstance(sp, bool)
-
-        topology = d["topology"]
-        assert isinstance(topology, str)
-        return cls(name, tm, sp, topology)
+    def __init__(self, name: str, tm: int, sp: bool, topology: str) -> None:
+        self.name = name
+        self.tm = tm
+        self.sp = sp
+        self.topology = topology
+        return
 
     @classmethod
-    def from_short_line(cls, line: str) -> "Phobius":
+    def from_line(cls, line: str) -> "Phobius":
         """ Parse a phobius line as an object. """
 
         if line == "":
@@ -47,6 +44,7 @@ class Phobius(NamedTuple):
                 f"Expected 4 but got {len(sline)}"
             )
 
+        # Sequence is mis-spelled in the output
         if sline == ["SEQENCE", "ID", "TM", "SP", "PREDICTION"]:
             raise LineParseError("The line appears to be the header line")
 
@@ -58,18 +56,19 @@ class Phobius(NamedTuple):
         )
 
     @classmethod
-    def from_short_file(cls, handle: TextIO) -> Iterator["Phobius"]:
+    def from_file(cls, handle: TextIO) -> Iterator["Phobius"]:
         for i, line in enumerate(handle):
             sline = line.strip()
             if sline.startswith("#"):
                 continue
+            # Sequence is mis-spelled in the output
             elif i == 0 and sline.startswith("SEQENCE"):
                 continue
             elif sline == "":
                 continue
 
             try:
-                yield cls.from_short_line(sline)
+                yield cls.from_line(sline)
 
             except LineParseError as e:
                 if hasattr(handle, "name"):
@@ -83,4 +82,3 @@ class Phobius(NamedTuple):
                     e.message
                 )
         return
-

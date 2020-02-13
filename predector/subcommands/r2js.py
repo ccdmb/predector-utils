@@ -5,7 +5,7 @@ import argparse
 import enum
 from datetime import datetime
 
-from predector import parsers
+from predector import analyses
 
 
 class ValidResults(enum.Enum):
@@ -92,47 +92,47 @@ def cli(parser: argparse.ArgumentParser) -> None:
 def runner(args: argparse.Namespace) -> None:
 
     if args.format == ValidResults.signalp3_nn:
-        p = parsers.SignalP3NN.from_short_file(args.infile)
+        p = analyses.SignalP3NN.from_file(args.infile)
         for l in p:
-            print(parsers.SignalP3NN.from_dict(l.as_dict()))
+            print(analyses.SignalP3NN.from_dict(l.as_dict()))
     elif args.format == ValidResults.signalp3_hmm:
-        p = parsers.SignalP3HMM.from_short_file(args.infile)
+        p = analyses.SignalP3HMM.from_file(args.infile)
         for l in p:
-            print(parsers.SignalP3HMM.from_dict(l.as_dict()))
+            print(analyses.SignalP3HMM.from_dict(l.as_dict()))
     elif args.format == ValidResults.signalp4:
-        p = parsers.SignalP4.from_short_file(args.infile)
+        p = analyses.SignalP4.from_file(args.infile)
         for l in p:
-            print(parsers.SignalP4.from_dict(l.as_dict()))
+            print(analyses.SignalP4.from_dict(l.as_dict()))
     elif args.format == ValidResults.signalp5:
-        p = parsers.SignalP5.from_short_file(args.infile)
+        p = analyses.SignalP5.from_file(args.infile)
         for l in p:
-            print(parsers.SignalP5.from_dict(l.as_dict()))
+            print(analyses.SignalP5.from_dict(l.as_dict()))
     elif args.format == ValidResults.targetp:
-        p = parsers.TargetP.from_short_file(args.infile)
+        p = analyses.TargetPNonPlant.from_file(args.infile)
         for l in p:
-            print(parsers.TargetP.from_dict(l.as_dict()))
+            print(analyses.TargetPNonPlant.from_dict(l.as_dict()))
     elif args.format == ValidResults.tmhmm:
-        p = parsers.TMHMM.from_short_file(args.infile)
+        p = analyses.TMHMM.from_file(args.infile)
         for l in p:
-            print(parsers.TMHMM.from_dict(l.as_dict()))
+            print(analyses.TMHMM.from_dict(l.as_dict()))
     elif args.format == ValidResults.phobius:
-        p = parsers.Phobius.from_short_file(args.infile)
+        p = analyses.Phobius.from_file(args.infile)
         for l in p:
-            print(parsers.Phobius.from_dict(l.as_dict()))
+            print(analyses.Phobius.from_dict(l.as_dict()))
     elif args.format == ValidResults.deepsig:
-        p = parsers.DeepSig.from_file(args.infile)
+        p = analyses.DeepSig.from_file(args.infile)
         for l in p:
-            print(parsers.DeepSig.from_dict(l.as_dict()))
+            print(analyses.DeepSig.from_dict(l.as_dict()))
     elif args.format == ValidResults.apoplastp:
-        p = parsers.ApoplastP.from_file(args.infile)
+        p = analyses.ApoplastP.from_file(args.infile)
         for l in p:
-            print(parsers.ApoplastP.from_dict(l.as_dict()))
+            print(analyses.ApoplastP.from_dict(l.as_dict()))
     elif args.format == ValidResults.effectorp1:
-        p = parsers.EffectorP1.from_file(args.infile)
+        p = analyses.EffectorP1.from_file(args.infile)
         for l in p:
-            print(parsers.EffectorP1.from_dict(l.as_dict()))
+            print(analyses.EffectorP1.from_dict(l.as_dict()))
     elif args.format == ValidResults.effectorp2:
-        p = parsers.EffectorP2.from_file(args.infile)
+        p = analyses.EffectorP2.from_file(args.infile)
         for l in p:
-            print(parsers.EffectorP2.from_dict(l.as_dict()))
+            print(analyses.EffectorP2.from_dict(l.as_dict()))
     return
