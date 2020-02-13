@@ -6,10 +6,16 @@ import argparse
 
 from typing import List
 
+from predector.subcommands.r2js import cli as r2js_cli
+from predector.subcommands.r2js import runner as r2js_runner
+
+from predector.parsers import ParseError
 from predector.exceptions import (
     EXIT_VALID, EXIT_KEYBOARD, EXIT_UNKNOWN, EXIT_CLI, EXIT_INPUT_FORMAT,
     EXIT_INPUT_NOT_FOUND, EXIT_SYSERR, EXIT_CANT_OUTPUT
 )
+
+__email__ = "darcy.ab.jones@gmail.com"
 
 
 class MyArgumentParser(argparse.ArgumentParser):
@@ -62,7 +68,16 @@ def cli(prog: str, args: List[str]) -> argparse.Namespace:
             "json format."
         )
     )
-    return
+
+    r2js_cli(r2js_subparser)
+
+    parsed = parser.parse_args(args)
+
+    if parsed.subparser_name is None:
+        parser.print_help()
+        sys.exit(0)
+
+    return parsed
 
 
 def main():  # noqa
@@ -72,17 +87,8 @@ def main():  # noqa
         print(e.message, file=sys.stderr)
         sys.exit(e.errno)
 
-
     try:
-        runner(
-            args.infile,
-            args.outhandle,
-            args.pca_handle,
-            args.counts_filepath,
-            labels,
-            args.file_format,
-            model,
-        )
+        r2js_runner(args)
 
     except ParseError as e:
         if e.line is not None:
@@ -93,15 +99,6 @@ def main():  # noqa
 
         print("{}\n{}".format(header, e.message), file=sys.stderr)
         sys.exit(EXIT_INPUT_FORMAT)
-
-    except HMMError as e:
-        msg = (
-            "Encountered an hmm that wasn't present in the training data.\n"
-            f"Offending HMMs were: {', '.join(e.hmms)}"
-        )
-        print(msg, file=sys.stderr)
-        sys.exit(EXIT_INPUT_FORMAT)
-        pass
 
     except OSError as e:
         msg = (

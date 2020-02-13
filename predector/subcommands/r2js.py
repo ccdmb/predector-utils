@@ -3,7 +3,9 @@
 import sys
 import argparse
 import enum
-import datetime
+from datetime import datetime
+
+from predector import parsers
 
 
 class ValidResults(enum.Enum):
@@ -40,7 +42,6 @@ def cli(parser: argparse.ArgumentParser) -> None:
 
     parser.add_argument(
         "format",
-        dest="file_format",
         type=ValidResults.from_string,
         choices=list(ValidResults),
         help="The file results to parse into a line delimited JSON format."
@@ -89,4 +90,49 @@ def cli(parser: argparse.ArgumentParser) -> None:
 
 
 def runner(args: argparse.Namespace) -> None:
+
+    if args.format == ValidResults.signalp3_nn:
+        p = parsers.SignalP3NN.from_short_file(args.infile)
+        for l in p:
+            print(parsers.SignalP3NN.from_dict(l.as_dict()))
+    elif args.format == ValidResults.signalp3_hmm:
+        p = parsers.SignalP3HMM.from_short_file(args.infile)
+        for l in p:
+            print(parsers.SignalP3HMM.from_dict(l.as_dict()))
+    elif args.format == ValidResults.signalp4:
+        p = parsers.SignalP4.from_short_file(args.infile)
+        for l in p:
+            print(parsers.SignalP4.from_dict(l.as_dict()))
+    elif args.format == ValidResults.signalp5:
+        p = parsers.SignalP5.from_short_file(args.infile)
+        for l in p:
+            print(parsers.SignalP5.from_dict(l.as_dict()))
+    elif args.format == ValidResults.targetp:
+        p = parsers.TargetP.from_short_file(args.infile)
+        for l in p:
+            print(parsers.TargetP.from_dict(l.as_dict()))
+    elif args.format == ValidResults.tmhmm:
+        p = parsers.TMHMM.from_short_file(args.infile)
+        for l in p:
+            print(parsers.TMHMM.from_dict(l.as_dict()))
+    elif args.format == ValidResults.phobius:
+        p = parsers.Phobius.from_short_file(args.infile)
+        for l in p:
+            print(parsers.Phobius.from_dict(l.as_dict()))
+    elif args.format == ValidResults.deepsig:
+        p = parsers.DeepSig.from_file(args.infile)
+        for l in p:
+            print(parsers.DeepSig.from_dict(l.as_dict()))
+    elif args.format == ValidResults.apoplastp:
+        p = parsers.ApoplastP.from_file(args.infile)
+        for l in p:
+            print(parsers.ApoplastP.from_dict(l.as_dict()))
+    elif args.format == ValidResults.effectorp1:
+        p = parsers.EffectorP1.from_file(args.infile)
+        for l in p:
+            print(parsers.EffectorP1.from_dict(l.as_dict()))
+    elif args.format == ValidResults.effectorp2:
+        p = parsers.EffectorP2.from_file(args.infile)
+        for l in p:
+            print(parsers.EffectorP2.from_dict(l.as_dict()))
     return
