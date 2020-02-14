@@ -7,20 +7,6 @@ from typing import Dict
 from typing import Union, Optional, Any
 
 
-from predector.analyses.apoplastp import ApoplastP
-from predector.analyses.deepsig import DeepSig
-from predector.analyses.effectorp import EffectorP1, EffectorP2
-from predector.analyses.phobius import Phobius
-from predector.analyses.signalp import (
-    SignalP3NN, SignalP3HMM, SignalP4, SignalP5)
-from predector.analyses.targetp import TargetPNonPlant, TargetPPlant
-from predector.analyses.tmhmm import TMHMM
-
-__all__ = ["Analysis", "ApoplastP", "DeepSig", "EffectorP1", "EffectorP2",
-           "Phobius", "SignalP3NN", "SignalP3HMM", "SignalP4", "SignalP5",
-           "TargetPNonPlant", "TargetPPlant", "TMHMM", "GFFAble"]
-
-
 def int_or_none(i: Any) -> Optional[int]:
     if i is None:
         return None
@@ -62,10 +48,10 @@ class Analysis(object):
         cls,
         d: Dict[str, Union[str, int, float, bool, None]]
     ) -> "Analysis":
-        fields = (
+        fields = tuple(
             type_(d.get(cname))
             for cname, type_
-            in zip(cls.columns, cls.coltypes)
+            in zip(cls.columns, cls.types)
         )
         return cls(*fields)
 
@@ -78,3 +64,19 @@ class GFFAble(Analysis):
 
     def to_gff(self) -> str:
         return "to do"
+
+# These have to be after the superclasses so that they don't have circular
+# dependency.
+
+from predector.analyses.apoplastp import ApoplastP  # noqa
+from predector.analyses.deepsig import DeepSig  # noqa
+from predector.analyses.effectorp import EffectorP1, EffectorP2  # noqa
+from predector.analyses.phobius import Phobius  # noqa
+from predector.analyses.signalp import (
+    SignalP3NN, SignalP3HMM, SignalP4, SignalP5)  # noqa
+from predector.analyses.targetp import TargetPNonPlant, TargetPPlant  # noqa
+from predector.analyses.tmhmm import TMHMM  # noqa
+
+__all__ = ["Analysis", "ApoplastP", "DeepSig", "EffectorP1", "EffectorP2",
+           "Phobius", "SignalP3NN", "SignalP3HMM", "SignalP4", "SignalP5",
+           "TargetPNonPlant", "TargetPPlant", "TMHMM", "GFFAble"]

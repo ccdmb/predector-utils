@@ -19,7 +19,7 @@ class DeepSig(Analysis):
 
     """     """
 
-    columns = ["name", "str", "prediction", "prob", "cs_prob"]
+    columns = ["name", "prediction", "prob", "cs_pos"]
     types = [str, str, float, int_or_none]
 
     def __init__(

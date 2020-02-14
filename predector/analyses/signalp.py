@@ -352,7 +352,7 @@ class SignalP4(Analysis):
     output should ideally be very low.
    """
 
-    types = [float, int, float, int, float, int,
+    types = [str, float, int, float, int, float, int,
              float, float, bool, float, str, str]
     columns = ["name", "cmax", "cmax_pos", "ymax", "ymax_pos",
                "smax", "smax_pos", "smean", "d", "decision", "dmax_cut",
