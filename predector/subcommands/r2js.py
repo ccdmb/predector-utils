@@ -2,48 +2,22 @@
 
 import sys
 import argparse
-import enum
+import json
 from datetime import datetime
 
+from typing import Dict
+from typing import Any
+from typing import Optional
+
 from predector import analyses
-
-
-class ValidResults(enum.Enum):
-
-    signalp3_nn = 1
-    signalp3_hmm = 2
-    signalp4 = 3
-    signalp5 = 4
-    deepsig = 5
-    phobius = 6
-    tmhmm = 7
-    deeploc = 8
-    targetp = 9
-    effectorp1 = 10
-    effectorp2 = 11
-    apoplastp = 12
-    localizer = 13
-    pfamscan = 14
-    hmmer_domtbl = 15
-    mmseqs = 16
-
-    def __str__(self) -> str:
-        return self.name
-
-    @classmethod
-    def from_string(cls, s: str) -> "ValidResults":
-        try:
-            return cls[s]
-        except KeyError:
-            raise ValueError(f"{s} is not a valid result type to parse.")
 
 
 def cli(parser: argparse.ArgumentParser) -> None:
 
     parser.add_argument(
         "format",
-        type=ValidResults.from_string,
-        choices=list(ValidResults),
+        type=analyses.Analyses.from_string,
+        choices=list(analyses.Analyses),
         help="The file results to parse into a line delimited JSON format."
     )
 
@@ -89,50 +63,42 @@ def cli(parser: argparse.ArgumentParser) -> None:
     return
 
 
-def runner(args: argparse.Namespace) -> None:
+def get_line(
+    run_name: Optional[str],
+    session_id: Optional[str],
+    start: Optional[datetime],
+    protein_name: str,
+    analysis_type: analyses.Analyses,
+    analysis: analyses.Analysis,
+) -> Dict[Any, Any]:
+    out = {
+        "protein_name": protein_name,
+        "analysis": str(analysis_type),
+        "data": analysis.as_dict()
+    }
 
-    if args.format == ValidResults.signalp3_nn:
-        p = analyses.SignalP3NN.from_file(args.infile)
-        for l in p:
-            print(analyses.SignalP3NN.from_dict(l.as_dict()))
-    elif args.format == ValidResults.signalp3_hmm:
-        p = analyses.SignalP3HMM.from_file(args.infile)
-        for l in p:
-            print(analyses.SignalP3HMM.from_dict(l.as_dict()))
-    elif args.format == ValidResults.signalp4:
-        p = analyses.SignalP4.from_file(args.infile)
-        for l in p:
-            print(analyses.SignalP4.from_dict(l.as_dict()))
-    elif args.format == ValidResults.signalp5:
-        p = analyses.SignalP5.from_file(args.infile)
-        for l in p:
-            print(analyses.SignalP5.from_dict(l.as_dict()))
-    elif args.format == ValidResults.targetp:
-        p = analyses.TargetPNonPlant.from_file(args.infile)
-        for l in p:
-            print(analyses.TargetPNonPlant.from_dict(l.as_dict()))
-    elif args.format == ValidResults.tmhmm:
-        p = analyses.TMHMM.from_file(args.infile)
-        for l in p:
-            print(analyses.TMHMM.from_dict(l.as_dict()))
-    elif args.format == ValidResults.phobius:
-        p = analyses.Phobius.from_file(args.infile)
-        for l in p:
-            print(analyses.Phobius.from_dict(l.as_dict()))
-    elif args.format == ValidResults.deepsig:
-        p = analyses.DeepSig.from_file(args.infile)
-        for l in p:
-            print(analyses.DeepSig.from_dict(l.as_dict()))
-    elif args.format == ValidResults.apoplastp:
-        p = analyses.ApoplastP.from_file(args.infile)
-        for l in p:
-            print(analyses.ApoplastP.from_dict(l.as_dict()))
-    elif args.format == ValidResults.effectorp1:
-        p = analyses.EffectorP1.from_file(args.infile)
-        for l in p:
-            print(analyses.EffectorP1.from_dict(l.as_dict()))
-    elif args.format == ValidResults.effectorp2:
-        p = analyses.EffectorP2.from_file(args.infile)
-        for l in p:
-            print(analyses.EffectorP2.from_dict(l.as_dict()))
+    if run_name is not None:
+        out["run_name"] = run_name
+
+    if session_id is not None:
+        out["session_id"] = session_id
+
+    if start is not None:
+        out["start"] = start.isoformat(sep=' ')
+
+    return out
+
+
+def runner(args: argparse.Namespace) -> None:
+    analysis = args.format.get_analysis()
+    for line in analysis.from_file(args.infile):
+        dline = get_line(
+            args.run_name,
+            args.session_id,
+            args.start,
+            line.name,
+            args.format,
+            line
+        )
+        print(json.dumps(dline), file=args.outfile)
     return

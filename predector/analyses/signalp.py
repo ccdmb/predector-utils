@@ -6,8 +6,8 @@ from typing import Optional
 from typing import TextIO
 from typing import Iterator
 
-from predector.analyses import Analysis
-from predector.analyses import str_or_none
+from predector.analyses.base import Analysis
+from predector.analyses.base import str_or_none
 from predector.analyses.parsers import ParseError, LineParseError
 from predector.analyses.parsers import (
     parse_string_not_empty,
