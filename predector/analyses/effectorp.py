@@ -56,15 +56,15 @@ class EffectorP1(Analysis):
         comment = False
         for i, line in enumerate(handle):
             sline = line.strip()
-            if comment and line.startswith("---------"):
+            if comment and sline.startswith("---------"):
                 comment = False
                 continue
-            elif comment and line.startswith("# Identifier"):
+            elif comment and sline.startswith("# Identifier"):
                 comment = False
                 continue
             elif comment:
                 continue
-            elif (i == 0) and line.startswith("---------"):
+            elif (i == 0) and sline.startswith("---------"):
                 comment = True
                 continue
 
@@ -133,15 +133,15 @@ class EffectorP2(Analysis):
         comment = False
         for i, line in enumerate(handle):
             sline = line.strip()
-            if comment and line.startswith("---------"):
+            if comment and sline.startswith("---------"):
                 comment = False
                 continue
-            elif comment and line.startswith("# Identifier"):
+            elif comment and sline.startswith("# Identifier"):
                 comment = False
                 continue
             elif comment:
                 continue
-            elif (i == 0) and line.startswith("---------"):
+            elif (i == 0) and sline.startswith("---------"):
                 comment = True
                 continue
 

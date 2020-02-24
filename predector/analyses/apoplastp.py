@@ -56,12 +56,12 @@ class ApoplastP(Analysis):
         comment = False
         for i, line in enumerate(handle):
             sline = line.strip()
-            if comment and line.startswith("---------"):
+            if comment and sline.startswith("---------"):
                 comment = False
                 continue
             elif comment:
                 continue
-            elif (i == 0) and line.startswith("---------"):
+            elif (i == 0) and sline.startswith("---------"):
                 comment = True
                 continue
 

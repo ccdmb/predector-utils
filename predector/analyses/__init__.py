@@ -15,11 +15,13 @@ from predector.analyses.tmhmm import TMHMM
 from predector.analyses.localizer import LOCALIZER
 from predector.analyses.deeploc import DeepLoc
 from predector.analyses.hmmer import DBCAN
+from predector.analyses.pfamscan import PfamScan
+
 
 __all__ = ["Analysis", "ApoplastP", "DeepSig", "EffectorP1", "EffectorP2",
            "Phobius", "SignalP3NN", "SignalP3HMM", "SignalP4", "SignalP5",
            "TargetPNonPlant", "TargetPPlant", "TMHMM", "LOCALIZER", "DeepLoc",
-           "DBCAN", "GFFAble"]
+           "DBCAN", "GFFAble", "PfamScan"]
 
 
 class Analyses(enum.Enum):
@@ -72,8 +74,8 @@ NAME_TO_ANALYSIS = {
     Analyses.localizer: LOCALIZER,
     Analyses.deeploc: DeepLoc,
     Analyses.dbcan: DBCAN,
+    Analyses.pfamscan: PfamScan,
 }
 
-#   Analyses.pfamscan: PfamScan,
 #   Analyses.hmmer_domtbl: HMMERDomTab,
 #   Analyses.mmseqs: MMSeqs,
