@@ -3,6 +3,7 @@
 import re
 from typing import Optional
 from typing import Sequence
+from typing import Dict
 
 MULTISPACE_REGEX = re.compile(r"\s+")
 
@@ -27,6 +28,16 @@ class LineParseError(Exception):
     def __init__(self, message: str):
         self.message = message
         return
+
+
+def parse_regex(field: str, regex: re.Pattern) -> Dict[str, str]:
+    matches = regex.match(field)
+    if matches is None:
+        raise LineParseError(
+            f"Expected a line matching the regular expression: {regex}, "
+            f"but got '{field}'.")
+    else:
+        return matches.groupdict()
 
 
 def split_at_eq(field: str, field_name: str, expected_lhs: str) -> str:
