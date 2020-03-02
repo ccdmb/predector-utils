@@ -558,7 +558,7 @@ class PepStats(Analysis):
                     if e.line is None:
                         lineno = i
                     else:
-                        lineno = i + e.line
+                        lineno = i - len(block) + e.line
 
                     raise ParseError(
                         filename,
