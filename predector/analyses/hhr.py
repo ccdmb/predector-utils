@@ -26,16 +26,17 @@ from predector.analyses.parsers import (
 )
 
 T = TypeVar("T")
+ALI_REGEX = re.compile(r"[QT]\s+[^\s]+\s+\d+\s+")
 
 
 def get_and_parse(
-    col: str,
+    key: str,
     field_name: str,
     d: Mapping[str, str],
     func: Callable[[str, str], T]
 ) -> T:
     return func(
-        get_from_dict_or_err(col, d, field_name),
+        get_from_dict_or_err(key, d, field_name),
         field_name
     )
 
@@ -54,6 +55,7 @@ class HHRAlignment(Analysis):
         'template_neff',
         'query_ali',
         'template_ali',
+        'confidence',
         'query_start',
         'template_start',
         'query_end',
@@ -75,6 +77,7 @@ class HHRAlignment(Analysis):
         int,
         str,
         float_or_none,
+        str,
         str,
         str,
         int,
@@ -101,6 +104,7 @@ class HHRAlignment(Analysis):
         template_neff: Optional[float],
         query_ali: str,
         template_ali: str,
+        confidence: str,
         query_start: int,
         template_start: int,
         query_end: int,
@@ -122,6 +126,7 @@ class HHRAlignment(Analysis):
         self.template_neff = template_neff
         self.query_ali = query_ali
         self.template_ali = template_ali
+        self.confidence = confidence
         self.query_start = query_start
         self.template_start = template_start
         self.query_end = query_end
@@ -148,7 +153,7 @@ class HHRAlignment(Analysis):
         alignment_block: List[str] = []
 
         for i, line in enumerate(lines):
-            sline = line.strip()
+            sline = line.rstrip('\n')
 
             if sline.startswith(">") and is_alignment:
                 try:
@@ -198,7 +203,7 @@ class HHRAlignment(Analysis):
         block: List[str] = []
 
         for i, line in enumerate(handle):
-            sline = line.strip()
+            sline = line.rstrip('\n')
 
             if sline == "":
                 continue
@@ -266,6 +271,8 @@ class HHRAlignment(Analysis):
         template_ends: List[int] = []
         template_sequence: List[str] = []
         template_length: Optional[int] = None
+        confidence_sequence: List[str] = []
+        seq_begin_col: Optional[int] = None
 
         probability: Optional[float] = None
         evalue: Optional[float] = None
@@ -283,7 +290,10 @@ class HHRAlignment(Analysis):
 
             elif line.startswith("Q"):
                 # type id ali_start sequence ali_end length
-                query_line = cls._parse_alignment_line(line)
+                try:
+                    query_line = cls._parse_alignment_line(line)
+                except LineParseError as e:
+                    raise BlockParseError.from_line_error(e, i)
 
                 if query_line[1] in skip_ali_tags:
                     continue
@@ -291,9 +301,15 @@ class HHRAlignment(Analysis):
                 query_starts.append(query_line[2])
                 query_ends.append(query_line[4])
                 query_sequence.append(query_line[3])
+                
+                if query_line[6] is not None:
+                    seq_begin_col = query_line[6]
 
             elif line.startswith("T"):
-                template_line = cls._parse_alignment_line(line)
+                try:
+                    template_line = cls._parse_alignment_line(line)
+                except LineParseError as e:
+                    raise BlockParseError.from_line_error(e, i)
 
                 if template_line[1] in skip_ali_tags:
                     continue
@@ -303,19 +319,40 @@ class HHRAlignment(Analysis):
                 template_sequence.append(template_line[3])
                 template_length = template_line[5]
 
+                if template_line[6] is not None:
+                    seq_begin_col = template_line[6]
+
             elif line.startswith("Probab"):
-                (probability,
-                 evalue,
-                 score,
-                 aligned_cols,
-                 identity,
-                 similarity,
-                 sum_probs,
-                 template_neff) = cls._parse_probab_line(line)
+                try:
+                    (probability,
+                    evalue,
+                    score,
+                    aligned_cols,
+                    identity,
+                    similarity,
+                    sum_probs,
+                    template_neff) = cls._parse_probab_line(line)
+                except LineParseError as e:
+                    raise BlockParseError.from_line_error(e, i)
+            
+            elif line.startswith("Confidence"):
+                if seq_begin_col is None:
+                    raise BlockParseError(i, (
+                        "Encountered a 'Confidence' line "
+                        "before the alignments themselves."
+                    ))
+
+                actual_lhs = line[:seq_begin_col].rstrip()
+                rhs = line[seq_begin_col:]
+                if not "Confidence" == actual_lhs:
+                    print(actual_lhs)
+                    raise BlockParseError(i, f"Could not parse the confidence line at ")
+                confidence_sequence.append(rhs)
 
         query_ali = "".join(query_sequence)
         template_ali = "".join(template_sequence)
-        assert len(query_ali) == len(template_ali)
+        confidence = "".join(confidence_sequence).replace(" ", "-")
+        assert len(query_ali) == len(template_ali) == len(confidence), (template_id, repr(confidence))
 
         query_start = min(cls._is_not_empty(query_starts, "query_start"))
         query_end = max(cls._is_not_empty(query_ends, "query_ends"))
@@ -333,6 +370,7 @@ class HHRAlignment(Analysis):
             template_neff,
             query_ali,
             template_ali,
+            confidence,
             query_start,
             template_start,
             query_end,
@@ -368,7 +406,7 @@ class HHRAlignment(Analysis):
     def _parse_probab_line(
         field: str
     ) -> Tuple[float, float, float, int, float, float, float, Optional[float]]:
-        sline = (s.strip() for s in MULTISPACE_REGEX.split(field))
+        sline = (s for s in MULTISPACE_REGEX.split(field.strip()))
         columns = [
             "Probab",
             "E-value",
@@ -394,18 +432,18 @@ class HHRAlignment(Analysis):
             template_neff = None
 
         return (
-            get_and_parse("probability", "Probab", dline, parse_float),
-            get_and_parse("evalue", "E-Value", dline, parse_float),
-            get_and_parse("score", "Score", dline, parse_float),
-            get_and_parse("aligned_cols", "Aligned_cols", dline, parse_int),
+            get_and_parse("Probab", "probability", dline, parse_float),
+            get_and_parse("E-value", "evalue", dline, parse_float),
+            get_and_parse("Score", "score", dline, parse_float),
+            get_and_parse("Aligned_cols", "aligned_cols", dline, parse_int),
             get_and_parse(
-                "identity",
                 "Identities",
+                "identity",
                 dline,
                 lambda x, y: parse_float(x.rstrip("%"), y) / 100.0 
             ),
-            get_and_parse("similarity", "Similarity", dline, parse_float),
-            get_and_parse("sum_probs", "Sum_probs", dline, parse_float),
+            get_and_parse("Similarity", "similarity", dline, parse_float),
+            get_and_parse("Sum_probs", "sum_probs", dline, parse_float),
             template_neff,
         )
 
@@ -415,7 +453,9 @@ class HHRAlignment(Analysis):
         return name
 
     @staticmethod
-    def _parse_alignment_line(line: str) -> Tuple[str, str, int, str, int, int]:
+    def _parse_alignment_line(
+        line: str
+    ) -> Tuple[str, str, int, str, int, int, Optional[int]]:
         sline = MULTISPACE_REGEX.split(line.strip(), maxsplit=5)
 
         columns = ["type", "id", "ali_start", "sequence", "ali_end", "length"]
@@ -429,6 +469,12 @@ class HHRAlignment(Analysis):
         if length is None:
             raise LineParseError(f"Missing 'length' from alignment line: '{line}'.")
 
+        seq_begin_match = ALI_REGEX.match(line)
+        if seq_begin_match is None:
+            seq_begin: Optional[int] = None
+        else:
+            seq_begin = seq_begin_match.end()
+
         return (
             get_and_parse(
                 "type",
@@ -440,7 +486,8 @@ class HHRAlignment(Analysis):
             get_and_parse("ali_start", "ali_start", dline, parse_int),
             get_and_parse("sequence", "sequence", dline, parse_string_not_empty),
             get_and_parse("ali_end", "ali_end", dline, parse_int),
-            parse_int(length, "length")
+            parse_int(length, "length"),
+            seq_begin
         )
 
 
