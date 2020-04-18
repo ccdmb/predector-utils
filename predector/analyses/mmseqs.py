@@ -115,7 +115,7 @@ class MMSeqs(Analysis):
 
         return cls(
             parse_string_not_empty(sline[0], "name"),
-            parse_int(sline[1], "target"),
+            parse_string_not_empty(sline[1], "target"),
             parse_int(sline[2], "qstart"),
             parse_int(sline[3], "qend"),
             parse_int(sline[4], "qlen"),

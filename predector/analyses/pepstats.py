@@ -9,6 +9,7 @@ from typing import TypeVar
 from typing import Callable
 from typing import Tuple
 from typing import List, Sequence
+from typing import Pattern
 
 from typing import Iterable
 
@@ -37,7 +38,7 @@ def convert_line_err(
         )
 
 
-def get_line(lines: Iterable[Tuple[int, str]]) -> Tuple[int, str]:
+def get_line(lines: Iterator[Tuple[int, str]]) -> Tuple[int, str]:
     i, line = next(lines)
 
     while line.strip() == "":
@@ -48,10 +49,10 @@ def get_line(lines: Iterable[Tuple[int, str]]) -> Tuple[int, str]:
 
 def parse_regex_line(
     lines: Iterable[Tuple[int, str]],
-    regex: re.Pattern,
+    regex: Pattern,
     record: Dict[str, str]
 ) -> None:
-    i, line = get_line(lines)
+    i, line = get_line(iter(lines))
     record.update(
         convert_line_err(
             i,
