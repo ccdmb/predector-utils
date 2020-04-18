@@ -18,6 +18,7 @@ conda-build/build
 .tox
 .cache
 .pytest_cache/**
+.vscode
 
 # Things to include that we ignored earlier
 !**/.gitinclude

@@ -5,6 +5,8 @@ from typing import List
 from typing import ClassVar
 from typing import Dict
 from typing import Union, Optional, Any
+from typing import TextIO
+from typing import Iterator
 
 
 def int_or_none(i: Any) -> Optional[int]:
@@ -59,8 +61,12 @@ class Analysis(object):
         inner = ", ".join([repr(getattr(self, k)) for k in self.columns])
         return f"{self.__class__.__name__}({inner})"
 
+    @classmethod
+    def from_file(cls, handle: TextIO) -> Iterator['Analysis']:
+        raise NotImplementedError()
+
 
 class GFFAble(Analysis):
 
     def to_gff(self) -> str:
-        return "to do"
+        raise NotImplementedError()
