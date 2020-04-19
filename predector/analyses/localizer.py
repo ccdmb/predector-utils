@@ -74,6 +74,7 @@ class LOCALIZER(Analysis):
              bool, float_or_none, int_or_none, int_or_none,
              bool, float_or_none, int_or_none, int_or_none,
              bool, str_or_none]
+    analysis = "localizer"
 
     def __init__(
         self,

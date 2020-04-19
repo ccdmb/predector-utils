@@ -270,6 +270,8 @@ class PepStats(Analysis):
         int, int, int, int, int, int, int, int, int,
         float, float, float, float, float, float, float, float, float,
     ]
+    analysis = "pepstats"
+
 
     def __init__(
         self,

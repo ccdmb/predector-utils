@@ -21,6 +21,7 @@ class Phobius(Analysis):
 
     columns = ["name", "tm", "sp", "topology"]
     types = [str, int, bool, str]
+    analysis = "phobius"
 
     def __init__(self, name: str, tm: int, sp: bool, topology: str) -> None:
         self.name = name

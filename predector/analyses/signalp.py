@@ -78,6 +78,7 @@ class SignalP3NN(Analysis):
 
     types = [str, float, int, bool, float, int, bool, float, int,
              bool, float, bool, float, bool]
+    analysis = "signalp3_nn"
 
     def __init__(
         self,
@@ -230,6 +231,7 @@ class SignalP3HMM(Analysis):
     columns = ["name", "is_secreted", "cmax", "cmax_pos", "cmax_decision",
                "sprob", "sprob_decision"]
     types = [str, bool, float, int, bool, float, int]
+    analysis = "signalp3_hmm"
 
     def __init__(
         self,
@@ -357,6 +359,7 @@ class SignalP4(Analysis):
     columns = ["name", "cmax", "cmax_pos", "ymax", "ymax_pos",
                "smax", "smax_pos", "smean", "d", "decision", "dmax_cut",
                "networks_used"]
+    analysis = "signalp4"
 
     def __init__(
         self,
@@ -470,6 +473,7 @@ class SignalP5(Analysis):
 
     columns = ["name", "prediction", "prob_signal", "prob_other", "cs_pos"]
     types = [str, str, float, float, str_or_none]
+    analysis = "signalp5"
 
     def __init__(
         self,

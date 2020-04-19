@@ -24,6 +24,7 @@ class DeepLoc(Analysis):
                "lysosome_vacuole", "peroxisome"]
     types = [str, str, str, float, float, float,
              float, float, float, float, float, float, float]
+    analysis = "deeploc"
 
     def __init__(
         self,

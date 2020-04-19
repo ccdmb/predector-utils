@@ -15,12 +15,12 @@ from predector.analyses.parsers import (
 )
 
 
-class DBCAN(Analysis):
+class DomTbl(Analysis):
 
     """ """
 
     columns = [
-        "name",
+        "query",
         "hmm",
         "hmm_len",
         "query_len",
@@ -60,10 +60,12 @@ class DBCAN(Analysis):
         float,
         str_or_none
     ]
+    analysis = "hmmer"
+    name_column = "query"
 
     def __init__(
         self,
-        name: str,
+        query: str,
         hmm: str,
         hmm_len: int,
         query_len: int,
@@ -82,7 +84,7 @@ class DBCAN(Analysis):
         acc: float,
         description: Optional[str]
     ) -> None:
-        self.name = name
+        self.query = query
         self.hmm = hmm
         self.hmm_len = hmm_len
         self.query_len = query_len
@@ -103,7 +105,7 @@ class DBCAN(Analysis):
         return
 
     @classmethod
-    def from_line(cls, line: str) -> "DBCAN":
+    def from_line(cls, line: str) -> "DomTbl":
         if line == "":
             raise LineParseError("The line was empty.")
 
@@ -143,7 +145,7 @@ class DBCAN(Analysis):
         )
 
     @classmethod
-    def from_file(cls, handle: TextIO) -> Iterator["DBCAN"]:
+    def from_file(cls, handle: TextIO) -> Iterator["DomTbl"]:
         for i, line in enumerate(handle):
             sline = line.strip()
 
@@ -186,6 +188,10 @@ class DBCAN(Analysis):
             return self.domain_i_evalue < 1e-5
         else:
             return self.domain_i_evalue < 1e-3
+
+
+class DBCAN(DomTbl):
+    analysis = "dbcan"
 
 
 def split_hmm(s: str) -> str:

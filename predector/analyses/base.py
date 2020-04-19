@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import pandas as pd
 
 from typing import Callable
 from typing import List
@@ -42,6 +43,9 @@ class Analysis(object):
         Callable[[Any], Optional[float]],
     ]]] = []
 
+    analysis: ClassVar[str] = "analysis"
+    name_column: ClassVar[str] = "name"
+
     def as_dict(self) -> Dict[str, Union[str, int, float, bool, None]]:
         return {k: getattr(self, k) for k in self.columns}
 
@@ -64,6 +68,20 @@ class Analysis(object):
     @classmethod
     def from_file(cls, handle: TextIO) -> Iterator['Analysis']:
         raise NotImplementedError()
+
+    def to_df(self, analysis: Optional[str] = None) -> pd.DataFrame:
+        if analysis is None:
+            analysis = self.analysis
+
+        rows: List[pd.Series] = []
+
+        header = ["name", "analysis", "parameter", "value"]
+        for column in self.columns[1:]:
+            rows.append(pd.Series(
+                data=[getattr(self, self.name_column), analysis, column, getattr(self, column)],
+                index=header,
+            ))
+        return pd.DataFrame(rows)
 
 
 class GFFAble(Analysis):
