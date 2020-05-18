@@ -11,7 +11,8 @@ install:
 - pip install ".[test,dev]"
 
 script:
-- mypy --ignore-missing-imports predector
+- mypy --ignore-missing-imports src
+- pytest .
 
 deploy:
   - provider: pypi
