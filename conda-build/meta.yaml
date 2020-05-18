@@ -32,12 +32,10 @@ test:
     - predector
   commands:
     - predector --help
-  requires:
-    - pytest
 
 about:
   home: "{{ url }}"
-  license: Apache 2
+  license: "Apache License 2.0"
   license_family: APACHE
   license_file: "LICENSE"
   summary: "{{ description }}"

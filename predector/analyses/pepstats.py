@@ -37,7 +37,7 @@ def convert_line_err(
         )
 
 
-def get_line(lines: Iterable[Tuple[int, str]]) -> Tuple[int, str]:
+def get_line(lines: Iterator[Tuple[int, str]]) -> Tuple[int, str]:
     i, line = next(lines)
 
     while line.strip() == "":
@@ -47,7 +47,7 @@ def get_line(lines: Iterable[Tuple[int, str]]) -> Tuple[int, str]:
 
 
 def parse_regex_line(
-    lines: Iterable[Tuple[int, str]],
+    lines: Iterator[Tuple[int, str]],
     regex: re.Pattern,
     record: Dict[str, str]
 ) -> None:
@@ -538,7 +538,7 @@ class PepStats(Analysis):
 
         return cls(*fields)
 
-    @classmethod
+    @classmethod  # noqa
     def from_file(cls, handle: TextIO) -> Iterator["PepStats"]:
         block: List[str] = []
 
