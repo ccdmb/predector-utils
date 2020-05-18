@@ -3,22 +3,26 @@
 from typing import Type
 import enum
 
-from predector.analyses.base import Analysis, GFFAble
-from predector.analyses.apoplastp import ApoplastP
-from predector.analyses.deepsig import DeepSig
-from predector.analyses.effectorp import EffectorP1, EffectorP2
-from predector.analyses.phobius import Phobius
-from predector.analyses.signalp import (
-    SignalP3NN, SignalP3HMM, SignalP4, SignalP5)
-from predector.analyses.targetp import TargetPNonPlant, TargetPPlant
-from predector.analyses.tmhmm import TMHMM
-from predector.analyses.localizer import LOCALIZER
-from predector.analyses.deeploc import DeepLoc
-from predector.analyses.hmmer import DomTbl, DBCAN
-from predector.analyses.pfamscan import PfamScan
-from predector.analyses.pepstats import PepStats
-from predector.analyses.mmseqs import MMSeqs, PHIBase
-from predector.analyses.hhr import HHRAlignment
+from predectorutils.analyses.base import Analysis, GFFAble
+from predectorutils.analyses.apoplastp import ApoplastP
+from predectorutils.analyses.deepsig import DeepSig
+from predectorutils.analyses.effectorp import EffectorP1, EffectorP2
+from predectorutils.analyses.phobius import Phobius
+from predectorutils.analyses.signalp import (
+    SignalP3NN,
+    SignalP3HMM,
+    SignalP4,
+    SignalP5
+)
+from predectorutils.analyses.targetp import TargetPNonPlant, TargetPPlant
+from predectorutils.analyses.tmhmm import TMHMM
+from predectorutils.analyses.localizer import LOCALIZER
+from predectorutils.analyses.deeploc import DeepLoc
+from predectorutils.analyses.hmmer import DomTbl, DBCAN
+from predectorutils.analyses.pfamscan import PfamScan
+from predectorutils.analyses.pepstats import PepStats
+from predectorutils.analyses.mmseqs import MMSeqs, PHIBase
+from predectorutils.analyses.hhr import HHRAlignment  # noqa
 
 
 __all__ = ["Analysis", "ApoplastP", "DeepSig", "EffectorP1", "EffectorP2",

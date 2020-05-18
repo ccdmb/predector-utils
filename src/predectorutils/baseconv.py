@@ -19,6 +19,9 @@
 # __version__ = '1.2.2'
 
 
+__all__ = ["IdConverter"]
+
+
 class BaseConverter(object):
     decimal_digits = '0123456789'
 

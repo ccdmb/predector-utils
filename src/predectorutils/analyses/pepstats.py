@@ -12,14 +12,14 @@ from typing import Pattern
 
 from typing import Iterable
 
-from predector.analyses.base import Analysis
-from predector.analyses.parsers import (
+from predectorutils.analyses.base import Analysis
+from predectorutils.analyses.parsers import (
     ParseError,
     BlockParseError,
     LineParseError
 )
 
-from predector.analyses.parsers import (
+from predectorutils.analyses.parsers import (
     parse_regex,
 )
 

@@ -10,11 +10,11 @@ from typing import Mapping, Dict
 from typing import Tuple
 from typing import TypeVar, Callable
 
-from predector.higher import fmap
-from predector.analyses.base import Analysis
-from predector.analyses.base import float_or_none
-from predector.analyses.parsers import ParseError, LineParseError, BlockParseError
-from predector.analyses.parsers import (
+from predectorutils.higher import fmap
+from predectorutils.analyses.base import Analysis
+from predectorutils.analyses.base import float_or_none
+from predectorutils.analyses.parsers import ParseError, LineParseError, BlockParseError
+from predectorutils.analyses.parsers import (
     parse_int,
     parse_float,
     split_at_eq,
@@ -168,7 +168,7 @@ class HHRAlignment(Analysis):
                 except BlockParseError as e:
                     raise BlockParseError.from_block_error(e, i)
 
-                alignment_block = [] 
+                alignment_block = []
 
             elif sline.startswith(">"):
                 is_alignment = True
@@ -177,7 +177,7 @@ class HHRAlignment(Analysis):
                 alignment_block.append(sline)
                 continue
 
-            try:            
+            try:
                 if sline.startswith("Query"):
                     query = cls._parse_query_line(sline)
                 elif sline.startswith("Match_columns"):
@@ -199,7 +199,7 @@ class HHRAlignment(Analysis):
                 raise BlockParseError.from_block_error(e, i)
         return
 
-    
+
     @classmethod
     def from_file(cls, handle: TextIO) -> Iterator["HHRAlignment"]:
         block: List[str] = []
@@ -237,7 +237,7 @@ class HHRAlignment(Analysis):
                 f"Did not encounter {field_name} in alignment."
             )
         return val
-    
+
     @staticmethod
     def _is_not_empty(val: List[T], field_name: str) -> List[T]:
         if len(val) == 0:
@@ -303,7 +303,7 @@ class HHRAlignment(Analysis):
                 query_starts.append(query_line[2])
                 query_ends.append(query_line[4])
                 query_sequence.append(query_line[3])
-                
+
                 if query_line[6] is not None:
                     seq_begin_col = query_line[6]
 
@@ -336,7 +336,7 @@ class HHRAlignment(Analysis):
                     template_neff) = cls._parse_probab_line(line)
                 except LineParseError as e:
                     raise BlockParseError.from_line_error(e, i)
-            
+
             elif line.startswith("Confidence"):
                 if seq_begin_col is None:
                     raise BlockParseError(i, (
@@ -389,7 +389,7 @@ class HHRAlignment(Analysis):
     @staticmethod
     def _parse_query_line(field: str) -> str:
         return split_at_multispace(field, "query", "Query")
-    
+
     @staticmethod
     def _parse_query_length_line(field: str) -> int:
         return parse_int(
@@ -442,7 +442,7 @@ class HHRAlignment(Analysis):
                 "Identities",
                 "identity",
                 dline,
-                lambda x, y: parse_float(x.rstrip("%"), y) / 100.0 
+                lambda x, y: parse_float(x.rstrip("%"), y) / 100.0
             ),
             get_and_parse("Similarity", "similarity", dline, parse_float),
             get_and_parse("Sum_probs", "sum_probs", dline, parse_float),

@@ -6,14 +6,14 @@ import argparse
 
 from typing import List
 
-from predector.subcommands.r2js import cli as r2js_cli
-from predector.subcommands.r2js import runner as r2js_runner
+from predectorutils.subcommands.r2js import cli as r2js_cli
+from predectorutils.subcommands.r2js import runner as r2js_runner
 
-from predector.subcommands.encode import cli as encode_cli
-from predector.subcommands.encode import runner as encode_runner
+from predectorutils.subcommands.encode import cli as encode_cli
+from predectorutils.subcommands.encode import runner as encode_runner
 
-from predector.analyses.parsers import ParseError
-from predector.exceptions import (
+from predectorutils.analyses.parsers import ParseError
+from predectorutils.exceptions import (
     EXIT_VALID, EXIT_KEYBOARD, EXIT_UNKNOWN, EXIT_CLI, EXIT_INPUT_FORMAT,
     EXIT_INPUT_NOT_FOUND, EXIT_SYSERR, EXIT_CANT_OUTPUT
 )

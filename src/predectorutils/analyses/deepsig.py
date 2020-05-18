@@ -4,10 +4,10 @@ from typing import Optional
 from typing import TextIO
 from typing import Iterator
 
-from predector.analyses.base import Analysis
-from predector.analyses.base import int_or_none
-from predector.analyses.parsers import ParseError, LineParseError
-from predector.analyses.parsers import (
+from predectorutils.analyses.base import Analysis
+from predectorutils.analyses.base import int_or_none
+from predectorutils.analyses.parsers import ParseError, LineParseError
+from predectorutils.analyses.parsers import (
     parse_string_not_empty,
     parse_float,
     parse_int,

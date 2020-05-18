@@ -9,7 +9,7 @@ from typing import Dict
 from typing import Any
 from typing import Optional
 
-from predector import analyses
+from predectorutils import analyses
 
 
 def cli(parser: argparse.ArgumentParser) -> None:

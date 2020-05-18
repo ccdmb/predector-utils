@@ -13,7 +13,7 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqUtils.CheckSum import seguid
 
-from predector.baseconv import IdConverter
+from predectorutils.baseconv import IdConverter
 
 
 def cli(parser: argparse.ArgumentParser) -> None:

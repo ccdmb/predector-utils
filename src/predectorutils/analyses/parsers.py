@@ -9,7 +9,7 @@ from typing import TypeVar
 from typing import TextIO
 from typing import Pattern
 
-from predector.higher import or_else
+from predectorutils.higher import or_else
 
 MULTISPACE_REGEX = re.compile(r"\s+")
 T = TypeVar("T")

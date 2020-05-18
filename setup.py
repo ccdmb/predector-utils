@@ -9,15 +9,17 @@ from setuptools import setup, find_packages
 # To use a consistent encoding
 from codecs import open
 from os import path
+from glob import glob
+from os.path import (basename, dirname, splitext)
 
-here = path.abspath(path.dirname(__file__))
+here = path.abspath(dirname(__file__))
 
 # Get the long description from the README file
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name='predector-utils',
+    name='predectorutils',
 
     # Versions should comply with PEP440.  For a discussion on single-sourcing
     # the version across setup.py and the project code, see
@@ -60,7 +62,8 @@ setup(
 
     # You can just specify the packages manually here if your project is
     # simple. Or you can use find_packages().
-    packages=find_packages(),
+    packages=find_packages("src"),
+    package_dir={'': 'src'},
 
     # List run-time dependencies here.  These will be installed by pip when
     # your project is installed. For an analysis of "install_requires" vs pip's
@@ -74,6 +77,7 @@ setup(
         'biopython>=1.70',
         'pandas'
         ],
+    py_modules=[splitext(basename(path))[0] for path in glob('src/*.py')],
 
     # List additional groups of dependencies here (e.g. development
     # dependencies). You can install these using the following syntax,
@@ -98,7 +102,7 @@ setup(
     # pip to create the appropriate form of executable for the target platform.
     entry_points={
         'console_scripts': [
-            'predector=predector.main:main',
+            'predector=predectorutils.main:main',
         ],
     },
 )
