@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import re
-from typing import Optional
 from typing import TextIO
 from typing import Iterator
 from typing import Dict
@@ -9,11 +8,17 @@ from typing import TypeVar
 from typing import Callable
 from typing import Tuple
 from typing import List, Sequence
+from typing import Pattern
 
 from typing import Iterable
 
 from predector.analyses.base import Analysis
-from predector.analyses.parsers import ParseError, LineParseError
+from predector.analyses.parsers import (
+    ParseError,
+    BlockParseError,
+    LineParseError
+)
+
 from predector.analyses.parsers import (
     parse_regex,
 )
@@ -30,11 +35,7 @@ def convert_line_err(
     try:
         return parser(field)
     except LineParseError as e:
-        raise ParseError(
-            None,
-            lineno,
-            e.message
-        )
+        raise BlockParseError.from_line_error(e, lineno)
 
 
 def get_line(lines: Iterator[Tuple[int, str]]) -> Tuple[int, str]:
@@ -47,11 +48,11 @@ def get_line(lines: Iterator[Tuple[int, str]]) -> Tuple[int, str]:
 
 
 def parse_regex_line(
-    lines: Iterator[Tuple[int, str]],
-    regex: re.Pattern,
+    lines: Iterable[Tuple[int, str]],
+    regex: Pattern,
     record: Dict[str, str]
 ) -> None:
-    i, line = get_line(lines)
+    i, line = get_line(iter(lines))
     record.update(
         convert_line_err(
             i,
@@ -273,6 +274,7 @@ class PepStats(Analysis):
         int, int, int, int, int, int, int, int, int,
         float, float, float, float, float, float, float, float, float,
     ]
+    analysis = "pepstats"
 
     def __init__(
         self,
@@ -494,7 +496,7 @@ class PepStats(Analysis):
         return
 
     @classmethod
-    def from_record(cls, lines: Sequence[str]) -> "PepStats":
+    def from_block(cls, lines: Sequence[str]) -> "PepStats":
         record: Dict[str, str] = dict()
 
         if not isinstance(lines, Iterable):
@@ -512,8 +514,7 @@ class PepStats(Analysis):
 
         i, line = get_line(ilines)
         if not line.startswith("Residue"):
-            raise ParseError(
-                None,
+            raise BlockParseError(
                 i,
                 "Expected to get the header line for the Residues table."
             )
@@ -547,24 +548,15 @@ class PepStats(Analysis):
 
             if sline.startswith("PEPSTATS") and len(block) > 0:
                 try:
-                    yield cls.from_record(block)
+                    yield cls.from_block(block)
 
-                except ParseError as e:
-                    if hasattr(handle, "name"):
-                        filename: Optional[str] = handle.name
-                    else:
-                        filename = None
-
-                    if e.line is None:
-                        lineno = i
-                    else:
-                        lineno = i - len(block) + e.line
-
-                    raise ParseError(
-                        filename,
-                        lineno,
-                        e.message
+                except BlockParseError as e:
+                    raise ParseError.from_block_error(
+                        e,
+                        i - len(block),
+                        handle
                     )
+
                 block = [sline]
 
             elif (len(block) == 0) and (sline == ""):
@@ -575,23 +567,13 @@ class PepStats(Analysis):
 
         if len(block) > 0:
             try:
-                yield cls.from_record(block)
+                yield cls.from_block(block)
 
-            except ParseError as e:
-                if hasattr(handle, "name"):
-                    filename = handle.name
-                else:
-                    filename = None
-
-                if e.line is None:
-                    lineno = i
-                else:
-                    lineno = i + e.line
-
-                raise ParseError(
-                    filename,
-                    lineno,
-                    e.message
+            except BlockParseError as e:
+                raise ParseError.from_block_error(
+                    e,
+                    i - len(block),
+                    handle
                 )
 
         return

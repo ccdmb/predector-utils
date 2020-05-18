@@ -21,6 +21,7 @@ class TargetPNonPlant(Analysis):
 
     columns = ["name", "prediction", "other", "sp", "mtp", "cs_pos"]
     types = [str, str, float, float, float, str_or_none]
+    analysis = "targetp_nonplant"
 
     def __init__(
         self,
@@ -108,19 +109,11 @@ class TargetPPlant(Analysis):
     """ Doesn't have output format documentation yet
     """
 
-    name: str
-    prediction: str
-    other: float
-    sp: float
-    mtp: float
-    ctp: Optional[float]
-    lutp: Optional[float]
-    cs_pos: Optional[str]
-
     columns = ["name", "prediction", "other", "sp",
                "mtp", "ctp", "lutp", "cs_pos"]
     types = [str, str, float, float, float,
              float_or_none, float_or_none, str_or_none]
+    analysis = "targetp_plant"
 
     def __init__(
         self,

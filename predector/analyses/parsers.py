@@ -1,11 +1,60 @@
 #!/usr/bin/env python3
 
 import re
+
 from typing import Optional
 from typing import Sequence
-from typing import Dict
+from typing import Mapping, Dict
+from typing import TypeVar
+from typing import TextIO
+from typing import Pattern
+
+from predector.higher import or_else
 
 MULTISPACE_REGEX = re.compile(r"\s+")
+T = TypeVar("T")
+
+
+class LineParseError(Exception):
+
+    def __init__(self, message: str):
+        self.message = message
+        return
+
+
+class BlockParseError(Exception):
+
+    def __init__(self, line: Optional[int], message: str):
+        self.line = line
+        self.message = message
+        return
+
+    @classmethod
+    def from_block_error(
+        cls,
+        error: "BlockParseError",
+        line: Optional[int],
+    ) -> "BlockParseError":
+        if (line is None) and (error.line is None):
+            line = None
+        else:
+            line = or_else(0, line) + or_else(0, error.line)
+
+        return cls(
+            line,
+            error.message
+        )
+
+    @classmethod
+    def from_line_error(
+        cls,
+        error: "LineParseError",
+        line: Optional[int],
+    ) -> "BlockParseError":
+        return cls(
+            line,
+            error.message
+        )
 
 
 class ParseError(Exception):
@@ -22,15 +71,50 @@ class ParseError(Exception):
         self.message = message
         return
 
+    @classmethod
+    def from_block_error(
+        cls,
+        error: BlockParseError,
+        line: Optional[int],
+        handle: TextIO
+    ) -> "ParseError":
+        if (line is None) and (error.line is None):
+            line = None
+        else:
+            line = or_else(0, line) + or_else(0, error.line)
 
-class LineParseError(Exception):
+        if hasattr(handle, "name"):
+            filename: Optional[str] = handle.name
+        else:
+            filename = None
 
-    def __init__(self, message: str):
-        self.message = message
-        return
+        return ParseError(
+            filename,
+            line,
+            error.message
+        )
+
+    @classmethod
+    def from_line_error(
+        cls,
+        error: BlockParseError,
+        line: Optional[int],
+        handle: TextIO
+    ) -> "ParseError":
+        if hasattr(handle, "name"):
+            filename: Optional[str] = handle.name
+        else:
+            filename = None
+
+        return ParseError(
+            filename,
+            line,
+            error.message
+        )
 
 
-def parse_regex(field: str, regex: re.Pattern) -> Dict[str, str]:
+
+def parse_regex(field: str, regex: Pattern) -> Dict[str, str]:
     matches = regex.match(field)
     if matches is None:
         raise LineParseError(
@@ -46,11 +130,28 @@ def split_at_eq(field: str, field_name: str, expected_lhs: str) -> str:
     if len(sfield) != 2:
         raise LineParseError(
             f"Expected a '{expected_lhs}=value' field value in column "
-            f"{field_name} but got {field}."
+            f"{field_name} but got '{field}'."
         )
     if sfield[0] != expected_lhs:
         raise LineParseError(
             f"Expected a '{expected_lhs}=value' field value in column "
+            f"{field_name} but got '{field}'."
+        )
+
+    return sfield[1]
+
+
+def split_at_multispace(field: str, field_name: str, expected_lhs: str) -> str:
+    """ Parse a field of a "key value" type, returning the value. """
+    sfield = MULTISPACE_REGEX.split(field, maxsplit=1)
+    if len(sfield) != 2:
+        raise LineParseError(
+            f"Expected a '{expected_lhs} value' field value in column "
+            f"{field_name} but got '{field}''."
+        )
+    if sfield[0] != expected_lhs:
+        raise LineParseError(
+            f"Expected a '{expected_lhs} value' field value in column "
             f"{field_name} but got {field}."
         )
 
@@ -124,3 +225,10 @@ def is_one_of(field: str, options: Sequence[str], field_name: str) -> str:
             f"Invalid value: '{field}' in the column: '{field_name}'. "
             f"Must be one of {options}."
         )
+
+
+def get_from_dict_or_err(key: str, d: Mapping[str, T], field_name: str) -> T:
+    if key in d:
+        return d[key]
+    else:
+        raise LineParseError(f"Missing field: '{field_name}' in line.")

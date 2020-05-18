@@ -59,6 +59,7 @@ class PfamScan(Analysis):
         str_or_none,
         str_or_none
     ]
+    analysis = "pfamscan"
 
     def __init__(
         self,

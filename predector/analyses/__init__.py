@@ -14,16 +14,18 @@ from predector.analyses.targetp import TargetPNonPlant, TargetPPlant
 from predector.analyses.tmhmm import TMHMM
 from predector.analyses.localizer import LOCALIZER
 from predector.analyses.deeploc import DeepLoc
-from predector.analyses.hmmer import DBCAN
+from predector.analyses.hmmer import DomTbl, DBCAN
 from predector.analyses.pfamscan import PfamScan
 from predector.analyses.pepstats import PepStats
-from predector.analyses.mmseqs import MMSeqs
+from predector.analyses.mmseqs import MMSeqs, PHIBase
+from predector.analyses.hhr import HHRAlignment
 
 
 __all__ = ["Analysis", "ApoplastP", "DeepSig", "EffectorP1", "EffectorP2",
            "Phobius", "SignalP3NN", "SignalP3HMM", "SignalP4", "SignalP5",
            "TargetPNonPlant", "TargetPPlant", "TMHMM", "LOCALIZER", "DeepLoc",
-           "DBCAN", "GFFAble", "PfamScan", "PepStats", "MMSeqs"]
+           "DomTbl", "DBCAN", "GFFAble", "PfamScan", "PepStats", "MMSeqs",
+           "PHIBase", "HHRAligmment"]
 
 
 class Analyses(enum.Enum):
@@ -44,7 +46,7 @@ class Analyses(enum.Enum):
     localizer = 14
     pfamscan = 15
     dbcan = 16
-    mmseqs = 17
+    phibase = 17
     pepstats = 18
 
     def __str__(self) -> str:
@@ -79,7 +81,5 @@ NAME_TO_ANALYSIS = {
     Analyses.dbcan: DBCAN,
     Analyses.pfamscan: PfamScan,
     Analyses.pepstats: PepStats,
-    Analyses.mmseqs: MMSeqs,
+    Analyses.phibase: PHIBase,
 }
-
-#   Analyses.hmmer_domtbl: HMMERDomTab,

@@ -3,6 +3,7 @@
 from typing import Optional
 from typing import TextIO
 from typing import Iterator
+from typing import List
 
 from predector.analyses.base import Analysis
 from predector.analyses.parsers import ParseError, LineParseError
@@ -19,6 +20,7 @@ class ApoplastP(Analysis):
 
     columns = ["name", "prediction", "prob"]
     types = [str, str, float]
+    analysis = "apoplastp"
 
     def __init__(self, name: str, prediction: str, prob: float) -> None:
         self.name = name

@@ -17,7 +17,7 @@ class MMSeqs(Analysis):
 
     """ """
     columns = [
-        "name",
+        "query",
         "target",
         "qstart",
         "qend",
@@ -58,16 +58,19 @@ class MMSeqs(Analysis):
         float
     ]
 
+    analysis = "mmseqs"
+    name_column = "query"
+
     def __init__(
         self,
-        target: str,
         query: str,
-        tstart: int,
-        tend: int,
-        tlen: int,
+        target: str,
         qstart: int,
         qend: int,
         qlen: int,
+        tstart: int,
+        tend: int,
+        tlen: int,
         evalue: float,
         gapopen: int,
         pident: float,
@@ -79,14 +82,14 @@ class MMSeqs(Analysis):
         qcov: float,
         tcov: float
     ):
-        self.target = target
         self.query = query
-        self.tstart = tstart
-        self.tend = tend
-        self.tlen = tlen
+        self.target = target
         self.qstart = qstart
         self.qend = qend
         self.qlen = qlen
+        self.tstart = tstart
+        self.tend = tend
+        self.tlen = tlen
         self.evalue = evalue
         self.gapopen = gapopen
         self.pident = pident
@@ -114,7 +117,7 @@ class MMSeqs(Analysis):
             )
 
         return cls(
-            parse_string_not_empty(sline[0], "name"),
+            parse_string_not_empty(sline[0], "query"),
             parse_string_not_empty(sline[1], "target"),
             parse_int(sline[2], "qstart"),
             parse_int(sline[3], "qend"),
@@ -159,3 +162,7 @@ class MMSeqs(Analysis):
                     e.message
                 )
         return
+
+
+class PHIBase(MMSeqs):
+    analysis = "phibase"

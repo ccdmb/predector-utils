@@ -19,6 +19,7 @@ class EffectorP1(Analysis):
 
     columns = ["name", "prediction", "prob"]
     types = [str, str, float]
+    analysis = "effectorp1"
 
     def __init__(self, name: str, prediction: str, prob: float) -> None:
         self.name = name
@@ -96,6 +97,7 @@ class EffectorP2(Analysis):
 
     columns = ["name", "prediction", "prob"]
     types = [str, str, float]
+    analysis = "effectorp2"
 
     def __init__(self, name: str, prediction: str, prob: float) -> None:
         self.name = name
