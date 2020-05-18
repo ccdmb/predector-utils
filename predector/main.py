@@ -9,6 +9,9 @@ from typing import List
 from predector.subcommands.r2js import cli as r2js_cli
 from predector.subcommands.r2js import runner as r2js_runner
 
+from predector.subcommands.encode import cli as encode_cli
+from predector.subcommands.encode import runner as encode_runner
+
 from predector.analyses.parsers import ParseError
 from predector.exceptions import (
     EXIT_VALID, EXIT_KEYBOARD, EXIT_UNKNOWN, EXIT_CLI, EXIT_INPUT_FORMAT,
@@ -71,6 +74,15 @@ def cli(prog: str, args: List[str]) -> argparse.Namespace:
 
     r2js_cli(r2js_subparser)
 
+    encode_subparser = subparsers.add_parser(
+        "encode",
+        help=(
+            "Remove duplicate sequences and give them new names."
+        )
+    )
+
+    encode_cli(encode_subparser)
+
     parsed = parser.parse_args(args)
 
     if parsed.subparser_name is None:
@@ -88,7 +100,10 @@ def main():  # noqa
         sys.exit(e.errno)
 
     try:
-        r2js_runner(args)
+        if args.subparser_name == "r2js":
+            r2js_runner(args)
+        elif args.subparser_name == "encode":
+            encode_runner(args)
 
     except ParseError as e:
         if e.line is not None:

@@ -70,10 +70,9 @@ setup(
     # Sorry about the hard dependency for scikit-learn.
     # The way that the PCA model is stored is not necessarily stable across
     # versions of scikit-learn, so I have to keep it fixed.
-    # install_requires=[
-    #     'numpy>=1.11.0',
-    #     'biopython>=1.70',
-    #     ],
+    install_requires=[
+        'biopython>=1.70',
+        ],
 
     # List additional groups of dependencies here (e.g. development
     # dependencies). You can install these using the following syntax,

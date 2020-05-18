@@ -12,6 +12,7 @@ source:
   path: "../"
 
 build:
+  noarch: python
   entry_points:
     - predector=predector.main:main
   script: "{{ PYTHON }} setup.py install --single-version-externally-managed --record=record.txt"
@@ -19,14 +20,16 @@ build:
 requirements:
   host:
     - python {{ python }}
+    - setuptools
+    - biopython
     - pip
   run:
-    - python
+    - python {{ python }}
+    - biopython
 
 test:
   imports:
     - predector
-    - test
   commands:
     - predector --help
   requires:
@@ -34,8 +37,8 @@ test:
 
 about:
   home: "{{ url }}"
-  license: BSD
-  license_family: BSD
+  license: Apache 2
+  license_family: APACHE
   license_file: "LICENSE"
   summary: "{{ description }}"
   doc_url: "{{ url }}"
