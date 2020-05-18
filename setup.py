@@ -72,6 +72,7 @@ setup(
     # versions of scikit-learn, so I have to keep it fixed.
     install_requires=[
         'biopython>=1.70',
+        'pandas'
         ],
 
     # List additional groups of dependencies here (e.g. development

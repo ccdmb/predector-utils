@@ -12,8 +12,8 @@ conda update -q conda
 
 conda install conda-build
 
-CONDA_OUTPUT=$(conda build --output-folder build .)
+CONDA_OUTPUT=$(conda build --output-folder conda-build/build conda-build)
 CREATED_FILE=$(echo "${CONDA_OUTPUT}" | sed -n '/^anaconda upload/s/anaconda upload //p')
 echo "${CREATED_FILE}"
 
-anaconda upload --all -d "test" --skip-existing "${CREATED_FILE}"
+anaconda -t "${ANACONDA_UPLOAD}" upload --all -d "test" --skip-existing "${CREATED_FILE}"

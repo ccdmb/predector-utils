@@ -78,7 +78,12 @@ class Analysis(object):
         header = ["name", "analysis", "parameter", "value"]
         for column in self.columns[1:]:
             rows.append(pd.Series(
-                data=[getattr(self, self.name_column), analysis, column, getattr(self, column)],
+                data=[
+                    getattr(self, self.name_column),
+                    analysis,
+                    column,
+                    getattr(self, column)
+                ],
                 index=header,
             ))
         return pd.DataFrame(rows)

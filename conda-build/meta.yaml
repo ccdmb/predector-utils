@@ -22,10 +22,12 @@ requirements:
     - python {{ python }}
     - setuptools
     - biopython
+    - pandas
     - pip
   run:
     - python {{ python }}
     - biopython
+    - pandas
 
 test:
   imports:
