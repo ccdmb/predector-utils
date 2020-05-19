@@ -12,6 +12,8 @@ conda update -q conda
 
 conda install conda-build
 conda install conda-verify
+conda install anaconda-client
+conda config --set anaconda_upload no
 
 CONDA_OUTPUT=$(conda build --output-folder conda-build/build conda-build)
 CREATED_FILE=$(echo "${CONDA_OUTPUT}" | sed -n '/^anaconda upload/s/anaconda upload //p')
