@@ -16,6 +16,13 @@ script:
 - mypy --ignore-missing-imports src
 
 deploy:
+  - provider: pypi
+    username: __token__
+    password:
+      secure: "V0LTGQitkTQTeEsbRkiyL8xxaouW8WDvjYIZup4KpOIDhTIEefRwdlSMbMr0etqQsB5FVC6sIXHh3rTTXO9eGIQWJZxMh4b/piPC6ZTtI7L91Heebj+Jv2C144Ymwmgy+l5K4ctjfjgcjwmnN/Evd3b+abK797H/u2KQKtr9mRC0B1zUVj0Dv4GQOMI3ABSsjM/EA5lmA6diKjz6qS3WcFgrPqhX4MiHcOYzjoz6P+rUcgDx7oJCcFynYUcUat4q/FNq4EWGR9mDOkAxEp3CaE5niTbon31N1BtMVJNymrg7Xr/gdkFr61c09dDmfrGjRTeC2es+GTvjfRMejHhW8yEu8PWbrKfXAHBpUm/UN4Wghs87MrKlGU2husS30FOfEnoAPkNNBICRPQtS9c6dgI8SSQwVFAaflLQlA5kXtp9x9WCqZr5C3nh1gI6O0uAfiUpq1yRT86XfAK2MiNiiwIh9dZbcgYAKDmbOeQuiQmvguxI5sBtgmVlSB/WNQRCBvufvwl8k/IRlGim8wFfsJgcSurCGDu49vsEtBwnJVTXAVzJv+fOcaEZ9JleV/lgcUT5qN1PIVzg7NosuVr20Rx73uRQFkhxmwS2tZIvepg7jdqPVb0282+RZHixlii5vEIa5upe9U+tl2XgOgKvp2urmdCBcNNNobxOBy/ksMO8="
+    on:
+      tags: true
+    skip_existing: true
   - provider: script
     script: "bash conda-build/travis_deploy.sh"
     on:
