@@ -102,7 +102,7 @@ setup(
     # pip to create the appropriate form of executable for the target platform.
     entry_points={
         'console_scripts': [
-            'predector=predectorutils.main:main',
+            'predutils=predectorutils.main:main',
         ],
     },
 )

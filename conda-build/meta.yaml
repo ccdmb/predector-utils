@@ -14,7 +14,7 @@ source:
 build:
   noarch: python
   entry_points:
-    - predector=predector.main:main
+    - predutils=predectorutils.main:main
   script: "{{ PYTHON }} setup.py install --single-version-externally-managed --record=record.txt"
 
 requirements:
@@ -31,9 +31,9 @@ requirements:
 
 test:
   imports:
-    - predector
+    - predectorutils
   commands:
-    - predector --help
+    - predutils --help
 
 about:
   home: "{{ url }}"
