@@ -38,7 +38,7 @@ setup(
     author_email='darcy.a.jones@postgrad.curtin.edu.au',
 
     # Choose your license
-    license='Apa',
+    license='Apache 2.0',
 
     # See https://pypi.python.org/pypi?%3Aaction=list_classifiers
     classifiers=[
@@ -49,7 +49,7 @@ setup(
         'Development Status :: 4 - Beta',
 
         # Pick your license as you wish (should match "license" above)
-        'License :: OSI Approved :: BSD License',
+        'License :: OSI Approved :: Apache Software License',
 
         # Specify the Python versions you support here.
         'Programming Language :: Python :: 3',
@@ -84,9 +84,9 @@ setup(
     # for example:
     # $ pip install -e .[dev,test]
     extras_require={
-        'dev': ['check-manifest', 'mypy', 'scipy', 'scikit-learn',
+        'dev': ['check-manifest', 'scipy', 'scikit-learn',
                 'jupyter', 'matplotlib', 'seaborn', "pandas"],
-        'test': ['coverage', "pytest"],
+        'test': ['coverage', 'pytest', 'mypy'],
     },
 
     # If there are data files included in your packages that need to be
