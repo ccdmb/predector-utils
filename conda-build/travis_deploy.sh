@@ -16,4 +16,4 @@ CONDA_OUTPUT=$(conda build --output-folder conda-build/build conda-build)
 CREATED_FILE=$(echo "${CONDA_OUTPUT}" | sed -n '/^anaconda upload/s/anaconda upload //p')
 echo "${CREATED_FILE}"
 
-anaconda -t "${ANACONDA_UPLOAD}" upload --all -d "test" --skip-existing "${CREATED_FILE}"
+anaconda -t "${ANACONDA_UPLOAD}" upload -u predector --all -d "test" --skip-existing "${CREATED_FILE}"
