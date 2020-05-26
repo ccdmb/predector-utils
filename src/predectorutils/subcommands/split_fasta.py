@@ -3,7 +3,10 @@
 import os
 import argparse
 
+from typing import List
+
 from Bio import SeqIO
+from Bio.SeqRecord import SeqRecord
 
 
 def cli(parser: argparse.ArgumentParser) -> None:
@@ -36,7 +39,7 @@ def runner(args: argparse.Namespace) -> None:
     seqs = SeqIO.parse(args.infile, "fasta")
 
     index = 1
-    chunk = []
+    chunk: List[SeqRecord] = []
     for seq in seqs:
         if len(chunk) >= args.size:
             fname = args.template.format(fname=args.infile, index=index)
