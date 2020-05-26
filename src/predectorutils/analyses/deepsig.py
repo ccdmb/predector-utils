@@ -22,6 +22,7 @@ class DeepSig(Analysis):
     columns = ["name", "prediction", "prob", "cs_pos"]
     types = [str, str, float, int_or_none]
     analysis = "deepsig"
+    software = "DeepSig"
 
     def __init__(
         self,

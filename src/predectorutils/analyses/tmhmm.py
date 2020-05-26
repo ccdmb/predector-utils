@@ -22,6 +22,7 @@ class TMHMM(Analysis):
     columns = ["name", "length", "exp_aa", "first_60", "pred_hel", "topology"]
     types = [str, int, float, float, int, str]
     analysis = "tmhmm"
+    software = "TMHMM"
 
     def __init__(
         self,

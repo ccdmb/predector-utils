@@ -7,7 +7,11 @@ from typing import Iterator
 from typing import Tuple
 
 from predectorutils.analyses.base import Analysis
-from predectorutils.analyses.base import int_or_none, float_or_none, str_or_none
+from predectorutils.analyses.base import (
+    int_or_none,
+    float_or_none,
+    str_or_none
+)
 from predectorutils.analyses.parsers import ParseError, LineParseError
 from predectorutils.analyses.parsers import (
     parse_string_not_empty,
@@ -75,6 +79,7 @@ class LOCALIZER(Analysis):
              bool, float_or_none, int_or_none, int_or_none,
              bool, str_or_none]
     analysis = "localizer"
+    software = "LOCALIZER"
 
     def __init__(
         self,

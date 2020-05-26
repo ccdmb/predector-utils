@@ -6,14 +6,19 @@ from typing import TextIO
 from typing import Iterator
 from typing import Optional
 from typing import Sequence, List
-from typing import Mapping, Dict
+from typing import Mapping
 from typing import Tuple
 from typing import TypeVar, Callable
 
 from predectorutils.higher import fmap
 from predectorutils.analyses.base import Analysis
 from predectorutils.analyses.base import float_or_none
-from predectorutils.analyses.parsers import ParseError, LineParseError, BlockParseError
+from predectorutils.analyses.parsers import (
+    ParseError,
+    LineParseError,
+    BlockParseError
+)
+
 from predectorutils.analyses.parsers import (
     parse_int,
     parse_float,
@@ -94,6 +99,7 @@ class HHRAlignment(Analysis):
     ]
     analysis = "hhblits"
     name_column = "query_id"
+    software = "HHSuite"
 
     def __init__(
         self,
@@ -198,7 +204,6 @@ class HHRAlignment(Analysis):
             except BlockParseError as e:
                 raise BlockParseError.from_block_error(e, i)
         return
-
 
     @classmethod
     def from_file(cls, handle: TextIO) -> Iterator["HHRAlignment"]:
@@ -327,13 +332,13 @@ class HHRAlignment(Analysis):
             elif line.startswith("Probab"):
                 try:
                     (probability,
-                    evalue,
-                    score,
-                    aligned_cols,
-                    identity,
-                    similarity,
-                    sum_probs,
-                    template_neff) = cls._parse_probab_line(line)
+                     evalue,
+                     score,
+                     aligned_cols,
+                     identity,
+                     similarity,
+                     sum_probs,
+                     template_neff) = cls._parse_probab_line(line)
                 except LineParseError as e:
                     raise BlockParseError.from_line_error(e, i)
 
@@ -348,18 +353,26 @@ class HHRAlignment(Analysis):
                 rhs = line[seq_begin_col:]
                 if not "Confidence" == actual_lhs:
                     print(actual_lhs)
-                    raise BlockParseError(i, f"Could not parse the confidence line at ")
+                    raise BlockParseError(
+                        i,
+                        f"Could not parse the confidence line at "
+                    )
+
                 confidence_sequence.append(rhs)
 
         query_ali = "".join(query_sequence)
         template_ali = "".join(template_sequence)
         confidence = "".join(confidence_sequence).replace(" ", "-")
-        assert len(query_ali) == len(template_ali) == len(confidence), (template_id, repr(confidence))
+        assert len(query_ali) == len(template_ali) == len(confidence), \
+            (template_id, repr(confidence))
 
         query_start = min(cls._is_not_empty(query_starts, "query_start"))
         query_end = max(cls._is_not_empty(query_ends, "query_ends"))
 
-        template_start = min(cls._is_not_empty(template_starts, "template_start"))
+        template_start = min(cls._is_not_empty(
+            template_starts,
+            "template_start"
+        ))
         template_end = max(cls._is_not_empty(template_ends, "template_ends"))
 
         return cls(
@@ -423,7 +436,8 @@ class HHRAlignment(Analysis):
         dline = {
             col: split_at_eq(f, col, col)
             for f, col
-            in zip(sline, columns)        }
+            in zip(sline, columns)
+        }
 
         if "Template_Neff" in dline:
             template_neff: Optional[float] = parse_float(
@@ -469,7 +483,8 @@ class HHRAlignment(Analysis):
         )
 
         if length is None:
-            raise LineParseError(f"Missing 'length' from alignment line: '{line}'.")
+            raise LineParseError(
+                f"Missing 'length' from alignment line: '{line}'.")
 
         seq_begin_match = ALI_REGEX.match(line)
         if seq_begin_match is None:
@@ -486,7 +501,8 @@ class HHRAlignment(Analysis):
             ),
             get_and_parse("id", "id", dline, parse_string_not_empty),
             get_and_parse("ali_start", "ali_start", dline, parse_int),
-            get_and_parse("sequence", "sequence", dline, parse_string_not_empty),
+            get_and_parse("sequence", "sequence",
+                          dline, parse_string_not_empty),
             get_and_parse("ali_end", "ali_end", dline, parse_int),
             parse_int(length, "length"),
             seq_begin

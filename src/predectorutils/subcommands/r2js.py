@@ -3,7 +3,6 @@
 import sys
 import argparse
 import json
-from datetime import datetime
 
 from typing import Dict
 from typing import Any
@@ -35,56 +34,60 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "-r", "--run-name",
-        dest="run_name",
+        "--pipeline-version",
+        dest="pipeline_version",
         type=str,
         default=None,
-        help="Add a run name to the output."
+        help="The version of predector that you're running."
     )
 
     parser.add_argument(
-        "-s", "--session-id",
-        dest="session_id",
+        "--software-version",
+        dest="software_version",
         type=str,
         default=None,
-        help="Add a session id to the output."
+        help=(
+            "The version of the software that you're using. "
+            "Note that the software itself is determined from the format arg."
+        ),
     )
 
-    # Should I convert this to a proper time object?
     parser.add_argument(
-        "-t", "--start",
-        dest="start",
-        type=datetime.fromisoformat,
+        "--database-version",
+        dest="database_version",
+        type=str,
         default=None,
-        help=("Add the run start-time to the output. Should be in the "
-              "iso format i.e. '2011-11-04 00:05:23.283'")
+        help=(
+            "The version of the database that you're searching. "
+            "Note that the database itself is determined from the format arg."
+        ),
     )
 
     return
 
 
 def get_line(
-    run_name: Optional[str],
-    session_id: Optional[str],
-    start: Optional[datetime],
-    protein_name: str,
+    pipeline_version: Optional[str],
+    software_version: Optional[str],
+    database_version: Optional[str],
     analysis_type: analyses.Analyses,
     analysis: analyses.Analysis,
 ) -> Dict[Any, Any]:
     out = {
-        "protein_name": protein_name,
+        "protein_name": getattr(analysis, analysis.name_column),
+        "software": analysis.software,
         "analysis": str(analysis_type),
         "data": analysis.as_dict()
     }
 
-    if run_name is not None:
-        out["run_name"] = run_name
+    if pipeline_version is not None:
+        out["pipeline_version"] = pipeline_version
 
-    if session_id is not None:
-        out["session_id"] = session_id
+    if software_version is not None:
+        out["software_version"] = software_version
 
-    if start is not None:
-        out["start"] = start.isoformat(sep=' ')
+    if database_version is not None:
+        out["database_version"] = database_version
 
     return out
 
@@ -93,10 +96,9 @@ def runner(args: argparse.Namespace) -> None:
     analysis = args.format.get_analysis()
     for line in analysis.from_file(args.infile):
         dline = get_line(
-            args.run_name,
-            args.session_id,
-            args.start,
-            line.name,
+            args.pipeline_version,
+            args.software_version,
+            args.database_version,
             args.format,
             line
         )

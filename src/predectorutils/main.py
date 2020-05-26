@@ -12,6 +12,10 @@ from predectorutils.subcommands.r2js import runner as r2js_runner
 from predectorutils.subcommands.encode import cli as encode_cli
 from predectorutils.subcommands.encode import runner as encode_runner
 
+from predectorutils.subcommands.split_fasta import cli as split_fasta_cli
+from predectorutils.subcommands.split_fasta import runner as split_fasta_runner
+
+
 from predectorutils.analyses.parsers import ParseError
 from predectorutils.exceptions import (
     EXIT_VALID, EXIT_KEYBOARD, EXIT_UNKNOWN, EXIT_CLI, EXIT_INPUT_FORMAT,
@@ -83,6 +87,15 @@ def cli(prog: str, args: List[str]) -> argparse.Namespace:
 
     encode_cli(encode_subparser)
 
+    split_fasta_subparser = subparsers.add_parser(
+        "split_fasta",
+        help=(
+            "Split a fasta file into chunks."
+        )
+    )
+
+    split_fasta_cli(split_fasta_subparser)
+
     parsed = parser.parse_args(args)
 
     if parsed.subparser_name is None:
@@ -104,6 +117,8 @@ def main():  # noqa
             r2js_runner(args)
         elif args.subparser_name == "encode":
             encode_runner(args)
+        elif args.subparser_name == "split_fasta":
+            split_fasta_runner(args)
 
     except ParseError as e:
         if e.line is not None:

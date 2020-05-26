@@ -22,6 +22,7 @@ class TargetPNonPlant(Analysis):
     columns = ["name", "prediction", "other", "sp", "mtp", "cs_pos"]
     types = [str, str, float, float, float, str_or_none]
     analysis = "targetp_nonplant"
+    software = "TargetP"
 
     def __init__(
         self,
@@ -114,6 +115,7 @@ class TargetPPlant(Analysis):
     types = [str, str, float, float, float,
              float_or_none, float_or_none, str_or_none]
     analysis = "targetp_plant"
+    software = "TargetP"
 
     def __init__(
         self,

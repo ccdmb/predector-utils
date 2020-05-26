@@ -20,6 +20,7 @@ class ApoplastP(Analysis):
     columns = ["name", "prediction", "prob"]
     types = [str, str, float]
     analysis = "apoplastp"
+    software = "ApoplastP"
 
     def __init__(self, name: str, prediction: str, prob: float) -> None:
         self.name = name

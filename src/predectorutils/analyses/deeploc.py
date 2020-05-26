@@ -18,19 +18,20 @@ class DeepLoc(Analysis):
     """ Doesn't have output format documentation yet
     """
 
-    columns = ["name", "prediction", "type", "nucleus", "cytoplasm",
+    columns = ["name", "prediction", "membrane", "nucleus", "cytoplasm",
                "extracellular", "mitochondrion", "cell_membrane",
                "endoplasmic_reticulum", "plastid", "golgi_apparatus",
                "lysosome_vacuole", "peroxisome"]
-    types = [str, str, str, float, float, float,
+    types = [str, str, float, float, float, float,
              float, float, float, float, float, float, float]
     analysis = "deeploc"
+    software = "DeepLoc"
 
     def __init__(
         self,
         name: str,
         prediction: str,
-        type: str,
+        membrane: float,
         nucleus: float,
         cytoplasm: float,
         extracellular: float,
@@ -44,7 +45,7 @@ class DeepLoc(Analysis):
     ) -> None:
         self.name = name
         self.prediction = prediction
-        self.type = type
+        self.membrane = membrane
         self.nucleus = nucleus
         self.cytoplasm = cytoplasm
         self.extracellular = extracellular
@@ -62,7 +63,7 @@ class DeepLoc(Analysis):
         if line == "":
             raise LineParseError("The line was empty.")
 
-        sline = line.strip().split(",")
+        sline = line.strip().split("\t")
 
         if len(sline) != 13:
             raise LineParseError(
@@ -72,16 +73,10 @@ class DeepLoc(Analysis):
 
         prediction = is_one_of(
             sline[1],
-            ["Nucleus", "Cytoplasm", "Extracellular", "Mitochondrion",
+            ["Membrane", "Nucleus", "Cytoplasm", "Extracellular", "Mitochondrion",
              "Cell membrane", "Endoplasmic reticulum", "Plastid",
              "Golgi apparatus", "Lysosome/Vacuole", "Peroxisome"],
             "prediction"
-        )
-
-        type_ = is_one_of(
-            sline[2],
-            ["Soluble", "Membrane"],
-            "type"
         )
 
         if prediction == "noTP":
@@ -90,7 +85,7 @@ class DeepLoc(Analysis):
         return cls(
             parse_string_not_empty(sline[0], "name"),
             prediction,
-            type_,
+            parse_float(sline[2], "membrane"),
             parse_float(sline[3], "nucleus"),
             parse_float(sline[4], "cytoplasm"),
             parse_float(sline[5], "extracellular"),
@@ -114,7 +109,7 @@ class DeepLoc(Analysis):
                 continue
             elif sline == "":
                 continue
-            elif sline.startswith("Entry ID,Localization,Type"):
+            elif sline.startswith("ID	Location	Membrane"):
                 continue
 
             try:

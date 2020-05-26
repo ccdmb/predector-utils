@@ -43,6 +43,8 @@ class Analysis(object):
         Callable[[Any], Optional[float]],
     ]]] = []
 
+    software: ClassVar[str] = "software"
+    database: ClassVar[Optional[str]] = None
     analysis: ClassVar[str] = "analysis"
     name_column: ClassVar[str] = "name"
 

@@ -60,6 +60,8 @@ class PfamScan(Analysis):
         str_or_none
     ]
     analysis = "pfamscan"
+    software = "Pfam-scan"
+    database = "Pfam"
 
     def __init__(
         self,

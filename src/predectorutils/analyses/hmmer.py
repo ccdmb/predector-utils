@@ -61,6 +61,7 @@ class DomTbl(Analysis):
         str_or_none
     ]
     analysis = "hmmer"
+    software = "HMMER"
     name_column = "query"
 
     def __init__(
@@ -192,6 +193,7 @@ class DomTbl(Analysis):
 
 class DBCAN(DomTbl):
     analysis = "dbcan"
+    database = "DBCan"
 
 
 def split_hmm(s: str) -> str:

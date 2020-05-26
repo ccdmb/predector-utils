@@ -58,6 +58,7 @@ class MMSeqs(Analysis):
         float
     ]
 
+    software = "MMSeqs2"
     analysis = "mmseqs"
     name_column = "query"
 
@@ -166,3 +167,5 @@ class MMSeqs(Analysis):
 
 class PHIBase(MMSeqs):
     analysis = "phibase"
+    software = "MMSeqs2"
+    database = "PHIBase"

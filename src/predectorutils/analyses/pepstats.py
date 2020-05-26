@@ -275,6 +275,7 @@ class PepStats(Analysis):
         float, float, float, float, float, float, float, float, float,
     ]
     analysis = "pepstats"
+    software = "EMBOSS"
 
     def __init__(
         self,
