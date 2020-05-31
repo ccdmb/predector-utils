@@ -177,12 +177,12 @@ def parse_predicted_active_site(
     """ """
 
     field = field.strip()
-
-    res = ACT_SITE_REGEX.match(field)
-    if res is None:
+    if not field.startswith("predicted_active_site"):
         raise LineParseError(
             f"Invalid value: '{field}' in the column: '{field_name}'. "
             "Must have the form 'predicted_active_site[1,2,3]'."
         )
-    else:
-        return res.groupdict()["sites"]
+
+    field = field[len("predicted_active_site"):]
+    sfield = (f.strip("[],; ") for f in field.split('['))
+    return ';'.join(f.replace(' ', '') for f in sfield if len(f) > 0)

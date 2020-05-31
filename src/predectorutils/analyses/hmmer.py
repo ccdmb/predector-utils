@@ -110,16 +110,18 @@ class DomTbl(Analysis):
         if line == "":
             raise LineParseError("The line was empty.")
 
-        sline = MULTISPACE_REGEX.split(line.strip(), maxsplit=16)
-        if len(sline) != 15 and len(sline) != 16:
+        sline = MULTISPACE_REGEX.split(line.strip(), maxsplit=22)
+        if len(sline) != 22 and len(sline) != 23:
             # Technically because of the max_split this should be impossible.
             # the description line is allowed to have spaces.
             raise LineParseError(
                 "The line had the wrong number of columns. "
-                f"Expected 15 or 16 but got {len(sline)}"
+                f"Expected 22 or 23 but got {len(sline)}"
             )
 
-        if sline[22] == "-" or sline[22] == "":
+        if len(sline) == 22:
+            description: Optional[str] = None
+        elif sline[22] == "-" or sline[22] == "":
             description: Optional[str] = None
         else:
             description = sline[22]
