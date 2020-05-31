@@ -73,9 +73,12 @@ class DeepLoc(Analysis):
 
         prediction = is_one_of(
             sline[1],
-            ["Membrane", "Nucleus", "Cytoplasm", "Extracellular", "Mitochondrion",
-             "Cell membrane", "Endoplasmic reticulum", "Plastid",
-             "Golgi apparatus", "Lysosome/Vacuole", "Peroxisome"],
+            [
+                "Membrane", "Nucleus", "Cytoplasm", "Extracellular",
+                "Mitochondrion", "Cell_membrane", "Endoplasmic_reticulum",
+                "Plastid", "Golgi_apparatus", "Lysosome/Vacuole",
+                "Peroxisome"
+            ],
             "prediction"
         )
 
