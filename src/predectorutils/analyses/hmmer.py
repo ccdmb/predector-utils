@@ -122,7 +122,7 @@ class DomTbl(Analysis):
         if len(sline) == 22:
             description: Optional[str] = None
         elif sline[22] == "-" or sline[22] == "":
-            description: Optional[str] = None
+            description = None
         else:
             description = sline[22]
 
