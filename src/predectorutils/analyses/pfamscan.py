@@ -50,6 +50,7 @@ class PfamScan(Analysis):
         int,
         str,
         str,
+        str,
         int,
         int,
         int,
