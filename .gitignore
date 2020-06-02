@@ -10,6 +10,7 @@ __pycache__/
 *~
 .eggs/**
 conda-build/build
+*.ipynb
 
 **/.ipynb_checkpoints
 .mypy_cache
