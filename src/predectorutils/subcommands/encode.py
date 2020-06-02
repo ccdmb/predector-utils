@@ -51,26 +51,6 @@ def cli(parser: argparse.ArgumentParser) -> None:
         help="The prefix to add to the beginning of the ids.",
     )
 
-    parser.add_argument(
-        "-s", "--strip",
-        default=None,
-        type=str,
-        help=(
-            "Strip these characters from the end of the sequence. "
-            "This is only respected for 'fasta' formats."
-        ),
-    )
-
-    parser.add_argument(
-        "-U", "--upper",
-        default=False,
-        action="store_true",
-        help=(
-            "Convert sequences to uppercase. "
-            "This is only used for 'fasta' format."
-        ),
-    )
-
     return
 
 
@@ -87,23 +67,6 @@ def get_checksum(seq: SeqRecord) -> Tuple[str, str]:
     return seq.id, checksum
 
 
-def get_table_line(
-    filename: str,
-    seq: SeqRecord,
-    id_conv: IdConverter,
-    checksums: Dict[str, str]
-) -> TableLine:
-    id, checksum = get_checksum(seq)
-
-    encoded = checksums.get(checksum, None)
-    if encoded is None:
-        encoded = next(id_conv)
-
-    basename = psplit(filename)[1]
-
-    return TableLine(encoded, basename, id, checksum)
-
-
 def format_table_line(t: TableLine) -> str:
     return f"{t.encoded}\t{t.filename}\t{t.id}\t{t.checksum}"
 
@@ -112,36 +75,57 @@ def runner(args: argparse.Namespace) -> None:
     checksums: Dict[str, str] = dict()
     id_conv = IdConverter(prefix=args.prefix, length=args.length)
 
+    i = 0
+    j = 1
     seq_chunk = list()
     tab_chunk = list()
-
     for infile in args.infiles:
+
         seqs = SeqIO.parse(infile, "fasta")
-        for i, seq in enumerate(seqs, 1):
+        for seq in seqs:
             seq.seq = Seq(
                 str(seq.seq)
                 .rstrip("*")
                 .upper()
                 .replace("*", "X")
+                .replace("J", "X")
+                .replace("B", "X")
+                .replace("Z", "X")
             )
 
-            line = get_table_line(infile, seq, id_conv, checksums)
+            id_, checksum = get_checksum(seq)
+            if checksum in checksums:
+                encoded = checksums[checksum]
+                new_seq = False
+            else:
+                encoded = id_conv.encode(i)
+                checksums[checksum] = encoded
+                i += 1
+                new_seq = True
+
+            line = TableLine(encoded, psplit(infile)[1], id_, checksum)
             tab_chunk.append(format_table_line(line))
 
-            if line.checksum not in checksums:
-                seq.id = line.encoded
-                seq.name = line.encoded
-                seq.description = line.encoded
+            if new_seq:
+                seq.id = encoded
+                seq.name = encoded
+                seq.description = encoded
 
-                seq_chunk.append(seq.format("fasta"))
+                seq_chunk.append(seq.format("fasta").strip())
 
-            if i % 10000 == 0:
-                args.outfasta.write(''.join(seq_chunk))
-                args.outmap.write('\n'.join(tab_chunk))
+            if j % 10000 == 0:
+                args.outfasta.write('\n'.join(seq_chunk) + '\n')
+                args.outmap.write('\n'.join(tab_chunk) + '\n')
+                seq_chunk = list()
+                tab_chunk = list()
+
+            j += 1
 
     if len(seq_chunk) > 0:
         args.outfasta.write(''.join(seq_chunk))
 
     if len(tab_chunk) > 0:
         args.outmap.write('\n'.join(tab_chunk))
+
+    print(len(checksums))
     return
