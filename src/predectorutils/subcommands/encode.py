@@ -122,10 +122,10 @@ def runner(args: argparse.Namespace) -> None:
             j += 1
 
     if len(seq_chunk) > 0:
-        args.outfasta.write(''.join(seq_chunk))
+        args.outfasta.write('\n'.join(seq_chunk) + '\n')
 
     if len(tab_chunk) > 0:
-        args.outmap.write('\n'.join(tab_chunk))
+        args.outmap.write('\n'.join(tab_chunk) + '\n')
 
     print(len(checksums))
     return
