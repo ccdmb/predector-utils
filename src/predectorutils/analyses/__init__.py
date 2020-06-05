@@ -21,7 +21,7 @@ from predectorutils.analyses.deeploc import DeepLoc
 from predectorutils.analyses.hmmer import DomTbl, DBCAN
 from predectorutils.analyses.pfamscan import PfamScan
 from predectorutils.analyses.pepstats import PepStats
-from predectorutils.analyses.mmseqs import MMSeqs, PHIBase
+from predectorutils.analyses.mmseqs import MMSeqs, PHIBase, EffectorSearch
 from predectorutils.analyses.hhr import HHRAlignment  # noqa
 
 
@@ -29,7 +29,7 @@ __all__ = ["Analysis", "ApoplastP", "DeepSig", "EffectorP1", "EffectorP2",
            "Phobius", "SignalP3NN", "SignalP3HMM", "SignalP4", "SignalP5",
            "TargetPNonPlant", "TargetPPlant", "TMHMM", "LOCALIZER", "DeepLoc",
            "DomTbl", "DBCAN", "GFFAble", "PfamScan", "PepStats", "MMSeqs",
-           "PHIBase", "HHRAligmment"]
+           "PHIBase", "HHRAligmment", "EffectorSearch"]
 
 
 class Analyses(enum.Enum):
@@ -52,6 +52,7 @@ class Analyses(enum.Enum):
     dbcan = 16
     phibase = 17
     pepstats = 18
+    effectorsearch = 19
 
     def __str__(self) -> str:
         return self.name
@@ -86,4 +87,5 @@ NAME_TO_ANALYSIS = {
     Analyses.pfamscan: PfamScan,
     Analyses.pepstats: PepStats,
     Analyses.phibase: PHIBase,
+    Analyses.effectorsearch: EffectorSearch,
 }

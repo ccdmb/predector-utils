@@ -169,3 +169,9 @@ class PHIBase(MMSeqs):
     analysis = "phibase"
     software = "MMSeqs2"
     database = "PHIBase"
+
+
+class EffectorSearch(MMSeqs):
+    analysis = "effectorsearch"
+    software = "MMSeqs2"
+    database = "CustomEffectorDatabase"
