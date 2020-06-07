@@ -1,16 +1,28 @@
 #!/usr/bin/env python3
 
-from typing import Optional
 from typing import TextIO
 from typing import Iterator
 
 from predectorutils.analyses.base import Analysis
-from predectorutils.analyses.parsers import ParseError, LineParseError
-from predectorutils.analyses.parsers import (
-    parse_string_not_empty,
+from predectorutils.parsers import (
+    FieldParseError,
+    LineParseError,
+    raise_it,
+    parse_field,
+    parse_str,
     parse_float,
     is_one_of
 )
+
+__all__ = ["ApoplastP"]
+
+
+apo_name = raise_it(parse_field(parse_str, "name"))
+apo_prediction = raise_it(parse_field(
+    is_one_of(["Apoplastic", "Non-apoplastic"]),
+    "prediction"
+))
+apo_prob = raise_it(parse_field(parse_float, "prob"))
 
 
 class ApoplastP(Analysis):
@@ -44,13 +56,9 @@ class ApoplastP(Analysis):
             )
 
         return cls(
-            parse_string_not_empty(sline[0], "name"),
-            is_one_of(
-                sline[1],
-                ["Apoplastic", "Non-apoplastic"],
-                "prediction"
-            ),
-            parse_float(sline[2], "prob"),
+            apo_name(sline[0]),
+            apo_prediction(sline[1]),
+            apo_prob(sline[2]),
         )
 
     @classmethod
@@ -75,15 +83,6 @@ class ApoplastP(Analysis):
             try:
                 yield cls.from_line(sline)
 
-            except LineParseError as e:
-                if hasattr(handle, "name"):
-                    filename: Optional[str] = handle.name
-                else:
-                    filename = None
-
-                raise ParseError(
-                    filename,
-                    i,
-                    e.message
-                )
+            except (LineParseError, FieldParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return

@@ -4,7 +4,7 @@ import re
 
 from typing import TextIO
 from typing import Iterator
-from typing import Optional
+from typing import Optional, Union
 from typing import Sequence, List
 from typing import Mapping
 from typing import Tuple
@@ -13,22 +13,24 @@ from typing import TypeVar, Callable
 from predectorutils.higher import fmap
 from predectorutils.analyses.base import Analysis
 from predectorutils.analyses.base import float_or_none
-from predectorutils.analyses.parsers import (
-    ParseError,
-    LineParseError,
-    BlockParseError
-)
-
-from predectorutils.analyses.parsers import (
+from predectorutils.parsers import (
     parse_int,
     parse_float,
     split_at_eq,
     split_at_multispace,
-    parse_string_not_empty,
+    parse_str,
     get_from_dict_or_err,
     is_one_of,
     MULTISPACE_REGEX,
+    ParseError,
+    LineParseError,
+    BlockParseError,
+    ValueParseError,
+    FieldParseError,
+    parse_field,
+    raise_it,
 )
+
 
 T = TypeVar("T")
 ALI_REGEX = re.compile(r"[QT]\s+[^\s]+\s+\d+\s+")
@@ -37,13 +39,22 @@ ALI_REGEX = re.compile(r"[QT]\s+[^\s]+\s+\d+\s+")
 def get_and_parse(
     key: str,
     field_name: str,
-    d: Mapping[str, str],
-    func: Callable[[str, str], T]
-) -> T:
-    return func(
-        get_from_dict_or_err(key, d, field_name),
-        field_name
-    )
+    pfn: Callable[[str], Union[ValueParseError, T]]
+) -> Callable[[Mapping[str, str]], T]:
+    vfn = get_from_dict_or_err(key)
+
+    def inner(d: Mapping[str, str]) -> T:
+        v1 = vfn(d)
+        if isinstance(v1, ValueParseError):
+            raise v1.as_field_error(field_name)
+
+        v2 = pfn(v1)
+        if isinstance(v2, ValueParseError):
+            raise v2.as_field_error(field_name)
+
+        return v2
+
+    return inner
 
 
 class HHRAlignment(Analysis):
@@ -148,7 +159,7 @@ class HHRAlignment(Analysis):
         self.sum_probs = sum_probs
         return
 
-    @classmethod
+    @classmethod  # noqa
     def from_block(cls, lines: Sequence[str]) -> Iterator["HHRAlignment"]:
         if len(lines) == 0:
             raise BlockParseError(0, "The block was empty.")
@@ -172,7 +183,7 @@ class HHRAlignment(Analysis):
                         query_neff
                     )
                 except BlockParseError as e:
-                    raise BlockParseError.from_block_error(e, i)
+                    raise e.as_block_error(i)
 
                 alignment_block = []
 
@@ -191,7 +202,7 @@ class HHRAlignment(Analysis):
                 elif sline.startswith("Neff"):
                     query_neff = cls._parse_query_neff_line(sline)
             except LineParseError as e:
-                raise BlockParseError.from_line_error(e, i)
+                raise e.as_block_error(i)
 
         if len(alignment_block) > 0:
             try:
@@ -202,7 +213,7 @@ class HHRAlignment(Analysis):
                     query_neff
                 )
             except BlockParseError as e:
-                raise BlockParseError.from_block_error(e, i)
+                raise e.as_block_error(i)
         return
 
     @classmethod
@@ -224,7 +235,7 @@ class HHRAlignment(Analysis):
                 block.append(sline)
 
             except BlockParseError as e:
-                raise ParseError.from_block_error(e, i, handle)
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
 
         try:
             if len(block) > 0:
@@ -232,7 +243,7 @@ class HHRAlignment(Analysis):
                     yield b
 
         except BlockParseError as e:
-            raise ParseError.from_block_error(e, i, handle)
+            raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return
 
     @staticmethod
@@ -251,7 +262,7 @@ class HHRAlignment(Analysis):
             )
         return val
 
-    @classmethod
+    @classmethod  # noqa
     def _parse_alignment(
         cls,
         block: Sequence[str],
@@ -299,8 +310,8 @@ class HHRAlignment(Analysis):
                 # type id ali_start sequence ali_end length
                 try:
                     query_line = cls._parse_alignment_line(line)
-                except LineParseError as e:
-                    raise BlockParseError.from_line_error(e, i)
+                except (FieldParseError, LineParseError) as e:
+                    raise e.as_block_error(i)
 
                 if query_line[1] in skip_ali_tags:
                     continue
@@ -315,8 +326,8 @@ class HHRAlignment(Analysis):
             elif line.startswith("T"):
                 try:
                     template_line = cls._parse_alignment_line(line)
-                except LineParseError as e:
-                    raise BlockParseError.from_line_error(e, i)
+                except (FieldParseError, LineParseError) as e:
+                    raise e.as_block_error(i)
 
                 if template_line[1] in skip_ali_tags:
                     continue
@@ -339,8 +350,8 @@ class HHRAlignment(Analysis):
                      similarity,
                      sum_probs,
                      template_neff) = cls._parse_probab_line(line)
-                except LineParseError as e:
-                    raise BlockParseError.from_line_error(e, i)
+                except (FieldParseError, LineParseError) as e:
+                    raise e.as_block_error(i)
 
             elif line.startswith("Confidence"):
                 if seq_begin_col is None:
@@ -401,21 +412,24 @@ class HHRAlignment(Analysis):
 
     @staticmethod
     def _parse_query_line(field: str) -> str:
-        return split_at_multispace(field, "query", "Query")
+        return raise_it(parse_field(
+            split_at_multispace(parse_str, "Query"),
+            "query"
+        ))(field)
 
     @staticmethod
     def _parse_query_length_line(field: str) -> int:
-        return parse_int(
-            split_at_multispace(field, "query_length", "Match_columns"),
+        return raise_it(parse_field(
+            split_at_multispace(parse_int, "Match_columns"),
             "query_length",
-        )
+        ))(field)
 
     @staticmethod
     def _parse_query_neff_line(field: str) -> float:
-        return parse_float(
-            split_at_multispace(field, "query_neff", "Neff"),
+        return raise_it(parse_field(
+            split_at_multispace(parse_float, "Neff"),
             "query_neff",
-        )
+        ))(field)
 
     @staticmethod
     def _parse_probab_line(
@@ -434,32 +448,31 @@ class HHRAlignment(Analysis):
         ]
 
         dline = {
-            col: split_at_eq(f, col, col)
+            col: raise_it(parse_field(split_at_eq(parse_str, col), col))(f)
             for f, col
             in zip(sline, columns)
         }
 
         if "Template_Neff" in dline:
-            template_neff: Optional[float] = parse_float(
-                dline["Template_Neff"],
+            template_neff: Optional[float] = raise_it(parse_field(
+                parse_float,
                 "template_neff"
-               )
+            ))(dline["Template_Neff"])
         else:
             template_neff = None
 
         return (
-            get_and_parse("Probab", "probability", dline, parse_float),
-            get_and_parse("E-value", "evalue", dline, parse_float),
-            get_and_parse("Score", "score", dline, parse_float),
-            get_and_parse("Aligned_cols", "aligned_cols", dline, parse_int),
+            get_and_parse("Probab", "probability", parse_float)(dline),
+            get_and_parse("E-value", "evalue", parse_float)(dline),
+            get_and_parse("Score", "score", parse_float)(dline),
+            get_and_parse("Aligned_cols", "aligned_cols", parse_int)(dline),
             get_and_parse(
                 "Identities",
                 "identity",
-                dline,
-                lambda x, y: parse_float(x.rstrip("%"), y) / 100.0
-            ),
-            get_and_parse("Similarity", "similarity", dline, parse_float),
-            get_and_parse("Sum_probs", "sum_probs", dline, parse_float),
+                lambda x: parse_float(x.rstrip("%"))
+            )(dline) / 100.0,
+            get_and_parse("Similarity", "similarity", parse_float)(dline),
+            get_and_parse("Sum_probs", "sum_probs", parse_float)(dline),
             template_neff,
         )
 
@@ -493,17 +506,11 @@ class HHRAlignment(Analysis):
             seq_begin = seq_begin_match.end()
 
         return (
-            get_and_parse(
-                "type",
-                "type",
-                dline,
-                lambda f, fn: is_one_of(f, ["T", "Q"], fn)
-            ),
-            get_and_parse("id", "id", dline, parse_string_not_empty),
-            get_and_parse("ali_start", "ali_start", dline, parse_int),
-            get_and_parse("sequence", "sequence",
-                          dline, parse_string_not_empty),
-            get_and_parse("ali_end", "ali_end", dline, parse_int),
-            parse_int(length, "length"),
+            get_and_parse("type", "type", is_one_of(["T", "Q"]))(dline),
+            get_and_parse("id", "id", parse_str)(dline),
+            get_and_parse("ali_start", "ali_start", parse_int)(dline),
+            get_and_parse("sequence", "sequence", parse_str)(dline),
+            get_and_parse("ali_end", "ali_end", parse_int)(dline),
+            raise_it(parse_field(parse_int, "length", "field"))(length),
             seq_begin
         )

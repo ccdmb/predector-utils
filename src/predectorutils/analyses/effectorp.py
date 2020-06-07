@@ -1,16 +1,26 @@
 #!/usr/bin/env python3
 
-from typing import Optional
 from typing import TextIO
 from typing import Iterator
 
 from predectorutils.analyses.base import Analysis
-from predectorutils.analyses.parsers import ParseError, LineParseError
-from predectorutils.analyses.parsers import (
-    parse_string_not_empty,
+from predectorutils.parsers import (
+    FieldParseError,
+    LineParseError,
+    raise_it,
+    parse_field,
+    parse_str,
     parse_float,
     is_one_of
 )
+
+
+e1_name = raise_it(parse_field(parse_str, "name"))
+e1_prediction = raise_it(parse_field(
+    is_one_of(["Effector", "Non-effector"]),
+    "prediction"
+))
+e1_prob = raise_it(parse_field(parse_float, "prob"))
 
 
 class EffectorP1(Analysis):
@@ -44,13 +54,9 @@ class EffectorP1(Analysis):
             )
 
         return cls(
-            parse_string_not_empty(sline[0], "name"),
-            is_one_of(
-                sline[1],
-                ["Effector", "Non-effector"],
-                "prediction"
-            ),
-            parse_float(sline[2], "prob"),
+            e1_name(sline[0]),
+            e1_prediction(sline[1]),
+            e1_prob(sline[2]),
         )
 
     @classmethod
@@ -77,19 +83,17 @@ class EffectorP1(Analysis):
 
             try:
                 yield cls.from_line(sline)
-
-            except LineParseError as e:
-                if hasattr(handle, "name"):
-                    filename: Optional[str] = handle.name
-                else:
-                    filename = None
-
-                raise ParseError(
-                    filename,
-                    i,
-                    e.message
-                )
+            except (LineParseError, FieldParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return
+
+
+e2_name = raise_it(parse_field(parse_str, "name"))
+e2_prediction = raise_it(parse_field(
+    is_one_of(["Effector", "Unlikely effector", "Non-effector"]),
+    "prediction"
+))
+e2_prob = raise_it(parse_field(parse_float, "prob"))
 
 
 class EffectorP2(Analysis):
@@ -123,13 +127,9 @@ class EffectorP2(Analysis):
             )
 
         return cls(
-            parse_string_not_empty(sline[0], "name"),
-            is_one_of(
-                sline[1],
-                ["Effector", "Unlikely effector", "Non-effector"],
-                "prediction"
-            ),
-            parse_float(sline[2], "prob"),
+            e2_name(sline[0]),
+            e2_prediction(sline[1]),
+            e2_prob(sline[2]),
         )
 
     @classmethod
@@ -156,16 +156,6 @@ class EffectorP2(Analysis):
 
             try:
                 yield cls.from_line(sline)
-
-            except LineParseError as e:
-                if hasattr(handle, "name"):
-                    filename: Optional[str] = handle.name
-                else:
-                    filename = None
-
-                raise ParseError(
-                    filename,
-                    i,
-                    e.message
-                )
+            except (LineParseError, FieldParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return

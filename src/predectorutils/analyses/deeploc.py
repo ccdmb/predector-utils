@@ -1,16 +1,43 @@
 #!/usr/bin/env python3
 
-from typing import Optional
 from typing import TextIO
 from typing import Iterator
 
 from predectorutils.analyses.base import Analysis
-from predectorutils.analyses.parsers import ParseError, LineParseError
-from predectorutils.analyses.parsers import (
-    parse_string_not_empty,
+from predectorutils.parsers import (
+    FieldParseError,
+    LineParseError,
+    parse_field,
+    raise_it,
+    parse_str,
     parse_float,
     is_one_of
 )
+
+dl_name = raise_it(parse_field(parse_str, "name"))
+dl_prediction = raise_it(parse_field(
+    is_one_of([
+        "Membrane", "Nucleus", "Cytoplasm", "Extracellular",
+        "Mitochondrion", "Cell_membrane", "Endoplasmic_reticulum",
+        "Plastid", "Golgi_apparatus", "Lysosome/Vacuole",
+        "Peroxisome"
+    ]),
+    "prediction"
+))
+dl_membrane = raise_it(parse_field(parse_float, "membrane"))
+dl_nucleus = raise_it(parse_field(parse_float, "nucleus"))
+dl_cytoplasm = raise_it(parse_field(parse_float, "cytoplasm"))
+dl_extracellular = raise_it(parse_field(parse_float, "extracellular"))
+dl_mitochondrion = raise_it(parse_field(parse_float, "mitochondrion"))
+dl_cell_membrane = raise_it(parse_field(parse_float, "cell_membrane"))
+dl_endoplasmic_reticulum = raise_it(parse_field(
+    parse_float,
+    "endoplasmic_reticulum"
+))
+dl_plastid = raise_it(parse_field(parse_float, "plastid"))
+dl_golgi_apparatus = raise_it(parse_field(parse_float, "golgi_apparatus"))
+dl_lysosome = raise_it(parse_field(parse_float, "lysosome_vacuole"))
+dl_peroxisome = raise_it(parse_field(parse_float, "peroxisome"))
 
 
 class DeepLoc(Analysis):
@@ -71,34 +98,20 @@ class DeepLoc(Analysis):
                 f"Expected 13 but got {len(sline)}"
             )
 
-        prediction = is_one_of(
-            sline[1],
-            [
-                "Membrane", "Nucleus", "Cytoplasm", "Extracellular",
-                "Mitochondrion", "Cell_membrane", "Endoplasmic_reticulum",
-                "Plastid", "Golgi_apparatus", "Lysosome/Vacuole",
-                "Peroxisome"
-            ],
-            "prediction"
-        )
-
-        if prediction == "noTP":
-            prediction = "OTHER"
-
         return cls(
-            parse_string_not_empty(sline[0], "name"),
-            prediction,
-            parse_float(sline[2], "membrane"),
-            parse_float(sline[3], "nucleus"),
-            parse_float(sline[4], "cytoplasm"),
-            parse_float(sline[5], "extracellular"),
-            parse_float(sline[6], "mitochondrion"),
-            parse_float(sline[7], "cell_membrane"),
-            parse_float(sline[8], "endoplasmic_reticulum"),
-            parse_float(sline[9], "plastid"),
-            parse_float(sline[10], "golgi_apparatus"),
-            parse_float(sline[11], "lysosome_vacuole"),
-            parse_float(sline[12], "peroxisome"),
+            dl_name(sline[0]),
+            dl_prediction(sline[1]),
+            dl_membrane(sline[2]),
+            dl_nucleus(sline[3]),
+            dl_cytoplasm(sline[4]),
+            dl_extracellular(sline[5]),
+            dl_mitochondrion(sline[6]),
+            dl_cell_membrane(sline[7]),
+            dl_endoplasmic_reticulum(sline[8]),
+            dl_plastid(sline[9]),
+            dl_golgi_apparatus(sline[10]),
+            dl_lysosome(sline[11]),
+            dl_peroxisome(sline[12]),
         )
 
     @classmethod
@@ -118,15 +131,6 @@ class DeepLoc(Analysis):
             try:
                 yield cls.from_line(sline)
 
-            except LineParseError as e:
-                if hasattr(handle, "name"):
-                    filename: Optional[str] = handle.name
-                else:
-                    filename = None
-
-                raise ParseError(
-                    filename,
-                    i,
-                    e.message
-                )
+            except (LineParseError, FieldParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return

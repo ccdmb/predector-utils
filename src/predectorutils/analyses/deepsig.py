@@ -6,13 +6,28 @@ from typing import Iterator
 
 from predectorutils.analyses.base import Analysis
 from predectorutils.analyses.base import int_or_none
-from predectorutils.analyses.parsers import ParseError, LineParseError
-from predectorutils.analyses.parsers import (
-    parse_string_not_empty,
+from predectorutils.parsers import (
+    FieldParseError,
+    LineParseError,
+    raise_it,
+    parse_field,
+    parse_str,
     parse_float,
     parse_int,
+    parse_or_none,
     is_one_of
 )
+
+__all__ = ["DeepSig"]
+
+
+ds_name = raise_it(parse_field(parse_str, "name"))
+ds_prediction = raise_it(parse_field(
+    is_one_of(["SignalPeptide", "Transmembrane", "Other"]),
+    "prediction"
+))
+ds_prob = raise_it(parse_field(parse_float, "prob"))
+ds_cs_pos = raise_it(parse_field(parse_or_none(parse_int, "-"), "cs_pos"))
 
 
 class DeepSig(Analysis):
@@ -52,20 +67,11 @@ class DeepSig(Analysis):
                 f"Expected 4 but got {len(sline)}"
             )
 
-        if sline[3] == "-":
-            cs_pos: Optional[int] = None
-        else:
-            cs_pos = parse_int(sline[3], "cs_pos")
-
         return cls(
-            parse_string_not_empty(sline[0], "name"),
-            is_one_of(
-                sline[1],
-                ["SignalPeptide", "Transmembrane", "Other"],
-                "prediction"
-            ),
-            parse_float(sline[2], "prob"),
-            cs_pos,
+            ds_name(sline[0]),
+            ds_prediction(sline[1]),
+            ds_prob(sline[2]),
+            ds_cs_pos(sline[3]),
         )
 
     @classmethod
@@ -79,16 +85,6 @@ class DeepSig(Analysis):
 
             try:
                 yield cls.from_line(sline)
-
-            except LineParseError as e:
-                if hasattr(handle, "name"):
-                    filename: Optional[str] = handle.name
-                else:
-                    filename = None
-
-                raise ParseError(
-                    filename,
-                    i,
-                    e.message
-                )
+            except (LineParseError, FieldParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return

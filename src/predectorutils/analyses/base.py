@@ -71,7 +71,13 @@ class Analysis(object):
     def from_file(cls, handle: TextIO) -> Iterator['Analysis']:
         raise NotImplementedError()
 
-    def to_df(self, analysis: Optional[str] = None) -> pd.DataFrame:
+    def as_series(self) -> pd.Series:
+        return pd.Series(
+            [getattr(self, c) for c in self.columns],
+            index=self.columns
+        )
+
+    def as_df(self, analysis: Optional[str] = None) -> pd.DataFrame:
         if analysis is None:
             analysis = self.analysis
 
@@ -93,5 +99,5 @@ class Analysis(object):
 
 class GFFAble(Analysis):
 
-    def to_gff(self) -> str:
+    def as_gff(self) -> str:
         raise NotImplementedError()

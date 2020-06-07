@@ -8,9 +8,12 @@ from typing import Iterator
 
 from predectorutils.analyses.base import Analysis
 from predectorutils.analyses.base import str_or_none
-from predectorutils.analyses.parsers import ParseError, LineParseError
-from predectorutils.analyses.parsers import (
-    parse_string_not_empty,
+from predectorutils.parsers import (
+    FieldParseError,
+    LineParseError,
+    raise_it,
+    parse_field,
+    parse_str,
     parse_float,
     parse_int,
     parse_bool,
@@ -18,6 +21,37 @@ from predectorutils.analyses.parsers import (
     is_one_of,
     is_value
 )
+
+
+__all__ = ["SignalP3NN", "SignalP3HMM", "SignalP4", "SignalP5"]
+
+
+s3nn_name = raise_it(parse_field(parse_str, "name"))
+s3nn_cmax = raise_it(parse_field(parse_float, "cmax"))
+s3nn_cmax_pos = raise_it(parse_field(parse_int, "cmax_pos"))
+s3nn_cmax_decision = raise_it(parse_field(
+    parse_bool("Y", "N"),
+    "cmax_decision"
+))
+s3nn_ymax = raise_it(parse_field(parse_float, "ymax"))
+s3nn_ymax_pos = raise_it(parse_field(parse_int, "ymax_pos"))
+s3nn_ymax_decision = raise_it(parse_field(
+    parse_bool("Y", "N"),
+    "ymax_decision"
+))
+s3nn_smax = raise_it(parse_field(parse_float, "smax"))
+s3nn_smax_pos = raise_it(parse_field(parse_int, "smax_pos"))
+s3nn_smax_decision = raise_it(parse_field(
+    parse_bool("Y", "N"),
+    "smax_decision"
+))
+s3nn_smean = raise_it(parse_field(parse_float, "smean"))
+s3nn_smean_decision = raise_it(parse_field(
+    parse_bool("Y", "N"),
+    "smean_decision"
+))
+s3nn_d = raise_it(parse_field(parse_float, "d"))
+s3nn_d_decision = raise_it(parse_field(parse_bool("Y", "N"), "d_decision"))
 
 
 class SignalP3NN(Analysis):
@@ -128,22 +162,21 @@ class SignalP3NN(Analysis):
                 "The line had the wrong number of columns. "
                 f"Expected 14 but got {len(sline)}"
             )
-
         return cls(
-            parse_string_not_empty(sline[0], "name"),
-            parse_float(sline[1], "cmax"),
-            parse_int(sline[2], "cmax_pos"),
-            parse_bool(sline[3], "cmax_decision", "Y", "N"),
-            parse_float(sline[4], "ymax"),
-            parse_int(sline[5], "ymax_pos"),
-            parse_bool(sline[6], "ymax_decision", "Y", "N"),
-            parse_float(sline[7], "smax"),
-            parse_int(sline[8], "smax_pos"),
-            parse_bool(sline[9], "smax_decision", "Y", "N"),
-            parse_float(sline[10], "smean"),
-            parse_bool(sline[11], "smean_decision", "Y", "N"),
-            parse_float(sline[12], "d"),
-            parse_bool(sline[13], "d_decision", "Y", "N"),
+            s3nn_name(sline[0]),
+            s3nn_cmax(sline[1]),
+            s3nn_cmax_pos(sline[2]),
+            s3nn_cmax_decision(sline[3]),
+            s3nn_ymax(sline[4]),
+            s3nn_ymax_pos(sline[5]),
+            s3nn_ymax_decision(sline[6]),
+            s3nn_smax(sline[7]),
+            s3nn_smax_pos(sline[8]),
+            s3nn_smax_decision(sline[9]),
+            s3nn_smean(sline[10]),
+            s3nn_smean_decision(sline[11]),
+            s3nn_d(sline[12]),
+            s3nn_d_decision(sline[13]),
         )
 
     @classmethod
@@ -165,18 +198,24 @@ class SignalP3NN(Analysis):
             try:
                 yield cls.from_line(sline)
 
-            except LineParseError as e:
-                if hasattr(handle, "name"):
-                    filename: Optional[str] = handle.name
-                else:
-                    filename = None
-
-                raise ParseError(
-                    filename,
-                    i,
-                    e.message
-                )
+            except (LineParseError, FieldParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return
+
+
+s3hmm_name = raise_it(parse_field(parse_str, "name"))
+s3hmm_is_secreted = raise_it(parse_field(is_value("S"), "is_secreted (!)"))
+s3hmm_cmax = raise_it(parse_field(parse_float, "cmax"))
+s3hmm_cmax_pos = raise_it(parse_field(parse_int, "cmax_pos"))
+s3hmm_cmax_decision = raise_it(parse_field(
+    parse_bool("Y", "N"),
+    "cmax_decision"
+))
+s3hmm_sprob = raise_it(parse_field(parse_float, "sprob"))
+s3hmm_sprob_decision = raise_it(parse_field(
+    parse_bool("Y", "N"),
+    "sprob_decision"
+))
 
 
 class SignalP3HMM(Analysis):
@@ -231,7 +270,7 @@ class SignalP3HMM(Analysis):
 
     columns = ["name", "is_secreted", "cmax", "cmax_pos", "cmax_decision",
                "sprob", "sprob_decision"]
-    types = [str, bool, float, int, bool, float, int]
+    types = [str, bool, float, int, bool, float, bool]
     analysis = "signalp3_hmm"
     software = "SignalP"
 
@@ -243,7 +282,7 @@ class SignalP3HMM(Analysis):
         cmax_pos: int,
         cmax_decision: bool,
         sprob: float,
-        sprob_decision: int,
+        sprob_decision: bool,
     ) -> None:
         self.name = name
         self.is_secreted = is_secreted
@@ -272,13 +311,13 @@ class SignalP3HMM(Analysis):
         # in column !.
         # Q is non-secreted, A is something, possibly long signalpeptide?
         return cls(
-            parse_string_not_empty(sline[0], "name"),
-            is_value(sline[1], "is_secreted (!)", "S"),
-            parse_float(sline[2], "cmax"),
-            parse_int(sline[3], "cmax_pos"),
-            parse_bool(sline[4], "cmax_decision", "Y", "N"),
-            parse_float(sline[5], "sprob"),
-            parse_bool(sline[6], "sprob_decision", "Y", "N"),
+            s3hmm_name(sline[0]),
+            s3hmm_is_secreted(sline[1]),
+            s3hmm_cmax(sline[2]),
+            s3hmm_cmax_pos(sline[3]),
+            s3hmm_cmax_decision(sline[4]),
+            s3hmm_sprob(sline[5]),
+            s3hmm_sprob_decision(sline[6]),
         )
 
     @classmethod
@@ -293,18 +332,26 @@ class SignalP3HMM(Analysis):
             try:
                 yield cls.from_line(sline)
 
-            except LineParseError as e:
-                if hasattr(handle, "name"):
-                    filename: Optional[str] = handle.name
-                else:
-                    filename = None
-
-                raise ParseError(
-                    filename,
-                    i,
-                    e.message
-                )
+            except (FieldParseError, LineParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return
+
+
+s4_name = raise_it(parse_field(parse_str, "name"))
+s4_cmax = raise_it(parse_field(parse_float, "cmax"))
+s4_cmax_pos = raise_it(parse_field(parse_int, "cmax_pos"))
+s4_ymax = raise_it(parse_field(parse_float, "ymax"))
+s4_ymax_pos = raise_it(parse_field(parse_int, "ymax_pos"))
+s4_smax = raise_it(parse_field(parse_float, "smax"))
+s4_smax_pos = raise_it(parse_field(parse_int, "smax_pos"))
+s4_smean = raise_it(parse_field(parse_float, "smean"))
+s4_d = raise_it(parse_field(parse_float, "d"))
+s4_decision = raise_it(parse_field(parse_bool("Y", "N"), "decision"))
+s4_dmax_cut = raise_it(parse_field(parse_float, "dmax_cut"))
+s4_networks_used = raise_it(parse_field(
+    is_one_of(["SignalP-noTM", "SignalP-TM"]),
+    "networks_used"
+))
 
 
 class SignalP4(Analysis):
@@ -409,22 +456,18 @@ class SignalP4(Analysis):
             )
 
         return cls(
-            parse_string_not_empty(sline[0], "name"),
-            parse_float(sline[1], "cmax"),
-            parse_int(sline[2], "cmax_pos"),
-            parse_float(sline[3], "ymax"),
-            parse_int(sline[4], "ymax_pos"),
-            parse_float(sline[5], "smax"),
-            parse_int(sline[6], "smax_pos"),
-            parse_float(sline[7], "smean"),
-            parse_float(sline[8], "d"),
-            parse_bool(sline[9], "decision", "Y", "N"),
-            parse_float(sline[10], "dmax_cut"),
-            is_one_of(
-                sline[11],
-                ["SignalP-noTM", "SignalP-TM"],
-                "networks_used"
-            ),
+            s4_name(sline[0]),
+            s4_cmax(sline[1]),
+            s4_cmax_pos(sline[2]),
+            s4_ymax(sline[3]),
+            s4_ymax_pos(sline[4]),
+            s4_smax(sline[5]),
+            s4_smax_pos(sline[6]),
+            s4_smean(sline[7]),
+            s4_d(sline[8]),
+            s4_decision(sline[9]),
+            s4_dmax_cut(sline[10]),
+            s4_networks_used(sline[11]),
         )
 
     @classmethod
@@ -439,18 +482,19 @@ class SignalP4(Analysis):
             try:
                 yield cls.from_line(sline)
 
-            except LineParseError as e:
-                if hasattr(handle, "name"):
-                    filename: Optional[str] = handle.name
-                else:
-                    filename = None
-
-                raise ParseError(
-                    filename,
-                    i,
-                    e.message
-                )
+            except (LineParseError, FieldParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return
+
+
+s5_name = raise_it(parse_field(parse_str, "name"))
+s5_prediction = raise_it(parse_field(
+    is_one_of(["SP(Sec/SPI)", "LIPO(Sec/SPII)", "TAT(Tat/SPI)", "OTHER"]),
+    "prediction"
+))
+s5_prob_signal = raise_it(parse_field(parse_float, "prob_signal"))
+s5_prob_other = raise_it(parse_field(parse_float, "prob_other"))
+s5_cs_pos = raise_it(parse_field(parse_str, "cs_pos"))
 
 
 class SignalP5(Analysis):
@@ -504,7 +548,7 @@ class SignalP5(Analysis):
         sline = line.strip().split("\t")
 
         if len(sline) == 5:
-            cs_pos: Optional[str] = str(sline[4])
+            cs_pos: Optional[str] = s5_cs_pos(sline[4])
         elif len(sline) == 4:
             cs_pos = None
         else:
@@ -514,14 +558,10 @@ class SignalP5(Analysis):
             )
 
         return cls(
-            parse_string_not_empty(sline[0], "name"),
-            is_one_of(
-                sline[1],
-                ["SP(Sec/SPI)", "LIPO(Sec/SPII)", "TAT(Tat/SPI)", "OTHER"],
-                "prediction"
-            ),
-            parse_float(sline[2], "prob_signal"),
-            parse_float(sline[3], "prob_other"),
+            s5_name(sline[0]),
+            s5_prediction(sline[1]),
+            s5_prob_signal(sline[2]),
+            s5_prob_other(sline[3]),
             cs_pos,
         )
 
@@ -537,15 +577,6 @@ class SignalP5(Analysis):
             try:
                 yield cls.from_line(sline)
 
-            except LineParseError as e:
-                if hasattr(handle, "name"):
-                    filename: Optional[str] = handle.name
-                else:
-                    filename = None
-
-                raise ParseError(
-                    filename,
-                    i,
-                    e.message
-                )
+            except (LineParseError, FieldParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return
