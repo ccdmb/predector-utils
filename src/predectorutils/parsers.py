@@ -315,7 +315,7 @@ def get_from_dict_or_err(
         if key in d:
             return d[key]
         else:
-            return ValueParseError(f"Field was missing.")
+            return ValueParseError(key, "", "{key} was missing.")
 
     return inner
 
@@ -349,7 +349,7 @@ def parse_field(
     fn: Callable[[str], Union[ValueParseError, T]],
     field: str,
     kind: str = "field",
-) -> Callable[[str], T]:
+) -> Callable[[str], Union[FieldParseError, T]]:
 
     def inner(value: str) -> Union[FieldParseError, T]:
         result = fn(value)
@@ -364,9 +364,10 @@ def parse_field(
 def raise_it(fn: Callable[[str], Union[Exception, T]]) -> Callable[[str], T]:
 
     def inner(value: str) -> T:
-        if isinstance(value, Exception):
-            raise value
+        fval = fn(value)
+        if isinstance(fval, Exception):
+            raise fval
         else:
-            return value
+            return fval
 
     return inner

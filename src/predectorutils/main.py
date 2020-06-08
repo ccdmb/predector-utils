@@ -16,7 +16,7 @@ from predectorutils.subcommands.split_fasta import cli as split_fasta_cli
 from predectorutils.subcommands.split_fasta import runner as split_fasta_runner
 
 
-from predectorutils.analyses.parsers import ParseError
+from predectorutils.parsers import ParseError
 from predectorutils.exceptions import (
     EXIT_VALID, EXIT_KEYBOARD, EXIT_UNKNOWN, EXIT_CLI, EXIT_INPUT_FORMAT,
     EXIT_INPUT_NOT_FOUND, EXIT_SYSERR, EXIT_CANT_OUTPUT

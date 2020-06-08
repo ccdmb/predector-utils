@@ -6,15 +6,22 @@ from typing import Optional, Union
 from typing import Set, List, Dict
 from typing import Sequence, Mapping
 from typing import Iterator
-from typing import Hashable, Any
-from typing import TextIO
-from typing import Callable
+# from typing import Hashable, Any
+# from typing import TextIO
+# from typing import Callable
 from typing import TypeVar
 
 from enum import Enum
 from collections import deque
 
 from predectorutils.higher import fmap
+from predectorutils.parsers import (
+    parse_float,
+    parse_str,
+    parse_int,
+    parse_or_none,
+    is_one_of,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.ERROR)
@@ -51,119 +58,6 @@ GFF3_WRITE_ORDER: List[str] = [
     "Ontology_term",
     "Is_circular",
 ]
-
-
-class GFF3LineParseError(Exception):
-
-    def __init__(self, message: str):
-        self.message = message
-        return
-
-
-class GFF3ParseError(Exception):
-    """ Some aspect of parsing failed. """
-
-    def __init__(
-        self,
-        filename: Optional[str],
-        line: Optional[int],
-        message: str
-    ):
-        self.filename = filename
-        self.line = line
-        self.message = message
-        return
-
-    @classmethod
-    def from_line_error(
-        cls,
-        error: GFF3LineParseError,
-        line: Optional[int],
-        handle: TextIO
-    ) -> "GFF3ParseError":
-        if hasattr(handle, "name"):
-            filename: Optional[str] = handle.name
-        else:
-            filename = None
-
-        return cls(
-            filename,
-            line,
-            error.message
-        )
-
-
-def parse_int(field: str, field_name: str) -> int:
-    """ Parse a string as an integer, raising a custom error if fails. """
-
-    try:
-        return int(field)
-    except ValueError:
-        raise GFF3LineParseError(
-            f"Could not parse value in {field_name} column as an integer. "
-            f"The offending value was: '{field}'."
-        )
-
-
-def parse_float(field: str, field_name: str) -> float:
-    """ Parse a string as a float, raising a custom error if fails. """
-
-    try:
-        return float(field)
-    except ValueError:
-        raise GFF3LineParseError(
-            f"Could not parse value in {field_name} column as a float. "
-            f"The offending value was: '{field}'."
-        )
-
-
-def is_one_of(field: str, options: Sequence[str], field_name: str) -> str:
-    """ """
-
-    if field in options:
-        return field
-    else:
-        raise GFF3LineParseError(
-            f"Invalid value: '{field}' in the column: '{field_name}'. "
-            f"Must be one of {options}."
-        )
-
-
-def parse_string_not_empty(field: str, field_name: str) -> str:
-    """ """
-
-    if field.strip() == "":
-        raise GFF3LineParseError(
-            f"The value in column: '{field_name}' was empty."
-        )
-    else:
-        return field
-
-
-def parse_or_none(
-    field: str,
-    field_name: str,
-    none_value: str,
-    fn: Callable[[str, str], T],
-) -> Optional[T]:
-    """ If the value is the same as the none value, will return None.
-    Otherwise will attempt to run the fn with field and field name as the
-    first and 2nd arguments.
-    """
-
-    if field == none_value:
-        return None
-
-    try:
-        val = fn(field, field_name)
-    except GFF3LineParseError as e:
-        msg = e.message + (
-            f"\nThe value may also be '{none_value}', which will be"
-            "interpreted as None."
-        )
-        raise GFF3LineParseError(msg)
-
-    return val
 
 
 class TargetStrand(Enum):
