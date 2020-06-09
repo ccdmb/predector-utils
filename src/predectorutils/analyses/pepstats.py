@@ -13,13 +13,11 @@ from typing import Pattern
 from typing import Iterable
 
 from predectorutils.analyses.base import Analysis
-from predectorutils.analyses.parsers import (
+from predectorutils.parsers import (
     ParseError,
+    ValueParseError,
     BlockParseError,
-    LineParseError
-)
-
-from predectorutils.analyses.parsers import (
+    LineParseError,
     parse_regex,
 )
 
@@ -35,7 +33,7 @@ def convert_line_err(
     try:
         return parser(field)
     except LineParseError as e:
-        raise BlockParseError.from_line_error(e, lineno)
+        raise e.as_block_error(lineno)
 
 
 def get_line(lines: Iterator[Tuple[int, str]]) -> Tuple[int, str]:
@@ -53,13 +51,12 @@ def parse_regex_line(
     record: Dict[str, str]
 ) -> None:
     i, line = get_line(iter(lines))
-    record.update(
-        convert_line_err(
-            i,
-            line,
-            lambda l: parse_regex(l, regex)
-        )
-    )
+    rline = parse_regex(regex)(line)
+
+    if isinstance(rline, ValueParseError):
+        raise rline.as_block_error(i)
+    else:
+        record.update(rline)
     return
 
 
@@ -70,11 +67,9 @@ def parse_residue_table(lines: Iterable[Tuple[int, str]]) -> Dict[str, str]:
         if line == "":
             break
 
-        dline = convert_line_err(
-            i,
-            line,
-            lambda l: parse_regex(l, RESIDUE_REGEX)
-        )
+        dline = parse_regex(RESIDUE_REGEX)(line)
+        if isinstance(dline, ValueParseError):
+            raise dline.as_block_error(i)
 
         aa = dline['aa'].lower()
         table[f"residue_{aa}_number"] = dline["number"]
@@ -91,11 +86,9 @@ def parse_property_table(lines: Iterable[Tuple[int, str]]) -> Dict[str, str]:
         if line == "":
             break
 
-        dline = convert_line_err(
-            i,
-            line,
-            lambda l: parse_regex(l, PROP_REGEX)
-        )
+        dline = parse_regex(PROP_REGEX)(line)
+        if isinstance(dline, ValueParseError):
+            raise dline.as_block_error(i)
 
         kind = dline['kind'].lower().replace("-", "")
         table[f"property_{kind}_number"] = dline["number"]
@@ -552,10 +545,9 @@ class PepStats(Analysis):
                     yield cls.from_block(block)
 
                 except BlockParseError as e:
-                    raise ParseError.from_block_error(
-                        e,
-                        i - len(block),
-                        handle
+                    raise (
+                        e.as_parse_error(line=i - len(block))
+                        .add_filename_from_handle(handle)
                     )
 
                 block = [sline]
@@ -571,10 +563,9 @@ class PepStats(Analysis):
                 yield cls.from_block(block)
 
             except BlockParseError as e:
-                raise ParseError.from_block_error(
-                    e,
-                    i - len(block),
-                    handle
+                raise (
+                    e.as_parse_error(line=i - len(block))
+                    .add_filename_from_handle(handle)
                 )
 
         return
