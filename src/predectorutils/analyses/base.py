@@ -9,6 +9,8 @@ from typing import Union, Optional, Any
 from typing import TextIO
 from typing import Iterator
 
+from predectorutils.gff import GFFRecord
+
 
 def int_or_none(i: Any) -> Optional[int]:
     if i is None:
@@ -97,7 +99,7 @@ class Analysis(object):
         return pd.DataFrame(rows)
 
 
-class GFFAble(Analysis):
+class GFFAble(object):
 
-    def as_gff(self) -> str:
+    def as_gff(self) -> Iterator[GFFRecord]:
         raise NotImplementedError()

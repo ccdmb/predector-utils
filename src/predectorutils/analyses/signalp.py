@@ -6,7 +6,8 @@ from typing import Optional
 from typing import TextIO
 from typing import Iterator
 
-from predectorutils.analyses.base import Analysis
+from predectorutils.gff import GFFRecord
+from predectorutils.analyses.base import Analysis, GFFAble
 from predectorutils.analyses.base import str_or_none
 from predectorutils.parsers import (
     FieldParseError,
@@ -54,7 +55,7 @@ s3nn_d = raise_it(parse_field(parse_float, "d"))
 s3nn_d_decision = raise_it(parse_field(parse_bool("Y", "N"), "d_decision"))
 
 
-class SignalP3NN(Analysis):
+class SignalP3NN(Analysis, GFFAble):
 
     """ For each organism class in SignalP; Eukaryote, Gram-negative and
     Gram-positive, two different neural networks are used, one for
@@ -200,6 +201,11 @@ class SignalP3NN(Analysis):
 
             except (LineParseError, FieldParseError) as e:
                 raise e.as_parse_error(line=i).add_filename_from_handle(handle)
+        return
+
+    def as_gff(self) -> Iterator[GFFRecord]:
+        # d_decision = prediction of issecreted.
+        # ymax = first aa of mature peptide
         return
 
 
