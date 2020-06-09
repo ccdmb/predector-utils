@@ -12,6 +12,7 @@ from collections import deque
 
 from predectorutils.higher import fmap
 from predectorutils.parsers import (
+    FieldParseError,
     raise_it,
     parse_field,
     parse_int,
@@ -53,6 +54,77 @@ GFF3_WRITE_ORDER: List[str] = [
     "Ontology_term",
     "Is_circular",
 ]
+
+rec_seqid = raise_it(parse_field(parse_str, "seqid"))
+rec_source = raise_it(parse_field(parse_str, "source"))
+rec_type = raise_it(parse_field(parse_str, "type"))
+rec_start = raise_it(parse_field(parse_int, "start"))
+rec_end = raise_it(parse_field(parse_int, "end"))
+rec_score = raise_it(parse_field(parse_or_none(parse_float, "."), "score"))
+rec_strand = raise_it(parse_field(is_one_of(["-", "+", ".", "?"]), "strand"))
+rec_phase = raise_it(parse_field(is_one_of(["0", "1", "2", "."]), "phase"))
+
+
+def parse_attr_list(string: str) -> List[str]:
+    return list(f.strip() for f in string.strip(", ").split(","))
+
+
+attr_is_circular = raise_it(parse_field(
+    parse_bool_options(["true", "TRUE", "True"],
+                       ["false", "FALSE", "False"]),
+    "is_circular",
+    "attributes"
+))
+
+attr_target_id = raise_it(parse_field(parse_str, "target.id" "attributes"))
+attr_target_start = raise_it(parse_field(
+    parse_int,
+    "target.start",
+    "attributes"
+))
+attr_target_end = raise_it(parse_field(parse_int, "target.end", "attributes"))
+attr_target_strand = raise_it(parse_field(
+    is_one_of(["+", "-"]),
+    "target.strand",
+    "attributes"
+))
+attr_gap_code = raise_it(parse_field(
+    is_one_of(["M", "I", "D", "F", "R"]),
+    "gap",
+    "attributes"
+))
+attr_gap_len = raise_it(parse_field(parse_int, "gap", "attributes"))
+
+
+def flatten_list_of_lists(li: Iterable[Iterable[T]]) -> Iterator[T]:
+    for i in li:
+        for j in i:
+            yield j
+    return
+
+
+def attr_escape(string: str) -> str:
+    return (
+        string
+        .replace(";", "%3B")
+        .replace(",", "%2C")
+        .replace("=", "%3D")
+        .replace("\t", "%09")
+        .replace("\n", "%0A")
+        .replace("\r", "%0D")
+    )
+
+
+def attr_unescape(string: str) -> str:
+    return (
+        string
+        .replace("%3B", ";")
+        .replace("%2C", ",")
+        .replace("%3D", "=")
+        .replace("%09", "\t")
+        .replace("%0A", "\n")
+        .replace("%0D", "\r")
+    )
 
 
 class Strand(Enum):
@@ -172,7 +244,7 @@ class Target(object):
             )
 
     def __str__(self) -> str:
-        target_id = self.target_id.replace(" ", "%20")
+        target_id = attr_escape(self.target_id)
 
         # Recode back to 1 based (inclusive)
         start = self.start + 1
@@ -188,27 +260,37 @@ class Target(object):
             )
 
     @classmethod
-    def parse(cls, string: str) -> "Target":
+    def parse(cls, string: str, unescape: bool = True) -> "Target":
         split_string = string.strip().split(" ")
 
         if len(split_string) < 3:
-            raise ValueError("Too few fields in Target string.")
+            raise FieldParseError(
+                "target",
+                ("Too few fields in Target string. Expected 3 or 4, "
+                 f"but got {len(split_string)}."),
+                "attribute"
+            )
+        elif len(split_string) > 4:
+            raise FieldParseError(
+                "target",
+                ("Too many fields in Target strand. Expected 3 or 4, "
+                 f"but got {len(split_string)}."),
+                "attribute"
+            )
 
-        elif len(split_string) == 3:
-            target_id = split_string[0]
-            start = int(split_string[1]) - 1  # We want 0 based exclusive
-            end = int(split_string[2])
-            return cls(target_id, start, end)
-
-        elif len(split_string) == 4:
-            target_id = split_string[0]
-            start = int(split_string[1]) - 1  # We want 0 based exclusive
-            end = int(split_string[2])
-            strand = TargetStrand.parse(split_string[3])
-            return cls(target_id, start, end, strand)
-
+        if unescape:
+            target_id = attr_target_id(attr_unescape(split_string[0]))
         else:
-            raise ValueError("Too many fields in Target string.")
+            target_id = attr_target_id(split_string[0])
+        # We want 0 based exclusive
+        start = attr_target_start(split_string[1]) - 1
+        end = attr_target_end(split_string[2])
+
+        if len(split_string) == 3:
+            return cls(target_id, start, end)
+        else:
+            strand = TargetStrand.parse(attr_target_strand(split_string[3]))
+            return cls(target_id, start, end, strand)
 
 
 class GapCode(Enum):
@@ -264,8 +346,8 @@ class GapElement(object):
     @classmethod
     def parse(cls, string: str) -> "GapElement":
         string = string.strip()
-        code = GapCode.parse(string[:1])
-        length = int(string[1:])
+        code = GapCode.parse(attr_gap_code(string[:1]))
+        length = attr_gap_len(string[1:])
         return cls(code, length)
 
 
@@ -287,27 +369,6 @@ class Gap(object):
         split_string = string.strip().split(" ")
         elements = [GapElement.parse(s) for s in split_string if s != '']
         return cls(elements)
-
-
-def parse_attr_list(string: str) -> List[str]:
-    return list(f.strip() for f in string.strip(", ").split(","))
-
-
-rec_seqid = raise_it(parse_field(parse_str, "seqid"))
-rec_source = raise_it(parse_field(parse_str, "source"))
-rec_type = raise_it(parse_field(parse_str, "type"))
-rec_start = raise_it(parse_field(parse_int, "start"))
-rec_end = raise_it(parse_field(parse_int, "end"))
-rec_score = raise_it(parse_field(parse_or_none(parse_float, "."), "score"))
-rec_strand = raise_it(parse_field(is_one_of(["-", "+", ".", "?"]), "strand"))
-rec_phase = raise_it(parse_field(is_one_of(["0", "1", "2", "."]), "phase"))
-
-attr_is_circular = raise_it(parse_field(
-    parse_bool_options(["true", "TRUE", "True"],
-                       ["false", "FALSE", "False"]),
-    "attributes.is_circular"
-))
-
 
 
 class GFFRecord(object):
@@ -362,9 +423,9 @@ class GFFRecord(object):
         return
 
     def __str__(self) -> str:
-        return self.as_str(escape=True)
+        return self.as_str()
 
-    def as_str(self, escape: bool = False) -> str:
+    def as_str(self, escape: bool = True) -> str:
         values = []
         for name in self.columns:
             value = getattr(self, name)
@@ -519,7 +580,7 @@ class GFFRecord(object):
         cls,
         string: str,
         strip_quote: bool = False,
-        unescape: bool = False,
+        unescape: bool = True,
     ) -> "GFFRecord":
         """ Parse a gff line string as a `GFFRecord`.
 
@@ -652,13 +713,6 @@ class GFFRecord(object):
         return node_copy
 
 
-def flatten_list_of_lists(li: Iterable[Iterable[T]]) -> Iterator[T]:
-    for i in li:
-        for j in i:
-            yield j
-    return
-
-
 class GFFAttributes(object):
 
     def __init__(
@@ -673,7 +727,7 @@ class GFFAttributes(object):
         note: Optional[Sequence[str]] = None,
         dbxref: Optional[Sequence[str]] = None,
         ontology_term: Optional[Sequence[str]] = None,
-        is_circular: Optional[bool] = None,
+        is_circular: bool = False,
         custom: Optional[Mapping[str, Sequence[str]]] = None,
     ) -> None:
         self.id = id
@@ -739,7 +793,7 @@ class GFFAttributes(object):
             value = value.strip("\"' ")
 
         if unescape:
-            return [cls._attr_unescape(v) for v in parse_attr_list(value)]
+            return [attr_unescape(v) for v in parse_attr_list(value)]
         else:
             return parse_attr_list(value)
 
@@ -772,11 +826,19 @@ class GFFAttributes(object):
                 in fields
             }
 
-        id = kvpairs.pop("ID", None)
+        if unescape:
+            id = fmap(attr_unescape, kvpairs.pop("ID", None))
+        else:
+            id = kvpairs.pop("ID", None)
+
         if id == "":
             id = None
 
-        name = kvpairs.pop("Name", None)
+        if unescape:
+            name = fmap(attr_unescape, kvpairs.pop("Name", None))
+        else:
+            name = kvpairs.pop("Name", None)
+
         if name == "":
             name = None
 
@@ -793,20 +855,11 @@ class GFFAttributes(object):
         )
 
         target: Optional[Target] = fmap(
-            Target.parse,
-            fmap(
-                lambda x: cls._attr_unescape(x) if unescape else x,
-                kvpairs.pop("Target", None)
-            )
+            lambda x: Target.parse(x, unescape),
+            kvpairs.pop("Target", None)
         )
 
-        gap = fmap(
-            Gap.parse,
-            fmap(
-                lambda x: cls._attr_unescape(x) if unescape else x,
-                kvpairs.pop("Gap", None)
-            )
-        )
+        gap = fmap(Gap.parse, kvpairs.pop("Gap", None))
 
         derives_from = cls._parse_list_of_strings(
             kvpairs.pop("Derives_from", ""),
@@ -837,7 +890,8 @@ class GFFAttributes(object):
         custom: Dict[str, Union[str, List[str]]] = dict()
         for k, v in kvpairs.items():
             if "," in v:
-                custom[k] = cls._parse_list_of_strings(v, strip_quote, unescape)
+                custom[k] = cls._parse_list_of_strings(
+                    v, strip_quote, unescape)
             elif v != "":
                 custom[k] = v
 
@@ -881,21 +935,15 @@ class GFFAttributes(object):
             return False
         elif len(self.ontology_term) > 0:
             return False
-        # Nothing will be printed is this is false, so we have to check for
-        # both
-        elif (self.is_circular is not None) and (self.is_circular):
+        elif self.is_circular:
             return False
         else:
             return True
 
-        return ((self.gene_id is None) and
-                (self.transcript_id is None) and
-                (len(self.custom) == 0))
-
     def __str__(self) -> str:
-        return self.as_str(escape=True)
+        return self.as_str()
 
-    def as_str(self, escape: bool = False) -> str:
+    def as_str(self, escape: bool = True) -> str:
         # Avoid having an empty string at the end.
         if self.is_empty():
             return "."
@@ -911,10 +959,10 @@ class GFFAttributes(object):
                 continue
 
             if escape:
-                key = self._attr_escape(key)
+                key = attr_escape(key)
 
             if isinstance(value, list) and escape:
-                value = ",".join(self._attr_escape(str(v)) for v in value)
+                value = ",".join(attr_escape(str(v)) for v in value)
 
             elif isinstance(value, list):
                 value = ",".join(str(v) for v in value)
@@ -924,7 +972,7 @@ class GFFAttributes(object):
 
             else:
                 if escape:
-                    value = self._attr_escape(str(value))
+                    value = attr_escape(str(value))
                 else:
                     value = str(value)
 
@@ -952,30 +1000,6 @@ class GFFAttributes(object):
 
         joined_parameters = ", ".join(parameters)
         return f"GFF3Attributes({joined_parameters})"
-
-    @staticmethod
-    def _attr_escape(string: str) -> str:
-        return (
-            string
-            .replace(";", "%3B")
-            .replace(",", "%2C")
-            .replace("=", "%3D")
-            .replace("\t", "%09")
-            .replace("\n", "%0A")
-            .replace("\r", "%0D")
-        )
-
-    @staticmethod
-    def _attr_unescape(string: str) -> str:
-        return (
-            string
-            .replace("%3B", ";")
-            .replace("%2C", ",")
-            .replace("%3D", "=")
-            .replace("%09", "\t")
-            .replace("%0A", "\n")
-            .replace("%0D", "\r")
-        )
 
     def __getitem__(
         self,
