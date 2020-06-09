@@ -1,33 +1,28 @@
 #!/usr/bin/env python3
 
-import logging
-from typing import cast
 from typing import Optional, Union
 from typing import Set, List, Dict
 from typing import Sequence, Mapping
-from typing import Iterator
-# from typing import Hashable, Any
-# from typing import TextIO
-# from typing import Callable
+from typing import Iterable, Iterator
 from typing import TypeVar
+from typing import cast
 
 from enum import Enum
 from collections import deque
 
 from predectorutils.higher import fmap
 from predectorutils.parsers import (
-    parse_float,
-    parse_str,
+    raise_it,
+    parse_field,
     parse_int,
+    parse_float,
     parse_or_none,
     is_one_of,
+    parse_str,
+    parse_bool_options,
 )
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.ERROR)
-
-T = TypeVar("T")
-
+T = TypeVar('T')
 
 GFF3_KEY_TO_ATTR: Dict[str, str] = {
     "ID": "id",
@@ -58,6 +53,64 @@ GFF3_WRITE_ORDER: List[str] = [
     "Ontology_term",
     "Is_circular",
 ]
+
+
+class Strand(Enum):
+    PLUS = 0
+    MINUS = 1
+    UNSTRANDED = 2
+    UNKNOWN = 3
+
+    def __str__(self):
+        into_str_map: List[str] = ["+", "-", ".", "?"]
+        return into_str_map[self.value]
+
+    def __repr__(self):
+        return f"Strand.{self.name}"
+
+    @classmethod
+    def parse(cls, string: str) -> "Strand":
+        from_str_map: Dict[str, Strand] = {
+            "+": cls.PLUS,
+            "-": cls.MINUS,
+            ".": cls.UNSTRANDED,
+            "?": cls.UNKNOWN,
+        }
+
+        try:
+            return from_str_map[string]
+        except KeyError:
+            valid = list(from_str_map.keys())
+            raise ValueError(f"Invalid option. Must be one of {valid}")
+
+
+class Phase(Enum):
+    FIRST = 0
+    SECOND = 1
+    THIRD = 2
+    NOT_CDS = 3
+
+    def __str__(self):
+        into_str_map: List[str] = ["0", "1", "2", "."]
+        return into_str_map[self.value]
+
+    def __repr__(self):
+        return f"Phase.{self.name}"
+
+    @classmethod
+    def parse(cls, string: str) -> "Phase":
+        from_str_map: Dict[str, Phase] = {
+            "0": cls.FIRST,
+            "1": cls.SECOND,
+            "2": cls.THIRD,
+            ".": cls.NOT_CDS,
+        }
+
+        try:
+            return from_str_map[string]
+        except KeyError:
+            valid = list(from_str_map.keys())
+            raise ValueError(f"Invalid option. Must be one of {valid}")
 
 
 class TargetStrand(Enum):
@@ -240,16 +293,373 @@ def parse_attr_list(string: str) -> List[str]:
     return list(f.strip() for f in string.strip(", ").split(","))
 
 
-def parse_bool(string: str) -> bool:
-    if string in ("true", "True", "TRUE"):
-        return True
-    elif string in ("false", "False", "FALSE"):
-        return False
-    else:
-        raise ValueError(f"Invalid boolean encountered: {string}")
+rec_seqid = raise_it(parse_field(parse_str, "seqid"))
+rec_source = raise_it(parse_field(parse_str, "source"))
+rec_type = raise_it(parse_field(parse_str, "type"))
+rec_start = raise_it(parse_field(parse_int, "start"))
+rec_end = raise_it(parse_field(parse_int, "end"))
+rec_score = raise_it(parse_field(parse_or_none(parse_float, "."), "score"))
+rec_strand = raise_it(parse_field(is_one_of(["-", "+", ".", "?"]), "strand"))
+rec_phase = raise_it(parse_field(is_one_of(["0", "1", "2", "."]), "phase"))
+
+attr_is_circular = raise_it(parse_field(
+    parse_bool_options(["true", "TRUE", "True"],
+                       ["false", "FALSE", "False"]),
+    "attributes.is_circular"
+))
 
 
-class GFF3Attributes(object):
+
+class GFFRecord(object):
+
+    columns: List[str] = [
+        "seqid",
+        "source",
+        "type",
+        "start",
+        "end",
+        "score",
+        "strand",
+        "phase",
+        "attributes"
+    ]
+
+    def __init__(
+        self,
+        seqid: str,
+        source: str,
+        type: str,
+        start: int,
+        end: int,
+        score: Optional[float] = None,
+        strand: Strand = Strand.UNSTRANDED,
+        phase: Phase = Phase.NOT_CDS,
+        attributes: Optional["GFFAttributes"] = None,
+        parents: Optional[Sequence["GFFRecord"]] = None,
+        children: Optional[Sequence["GFFRecord"]] = None,
+    ) -> None:
+        self.seqid = seqid
+        self.source = source
+        self.type = type
+        self.start = start
+        self.end = end
+        self.score = score
+        self.strand = strand
+        self.phase = phase
+
+        if attributes is None:
+            self.attributes = GFFAttributes()
+        else:
+            self.attributes = attributes
+
+        self.parents: List[GFFRecord] = []
+        if parents is not None:
+            self.add_parents(parents)
+
+        self.children: List[GFFRecord] = []
+        if children is not None:
+            self.add_children(children)
+        return
+
+    def __str__(self) -> str:
+        return self.as_str(escape=True)
+
+    def as_str(self, escape: bool = False) -> str:
+        values = []
+        for name in self.columns:
+            value = getattr(self, name)
+
+            if value is None:
+                values.append(".")
+            # Convert back to 1-based inclusive indexing.
+            elif name == "start":
+                values.append(str(value + 1))
+            elif name == "attributes" and not escape:
+                values.append(value.as_str(escape=False))
+            else:
+                values.append(str(value))
+
+        return "\t".join(values)
+
+    def __repr__(self) -> str:
+        parameters = []
+        for col in self.columns:
+            val = repr(getattr(self, col))
+            parameters.append(f"{val}")
+
+        joined_parameters = ", ".join(parameters)
+        return f"GFFRecord({joined_parameters})"
+
+    def length(self) -> int:
+        """ Returns the distance between start and end. """
+        return self.end - self.start
+
+    def __len__(self) -> int:
+        return self.length()
+
+    def add_child(self, child: "GFFRecord") -> None:
+        if child not in self.children:
+            self.children.append(child)
+        if self not in child.parents:
+            child.parents.append(self)
+        return
+
+    def add_parent(self, parent: "GFFRecord") -> None:
+        if parent not in self.parents:
+            self.parents.append(parent)
+
+        if self not in parent.children:
+            parent.children.append(self)
+        return
+
+    def add_children(self, children: Sequence["GFFRecord"]) -> None:
+        for child in children:
+            self.add_child(child)
+        return
+
+    def add_parents(self, parents: Sequence["GFFRecord"]) -> None:
+        for parent in parents:
+            self.add_parent(parent)
+        return
+
+    def traverse_children(
+        self,
+        sort: bool = False,
+        breadth: bool = False,
+    ) -> Iterator["GFFRecord"]:
+        """ A graph traversal of this `GFFRecord`s children.
+
+        Keyword arguments:
+        sort -- Sort the children so that they appear in increasing order.
+        breadth -- Perform a breadth first search rather than the default
+            depth first search.
+
+        Returns:
+        A generator yielding `GFFRecord`s.
+        """
+
+        should_reverse = not breadth
+
+        seen: Set[GFFRecord] = set()
+
+        to_visit = deque([self])
+
+        while len(to_visit) > 0:
+
+            if breadth:
+                node = to_visit.popleft()
+            else:
+                node = to_visit.pop()
+
+            # NB uses id() for hashing
+            if node in seen:
+                continue
+            else:
+                seen.add(node)
+
+            children = list(node.children)
+            if sort:
+                children.sort(
+                    key=lambda f: (f.seqid, f.start, f.end, f.type),
+                    reverse=should_reverse
+                )
+
+            to_visit.extend(children)
+            yield node
+
+        return None
+
+    def traverse_parents(
+        self,
+        sort: bool = False,
+        breadth: bool = False,
+    ) -> Iterator["GFFRecord"]:
+        """ A graph traversal of this `GFFRecord`s parents.
+
+        Keyword arguments:
+        sort -- Sort the parents so that they appear in increasing order.
+        breadth -- Perform a breadth first search rather than the default
+            depth first search.
+
+        Returns:
+        A generator yielding `GFFRecord`s.
+        """
+
+        should_reverse = not breadth
+
+        seen: Set[GFFRecord] = set()
+        to_visit = deque([self])
+
+        while len(to_visit) > 0:
+
+            if breadth:
+                node = to_visit.popleft()
+            else:
+                node = to_visit.pop()
+
+            if node in seen:
+                continue
+            else:
+                seen.add(node)
+
+            parents = list(node.parents)
+            if sort:
+                parents.sort(
+                    key=lambda f: (f.seqid, f.start, f.end, f.type),
+                    reverse=should_reverse
+                )
+
+            to_visit.extend(parents)
+            yield node
+
+        return None
+
+    @classmethod
+    def parse(
+        cls,
+        string: str,
+        strip_quote: bool = False,
+        unescape: bool = False,
+    ) -> "GFFRecord":
+        """ Parse a gff line string as a `GFFRecord`.
+
+        Keyword arguments:
+        string -- The gff line to parse.
+        format -- What format the gff file is in.
+            Currently only GFF3 is supported.
+        strip_quote -- Strip quotes from attributes values. The specification
+            says that they should not be stripped, so we don't by default.
+        unescape -- Unescape reserved characters in the attributes to their
+            original values. I.E. some commas, semicolons, newlines etc.
+
+        Returns:
+        A `GFFRecord`
+        """
+
+        sline = string.strip().split("\t")
+        sline_len = len(sline)
+        columns_len = len(cls.columns)
+
+        if sline_len < (columns_len - 1):
+            raise ValueError((
+                "Line has too few columns. "
+                f"Expected: {columns_len}, Encountered: {sline_len}"
+            ))
+
+        fields: Dict[str, str] = dict(zip(cls.columns, sline))
+        if sline_len == columns_len - 1:
+            fields["attributes"] = ""
+
+        # 0-based indexing exclusive
+        start = rec_start(fields["start"]) - 1
+        end = rec_end(fields["end"])
+
+        if start > end:
+            tmp = start
+            start = end
+            end = tmp
+            del tmp
+
+        score = rec_score(fields["score"])
+        strand = Strand.parse(rec_strand(fields["strand"]))
+        phase = Phase.parse(rec_phase(fields["phase"]))
+
+        attributes = GFFAttributes.parse(
+            fields["attributes"],
+            strip_quote=strip_quote,
+            unescape=unescape,
+        )
+
+        return cls(
+            rec_seqid(fields["seqid"]),
+            rec_source(fields["source"]),
+            rec_type(fields["type"]),
+            start,
+            end,
+            score,
+            strand,
+            phase,
+            attributes
+        )
+
+    def trim_ends(self, length: int) -> None:
+        """ Trim a specified number of bases from each end of the feature. """
+
+        from math import ceil
+
+        if self.length() <= 2:
+            length = 0
+        elif self.length() < (2 * length):
+            length = ceil(self.length() / 4)
+
+        self.start += length
+        self.end -= length
+        return
+
+    def pad_ends(self, length: int, max_value: Optional[int] = None) -> None:
+
+        if (self.start - length) < 0:
+            self.start = 0
+        else:
+            self.start -= length
+
+        if max_value is not None and (self.end + length) > max_value:
+            self.end = max_value
+        else:
+            self.end += length
+        return
+
+    def expand_to_children(self) -> None:
+        if len(self.children) == 0:
+            return
+
+        min_ = min(c.start for c in self.children)
+        max_ = max(c.end for c in self.children)
+
+        if min_ < self.start:
+            self.start = min_
+
+        if max_ > self.end:
+            self.end = max_
+        return
+
+    def shrink_to_children(self) -> None:
+        if len(self.children) == 0:
+            return
+
+        min_ = min(c.start for c in self.children)
+        max_ = max(c.end for c in self.children)
+
+        if min_ > self.start:
+            self.start = min_
+
+        if max_ < self.end:
+            self.end = max_
+        return
+
+    def copy(self) -> "GFFRecord":
+        """ You'll still need to update the ID """
+        from copy import copy, deepcopy
+
+        node_copy = copy(self)
+        node_copy.attributes = deepcopy(self.attributes)
+
+        if node_copy.attributes is not None:
+            node_copy.attributes.parent = []
+
+        node_copy.children = []
+        node_copy.parents = []
+        return node_copy
+
+
+def flatten_list_of_lists(li: Iterable[Iterable[T]]) -> Iterator[T]:
+    for i in li:
+        for j in i:
+            yield j
+    return
+
+
+class GFFAttributes(object):
 
     def __init__(
         self,
@@ -264,7 +674,7 @@ class GFF3Attributes(object):
         dbxref: Optional[Sequence[str]] = None,
         ontology_term: Optional[Sequence[str]] = None,
         is_circular: Optional[bool] = None,
-        custom: Optional[Mapping[str, str]] = None,
+        custom: Optional[Mapping[str, Sequence[str]]] = None,
     ) -> None:
         self.id = id
         self.name = name
@@ -304,12 +714,14 @@ class GFF3Attributes(object):
 
         self.is_circular = is_circular
 
+        self.custom: Dict[str, Union[str, List[str]]] = {}
         if custom is not None:
-            custom_not_none: Dict[str, str] = dict(custom)
-        else:
-            custom_not_none = {}
+            for k, v in custom.items():
+                if isinstance(v, str):
+                    self.custom[k] = v
+                else:
+                    self.custom[k] = list(v)
 
-        self.custom: Dict[str, str] = custom_not_none
         return
 
     @classmethod
@@ -317,7 +729,7 @@ class GFF3Attributes(object):
         cls,
         value: str,
         strip_quote: bool = False,
-        unescape: bool = False
+        unescape: bool = True
     ) -> List[str]:
         """ Parses a gff attribute list of strings. """
         if value == "":
@@ -336,8 +748,8 @@ class GFF3Attributes(object):
         cls,
         string: str,
         strip_quote: bool = False,
-        unescape: bool = False,
-    ) -> "GFF3Attributes":
+        unescape: bool = True,
+    ) -> "GFFAttributes":
         if string.strip() in (".", ""):
             return cls()
 
@@ -361,7 +773,12 @@ class GFF3Attributes(object):
             }
 
         id = kvpairs.pop("ID", None)
+        if id == "":
+            id = None
+
         name = kvpairs.pop("Name", None)
+        if name == "":
+            name = None
 
         alias = cls._parse_list_of_strings(
             kvpairs.pop("Alias", ""),
@@ -415,7 +832,14 @@ class GFF3Attributes(object):
             unescape
         )
 
-        is_circular = fmap(parse_bool, kvpairs.pop("Is_circular", None))
+        is_circular = attr_is_circular(kvpairs.pop("Is_circular", "false"))
+
+        custom: Dict[str, Union[str, List[str]]] = dict()
+        for k, v in kvpairs.items():
+            if "," in v:
+                custom[k] = cls._parse_list_of_strings(v, strip_quote, unescape)
+            elif v != "":
+                custom[k] = v
 
         return cls(
             id,
@@ -429,7 +853,7 @@ class GFF3Attributes(object):
             dbxref,
             ontology_term,
             is_circular,
-            kvpairs
+            custom
         )
 
     def is_empty(self) -> bool:  # noqa
@@ -624,451 +1048,3 @@ class GFF3Attributes(object):
 
         else:
             return self.custom.pop(key, default)
-
-
-class Strand(Enum):
-    PLUS = 0
-    MINUS = 1
-    UNSTRANDED = 2
-    UNKNOWN = 3
-
-    def __str__(self):
-        into_str_map: List[str] = ["+", "-", ".", "?"]
-        return into_str_map[self.value]
-
-    def __repr__(self):
-        return f"Strand.{self.name}"
-
-    @classmethod
-    def parse(cls, string: str) -> "Strand":
-        from_str_map: Dict[str, Strand] = {
-            "+": cls.PLUS,
-            "-": cls.MINUS,
-            ".": cls.UNSTRANDED,
-            "?": cls.UNKNOWN,
-        }
-
-        try:
-            return from_str_map[string]
-        except KeyError:
-            valid = list(from_str_map.keys())
-            raise ValueError(f"Invalid option. Must be one of {valid}")
-
-    @classmethod
-    def infer_from_many(cls, strands: Sequence["Strand"]) -> "Strand":
-        """ Infer the strand from a sequence of strands. """
-
-        if len(set(strands)) > 1:
-            logger.warning("Ambiguous strand found during parent inference.")
-            return Strand.UNKNOWN
-        else:
-            return list(strands)[0]
-
-
-class Phase(Enum):
-    FIRST = 0
-    SECOND = 1
-    THIRD = 2
-    NOT_CDS = 3
-
-    def __str__(self):
-        into_str_map: List[str] = ["0", "1", "2", "."]
-        return into_str_map[self.value]
-
-    def __repr__(self):
-        return f"Phase.{self.name}"
-
-    @classmethod
-    def parse(cls, string: str) -> "Phase":
-        from_str_map: Dict[str, Phase] = {
-            "0": cls.FIRST,
-            "1": cls.SECOND,
-            "2": cls.THIRD,
-            ".": cls.NOT_CDS,
-        }
-
-        try:
-            return from_str_map[string]
-        except KeyError:
-            valid = list(from_str_map.keys())
-            raise ValueError(f"Invalid option. Must be one of {valid}")
-
-
-class GFF3Record(object):
-
-    columns: List[str] = [
-        "seqid",
-        "source",
-        "type",
-        "start",
-        "end",
-        "score",
-        "strand",
-        "phase",
-        "id",
-        "parents",
-        "attributes"
-    ]
-
-    def __init__(
-        self,
-        seqid: str,
-        source: str,
-        type: str,
-        start: int,
-        end: int,
-        score: Optional[float] = None,
-        strand: Strand = Strand.UNSTRANDED,
-        phase: Phase = Phase.NOT_CDS,
-        attributes: Optional[GFF3Attributes] = None,
-        parents: Optional[Sequence["GFF3Record"]] = None,
-        children: Optional[Sequence["GFF3Record"]] = None,
-    ) -> None:
-        self.seqid = seqid
-        self.source = source
-        self.type = type
-        self.start = start
-        self.end = end
-        self.score = score
-        self.strand = strand
-        self.phase = phase
-        self.attributes = attributes
-
-        self.parents: List[GFF3Record] = []
-        if parents is not None:
-            self.add_parents(parents)
-
-        self.children: List[GFF3Record] = []
-        if children is not None:
-            self.add_children(children)
-        return
-
-    def __str__(self) -> str:
-        return self.as_str(escape=True)
-
-    def as_str(self, escape: bool = False) -> str:
-        values = []
-        for name in self.columns:
-            value = getattr(self, name)
-
-            if value is None:
-                values.append(".")
-            # Convert back to 1-based inclusive indexing.
-            elif name == "start":
-                values.append(str(value + 1))
-            elif name == "attributes" and not escape:
-                values.append(value.as_str(escape=False))
-            else:
-                values.append(str(value))
-
-        return "\t".join(values)
-
-    def __repr__(self) -> str:
-        parameters = []
-        for col in self.columns:
-            val = repr(getattr(self, col))
-            parameters.append(f"{val}")
-
-        joined_parameters = ", ".join(parameters)
-        return f"GFFRecord({joined_parameters})"
-
-    def length(self) -> int:
-        """ Returns the distance between start and end. """
-        return self.end - self.start
-
-    def __len__(self) -> int:
-        return self.length()
-
-    def add_child(self, child: "GFF3Record") -> None:
-        if child not in self.children:
-            self.children.append(child)
-        if self not in child.parents:
-            child.parents.append(self)
-        return
-
-    def add_parent(self, parent: "GFF3Record") -> None:
-        if parent not in self.parents:
-            self.parents.append(parent)
-
-        if self not in parent.children:
-            parent.children.append(self)
-        return
-
-    def add_children(self, children: Sequence["GFF3Record"]) -> None:
-        for child in children:
-            self.add_child(child)
-        return
-
-    def add_parents(self, parents: Sequence["GFF3Record"]) -> None:
-        for parent in parents:
-            self.add_parent(parent)
-        return
-
-    def traverse_children(
-        self,
-        sort: bool = False,
-        breadth: bool = False,
-    ) -> Iterator["GFF3Record"]:
-        """ A graph traversal of this `GFFRecord`s children.
-
-        Keyword arguments:
-        sort -- Sort the children so that they appear in increasing order.
-        breadth -- Perform a breadth first search rather than the default
-            depth first search.
-
-        Returns:
-        A generator yielding `GFFRecord`s.
-        """
-
-        should_reverse = not breadth
-
-        seen: Set[GFF3Record] = set()
-
-        to_visit = deque([self])
-
-        while len(to_visit) > 0:
-
-            if breadth:
-                node = to_visit.popleft()
-            else:
-                node = to_visit.pop()
-
-            # NB uses id() for hashing
-            if node in seen:
-                continue
-            else:
-                seen.add(node)
-
-            children = list(node.children)
-            if sort:
-                children.sort(
-                    key=lambda f: (f.seqid, f.start, f.end, f.type),
-                    reverse=should_reverse
-                )
-
-            to_visit.extend(children)
-            yield node
-
-        return None
-
-    def traverse_parents(
-        self,
-        sort: bool = False,
-        breadth: bool = False,
-    ) -> Iterator["GFF3Record"]:
-        """ A graph traversal of this `GFFRecord`s parents.
-
-        Keyword arguments:
-        sort -- Sort the parents so that they appear in increasing order.
-        breadth -- Perform a breadth first search rather than the default
-            depth first search.
-
-        Returns:
-        A generator yielding `GFFRecord`s.
-        """
-
-        should_reverse = not breadth
-
-        seen: Set[GFF3Record] = set()
-        to_visit = deque([self])
-
-        while len(to_visit) > 0:
-
-            if breadth:
-                node = to_visit.popleft()
-            else:
-                node = to_visit.pop()
-
-            if node in seen:
-                continue
-            else:
-                seen.add(node)
-
-            parents = list(node.parents)
-            if sort:
-                parents.sort(
-                    key=lambda f: (f.seqid, f.start, f.end, f.type),
-                    reverse=should_reverse
-                )
-
-            to_visit.extend(parents)
-            yield node
-
-        return None
-
-    @classmethod
-    def parse(
-        cls,
-        string: str,
-        strip_quote: bool = False,
-        unescape: bool = False,
-    ) -> "GFF3Record":
-        """ Parse a gff line string as a `GFFRecord`.
-
-        Keyword arguments:
-        string -- The gff line to parse.
-        format -- What format the gff file is in.
-            Currently only GFF3 is supported.
-        strip_quote -- Strip quotes from attributes values. The specification
-            says that they should not be stripped, so we don't by default.
-        unescape -- Unescape reserved characters in the attributes to their
-            original values. I.E. some commas, semicolons, newlines etc.
-
-        Returns:
-        A `GFFRecord`
-        """
-
-        sline = string.strip().split("\t")
-        sline_len = len(sline)
-        columns_len = len(cls.columns)
-
-        if sline_len == columns_len - 1:
-            logger.warning(
-                ("Line has has too few columns columns. "
-                 "Probably it is missing the attributes"),
-            )
-        elif sline_len < columns_len:
-            raise ValueError((
-                "Line has too few columns. "
-                f"Expected: {columns_len}, Encountered: {sline_len}"
-            ))
-        elif sline_len > columns_len:
-            logger.warning(
-                "Line has too many columns. Expected: %s, Encountered: %s",
-                columns_len,
-                sline_len
-            )
-
-        fields: Dict[str, str] = dict(zip(cls.columns, sline))
-        if sline_len == columns_len - 1:
-            fields["attributes"] = ""
-
-        # 0-based indexing exclusive
-        start = parse_int(fields["start"], "start") - 1
-        end = parse_int(fields["end"], "end")
-
-        if start > end:
-            tmp = start
-            start = end
-            end = tmp
-            del tmp
-
-        score = parse_or_none(fields["score"], "score", ".", parse_float)
-
-        strand = Strand.parse(is_one_of(
-            fields["strand"],
-            ["-", "+", ".", "?"],
-            "strand"
-        ))
-
-        phase = Phase.parse(is_one_of(
-            fields["phase"],
-            ["0", "1", "2", "."],
-            "phase"
-        ))
-
-        attributes = GFF3Attributes.parse(
-            fields["attributes"],
-            strip_quote=strip_quote,
-            unescape=unescape,
-        )
-
-        return cls(
-            parse_string_not_empty(fields["seqid"], "seqid"),
-            parse_string_not_empty(fields["source"], "source"),
-            parse_string_not_empty(fields["type"], "type"),
-            start,
-            end,
-            score,
-            strand,
-            phase,
-            attributes
-        )
-
-    def expand_to_children(self) -> None:
-        if len(self.children) == 0:
-            return
-
-        min_ = min(c.start for c in self.children)
-        max_ = max(c.end for c in self.children)
-
-        if min_ < self.start:
-            self.start = min_
-
-        if max_ > self.end:
-            self.end = max_
-        return
-
-    def shrink_to_children(self) -> None:
-        if len(self.children) == 0:
-            return
-
-        min_ = min(c.start for c in self.children)
-        max_ = max(c.end for c in self.children)
-
-        if min_ > self.start:
-            self.start = min_
-
-        if max_ < self.end:
-            self.end = max_
-        return
-
-    def update_parents(self) -> None:
-        self.add_attributes_if_none()
-        assert self.attributes is not None
-
-        parent_ids = []
-        for parent in self.parents:
-            assert parent.attributes is not None
-            assert parent.attributes.id is not None
-            parent_id = parent.attributes.id
-            parent_ids.append(parent_id)
-
-        self.attributes.parent = parent_ids
-        return
-
-    def add_attributes_if_none(
-        self,
-        id: Optional[str] = None,
-        name: Optional[str] = None,
-        alias: Optional[Sequence[str]] = None,
-        parent: Optional[Sequence[str]] = None,
-        target: Optional[Target] = None,
-        gap: Optional[Gap] = None,
-        derives_from: Optional[Sequence[str]] = None,
-        note: Optional[Sequence[str]] = None,
-        dbxref: Optional[Sequence[str]] = None,
-        ontology_term: Optional[Sequence[str]] = None,
-        is_circular: Optional[bool] = None,
-        custom: Optional[Mapping[str, str]] = None,
-    ) -> None:
-        if self.attributes is None:
-            self.attributes = GFF3Attributes(
-                id,
-                name,
-                alias,
-                parent,
-                target,
-                gap,
-                derives_from,
-                note,
-                dbxref,
-                ontology_term,
-                is_circular,
-                custom
-            )
-        return
-
-    def copy(self) -> "GFF3Record":
-        """ You'll still need to update the ID """
-        from copy import copy, deepcopy
-
-        node_copy = copy(self)
-        node_copy.attributes = deepcopy(self.attributes)
-
-        if node_copy.attributes is not None:
-            node_copy.attributes.parent = []
-
-        node_copy.children = []
-        node_copy.parents = []
-        return node_copy

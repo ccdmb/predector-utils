@@ -263,6 +263,29 @@ def parse_bool(
     return inner
 
 
+def parse_bool_options(
+    true_values: Sequence[str],
+    false_values: Sequence[str]
+) -> Callable[[str], Union[ValueParseError, bool]]:
+    """ """
+    trues = set(true_values)
+    falses = set(false_values)
+
+    def inner(value: str) -> Union[ValueParseError, bool]:
+        if value in trues:
+            return True
+        elif value in falses:
+            return False
+        else:
+            raise ValueParseError(
+                value,
+                f"{repr(true_values)} or {repr(false_values)}",
+                "Invalid value '{got}', must be one of {expected}."
+            )
+
+    return inner
+
+
 def parse_regex(
     regex: Pattern
 ) -> Callable[[str], Union[ValueParseError, Dict[str, str]]]:
