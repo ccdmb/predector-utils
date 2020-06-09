@@ -6,12 +6,15 @@ from typing import Sequence, Mapping
 from typing import Iterable, Iterator
 from typing import TypeVar
 from typing import cast
+from typing import TextIO
 
 from enum import Enum
 from collections import deque
 
 from predectorutils.higher import fmap
 from predectorutils.parsers import (
+    ParseError,
+    LineParseError,
     FieldParseError,
     raise_it,
     parse_field,
@@ -398,6 +401,8 @@ class GFFRecord(object):
         attributes: Optional["GFFAttributes"] = None,
         parents: Optional[Sequence["GFFRecord"]] = None,
         children: Optional[Sequence["GFFRecord"]] = None,
+        derives_froms: Optional[Sequence["GFFRecord"]] = None,
+        derivatives: Optional[Sequence["GFFRecord"]] = None,
     ) -> None:
         self.seqid = seqid
         self.source = source
@@ -420,6 +425,14 @@ class GFFRecord(object):
         self.children: List[GFFRecord] = []
         if children is not None:
             self.add_children(children)
+
+        self.derives_from: List[GFFRecord] = []
+        if derives_froms is not None:
+            self.add_derives_froms(derives_froms)
+
+        self.derivatives: List[GFFRecord] = []
+        if derivatives is not None:
+            self.add_derivatives(derivatives)
         return
 
     def __str__(self) -> str:
@@ -481,6 +494,51 @@ class GFFRecord(object):
     def add_parents(self, parents: Sequence["GFFRecord"]) -> None:
         for parent in parents:
             self.add_parent(parent)
+        return
+
+    def add_derivative(self, derivative: "GFFRecord") -> None:
+        if derivative not in self.derivatives:
+            self.derivatives.append(derivative)
+        if self not in derivative.parents:
+            derivative.derives_from.append(self)
+        return
+
+    def add_derives_from(self, derives_from: "GFFRecord") -> None:
+        if derives_from not in self.derives_from:
+            self.derives_from.append(derives_from)
+
+        if self not in derives_from.derivatives:
+            derives_from.derivatives.append(self)
+        return
+
+    def add_derivatives(self, derivatives: Sequence["GFFRecord"]) -> None:
+        for derivative in derivatives:
+            self.add_derivative(derivative)
+        return
+
+    def add_derives_froms(self, derives_froms: Sequence["GFFRecord"]) -> None:
+        for derives_from in derives_froms:
+            self.add_derives_from(derives_from)
+        return
+
+    def update_parents(self) -> None:
+        parent_ids = []
+        for parent in self.parents:
+            parent_id = parent.attributes.id
+            assert parent_id is not None
+            parent_ids.append(parent_id)
+
+        self.attributes.parent = parent_ids
+        return
+
+    def update_derives_from(self) -> None:
+        df_ids = []
+        for df in self.derives_from:
+            df_id = df.attributes.id
+            assert df_id is not None
+            df_ids.append(df_id)
+
+        self.attributes.derives_from = df_ids
         return
 
     def traverse_children(
@@ -711,6 +769,107 @@ class GFFRecord(object):
         node_copy.children = []
         node_copy.parents = []
         return node_copy
+
+    @classmethod  # noqa
+    def from_file(
+        cls,
+        handle: TextIO,
+        strip_quote: bool = False,
+        unescape: bool = True,
+    ) -> Iterator["GFFRecord"]:
+        """
+        Yes yes I need to make this more modular... not time right now.
+        """
+
+        from collections import defaultdict
+
+        id_to_record = defaultdict(list)
+
+        to_yield = list()
+        lonely_children = set()
+        lonely_derivatives = set()
+
+        # Children that are encountered before their parents
+        undefined_parents: Dict[str, List[GFFRecord]] = defaultdict(list)
+
+        # derivatives encountered before their parents.
+        undefined_derives_froms: Dict[str, List[GFFRecord]] = defaultdict(list)
+
+        for i, line in enumerate(handle):
+            if line.startswith("#"):
+                continue
+            elif line.strip() == "":
+                continue
+
+            try:
+                record = GFFRecord.parse(line, strip_quote, unescape)
+            except (LineParseError, FieldParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
+
+            id_ = record.attributes.id
+
+            if id_ is not None:
+                id_to_record[id_].append(record)
+
+                uparents = undefined_parents.pop(id_, [])
+                uderives = undefined_derives_froms.pop(id_, [])
+                record.add_children(uparents)
+                record.add_derivatives(uderives)
+
+                for r in uparents:
+                    lonely_children.discard(r)
+                    if r not in lonely_derivatives:
+                        to_yield.append(r)
+
+                for r in uderives:
+                    lonely_derivatives.discard(r)
+                    if r not in lonely_children:
+                        to_yield.append(r)
+
+            is_missing_parent = False
+            for parent in record.attributes.parent:
+                if parent not in id_to_record:
+                    undefined_parents[parent].append(record)
+                    lonely_children.add(record)
+                    is_missing_parent = True
+                else:
+                    record.add_parents(id_to_record.get(parent, []))
+
+            is_missing_derives_from = False
+            for derives_from in record.attributes.derives_from:
+                if derives_from not in id_to_record:
+                    undefined_derives_froms[derives_from].append(record)
+                    lonely_derivatives.add(record)
+                    is_missing_derives_from = True
+                else:
+                    record.add_derives_froms(
+                        id_to_record.get(derives_from, []))
+
+            if not (is_missing_parent or is_missing_derives_from):
+                to_yield.append(record)
+
+            while len(to_yield) > 0:
+                yield to_yield.pop()
+
+        if (len(undefined_parents) > 0) or (len(undefined_derives_froms) > 0):
+            upar = set(undefined_parents.keys())
+            uder = set(undefined_derives_froms.keys())
+
+            message = [
+                "Reached the end of GFF file with undefined references."
+            ]
+
+            if len(upar) > 0:
+                message.append(f"Expected to find parent: {repr(upar)}.")
+
+            if len(uder) > 0:
+                message.append(f"Expected to find derives_from: {repr(uder)}.")
+
+            raise (
+                ParseError(filename=None, line=i, message=" ".join(message))
+                .add_filename_from_handle(handle)
+            )
+        return
 
 
 class GFFAttributes(object):
