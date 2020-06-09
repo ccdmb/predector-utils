@@ -4,7 +4,8 @@ from typing import Optional
 from typing import TextIO
 from typing import Iterator
 
-from predectorutils.analyses.base import Analysis
+from predectorutils.gff import GFFRecord, GFFAttributes, Strand
+from predectorutils.analyses.base import Analysis, GFFAble
 from predectorutils.analyses.base import int_or_none
 from predectorutils.parsers import (
     FieldParseError,
@@ -30,7 +31,7 @@ ds_prob = raise_it(parse_field(parse_float, "prob"))
 ds_cs_pos = raise_it(parse_field(parse_or_none(parse_int, "-"), "cs_pos"))
 
 
-class DeepSig(Analysis):
+class DeepSig(Analysis, GFFAble):
 
     """     """
 
@@ -87,4 +88,29 @@ class DeepSig(Analysis):
                 yield cls.from_line(sline)
             except (LineParseError, FieldParseError) as e:
                 raise e.as_parse_error(line=i).add_filename_from_handle(handle)
+        return
+
+    def as_gff(self) -> Iterator[GFFRecord]:
+
+        if not self.prediction == "SignalPeptide":
+            return
+
+        # d_decision = prediction of issecreted.
+        # ymax = first aa of mature peptide
+        attr = GFFAttributes(custom={
+            "prediction": str(self.prediction),
+            "prob": str(self.prob),
+            "cs_pos": str(self.cs_pos),
+        })
+
+        yield GFFRecord(
+            seqid=self.name,
+            source=self.analysis,
+            type="signal_peptide",
+            start=0,
+            end=self.cs_pos,
+            score=self.prob,
+            strand=Strand.PLUS,
+            attributes=attr
+        )
         return

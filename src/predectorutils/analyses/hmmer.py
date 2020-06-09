@@ -4,7 +4,14 @@ from typing import Optional, Union
 from typing import TextIO
 from typing import Iterator
 
-from predectorutils.analyses.base import Analysis
+from predectorutils.gff import (
+    GFFRecord,
+    GFFAttributes,
+    Target,
+    Strand,
+)
+
+from predectorutils.analyses.base import Analysis, GFFAble
 from predectorutils.analyses.base import str_or_none
 from predectorutils.parsers import (
     FieldParseError,
@@ -46,7 +53,7 @@ hm_query_to = raise_it(parse_field(parse_int, "query_to"))
 hm_acc = raise_it(parse_field(parse_float, "acc"))
 
 
-class DomTbl(Analysis):
+class DomTbl(Analysis, GFFAble):
 
     """ """
 
@@ -213,6 +220,37 @@ class DomTbl(Analysis):
             return self.domain_i_evalue < 1e-5
         else:
             return self.domain_i_evalue < 1e-3
+
+    def as_gff(self) -> Iterator[GFFRecord]:
+        attr = GFFAttributes(
+            target=Target(self.hmm, self.hmm_from, self.hmm_to),
+            custom={
+                "hmm_len": str(self.hmm_len),
+                "query_len": str(self.query_len),
+                "full_evalue": str(self.full_evalue),
+                "full_score": str(self.full_score),
+                "full_bias": str(self.full_bias),
+                "nmatches": str(self.nmatches),
+                "domain_c_evalue": str(self.domain_c_evalue),
+                "domain_i_evalue": str(self.domain_i_evalue),
+                "domain_score": str(self.domain_score),
+                "domain_bias": str(self.domain_bias),
+                "acc": str(self.acc),
+                "description": str(self.description),
+            }
+        )
+
+        yield GFFRecord(
+            seqid=self.query,
+            source=f"{self.software}:{self.database}",
+            type="protein_hmm_match",
+            start=self.query_from,
+            end=self.query_end,
+            score=self.domain_i_evalue,
+            strand=Strand.PLUS,
+            attributes=attr
+        )
+        return
 
 
 class DBCAN(DomTbl):

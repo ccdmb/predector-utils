@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 
+import re
 import sys
 
 from typing import Optional
 from typing import TextIO
 from typing import Iterator
 
-from predectorutils.gff import GFFRecord
+from predectorutils.gff import (
+    GFFRecord,
+    GFFAttributes,
+    Strand,
+)
 from predectorutils.analyses.base import Analysis, GFFAble
 from predectorutils.analyses.base import str_or_none
 from predectorutils.parsers import (
@@ -18,6 +23,7 @@ from predectorutils.parsers import (
     parse_float,
     parse_int,
     parse_bool,
+    parse_regex,
     MULTISPACE_REGEX,
     is_one_of,
     is_value
@@ -204,8 +210,38 @@ class SignalP3NN(Analysis, GFFAble):
         return
 
     def as_gff(self) -> Iterator[GFFRecord]:
+
+        if not self.d_decision:
+            return
+
         # d_decision = prediction of issecreted.
         # ymax = first aa of mature peptide
+        attr = GFFAttributes(custom={
+            "cmax": str(self.cmax),
+            "cmax_pos": str(self.cmax_pos),
+            "cmax_decision": "true" if self.cmax_decision else "false",
+            "ymax": str(self.ymax),
+            "ymax_pos": str(self.ymax_pos),
+            "ymax_decision": "true" if self.ymax_decision else "false",
+            "smax": str(self.smax),
+            "smax_pos": str(self.smax_pos),
+            "smax_decision": "true" if self.smax_decision else "false",
+            "smean": str(self.smean),
+            "smean_decision": "true" if self.smean_decision else "false",
+            "d": str(self.d),
+            "d_decision": "true" if self.d_decision else "false",
+        })
+
+        yield GFFRecord(
+            seqid=self.name,
+            source=self.analysis,
+            type="signal_peptide",
+            start=0,
+            end=self.ymax_pos,
+            score=self.d,
+            strand=Strand.PLUS,
+            attributes=attr
+        )
         return
 
 
@@ -340,6 +376,34 @@ class SignalP3HMM(Analysis):
 
             except (FieldParseError, LineParseError) as e:
                 raise e.as_parse_error(line=i).add_filename_from_handle(handle)
+        return
+
+    def as_gff(self) -> Iterator[GFFRecord]:
+
+        if not self.is_secreted:
+            return
+
+        # d_decision = prediction of issecreted.
+        # ymax = first aa of mature peptide
+        attr = GFFAttributes(custom={
+            "is_secreted": "true" if self.is_secreted else "false",
+            "cmax": str(self.cmax),
+            "cmax_pos": str(self.cmax_pos),
+            "cmax_decision": "true" if self.cmax_decision else "false",
+            "sprob": str(self.sprob),
+            "sprob_decision": "true" if self.sprob_decision else "false",
+        })
+
+        yield GFFRecord(
+            seqid=self.name,
+            source=self.analysis,
+            type="signal_peptide",
+            start=0,
+            end=self.cmax_pos,
+            score=self.sprob,
+            strand=Strand.PLUS,
+            attributes=attr
+        )
         return
 
 
@@ -492,6 +556,39 @@ class SignalP4(Analysis):
                 raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return
 
+    def as_gff(self) -> Iterator[GFFRecord]:
+
+        if not self.is_secreted:
+            return
+
+        # d_decision = prediction of issecreted.
+        # ymax = first aa of mature peptide
+        attr = GFFAttributes(custom={
+            "cmax": str(self.cmax),
+            "cmax_pos": str(self.cmax_pos),
+            "ymax": str(self.ymax),
+            "ymax_pos": str(self.ymax_pos),
+            "smax": str(self.smax),
+            "smax_pos": str(self.smax_pos),
+            "smean": str(self.smean),
+            "d": str(self.d),
+            "decision": "true" if self.decision else "false",
+            "dmax_cut": str(self.dmax_cut),
+            "networks_used": str(self.networks_used),
+        })
+
+        yield GFFRecord(
+            seqid=self.name,
+            source=self.analysis,
+            type="signal_peptide",
+            start=0,
+            end=self.ymax_pos,
+            score=self.d,
+            strand=Strand.PLUS,
+            attributes=attr
+        )
+        return
+
 
 s5_name = raise_it(parse_field(parse_str, "name"))
 s5_prediction = raise_it(parse_field(
@@ -501,6 +598,16 @@ s5_prediction = raise_it(parse_field(
 s5_prob_signal = raise_it(parse_field(parse_float, "prob_signal"))
 s5_prob_other = raise_it(parse_field(parse_float, "prob_other"))
 s5_cs_pos = raise_it(parse_field(parse_str, "cs_pos"))
+
+SP5_CS_POS_REGEX = re.compile(
+    r"CS\s+pos:\s+\d+-(?P<cs>\d+)\.?\s+"
+    r"[A-Za-z]+-[A-Za-z]+\.?\s+"
+    r"Pr: (?P<cs_prob>[-+]?\d*\.?\d+)"
+)
+s5_cs_actual_pos = raise_it(parse_field(
+    parse_regex(SP5_CS_POS_REGEX),
+    "cs_pos"
+))
 
 
 class SignalP5(Analysis):
@@ -585,4 +692,35 @@ class SignalP5(Analysis):
 
             except (LineParseError, FieldParseError) as e:
                 raise e.as_parse_error(line=i).add_filename_from_handle(handle)
+        return
+
+    def as_gff(self) -> Iterator[GFFRecord]:
+
+        if not self.is_secreted:
+            return
+        elif self.cs_pos is None:
+            return
+
+        # d_decision = prediction of issecreted.
+        # ymax = first aa of mature peptide
+        attr = GFFAttributes(custom={
+            "prediction": str(self.prediction),
+            "prob_signal": str(self.prob_signal),
+            "prob_other": str(self.prob_other),
+        })
+        attr.custom["cs_pos"] = self.cs_pos
+
+        # dict(cs, cs_prob)
+        cs = s5_cs_actual_pos(self.cs_pos)
+
+        yield GFFRecord(
+            seqid=self.name,
+            source=self.analysis,
+            type="signal_peptide",
+            start=0,
+            end=int(cs["cs"]),
+            score=self.prob_signal,
+            strand=Strand.PLUS,
+            attributes=attr
+        )
         return
