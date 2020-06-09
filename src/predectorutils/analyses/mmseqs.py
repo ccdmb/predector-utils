@@ -1,16 +1,38 @@
 #!/usr/bin/env python3
 
-from typing import Optional
 from typing import TextIO
 from typing import Iterator
 
 from predectorutils.analyses.base import Analysis
-from predectorutils.analyses.parsers import ParseError, LineParseError
-from predectorutils.analyses.parsers import (
-    parse_string_not_empty,
+from predectorutils.parsers import (
+    FieldParseError,
+    LineParseError,
+    parse_field,
+    raise_it,
+    parse_str,
     parse_float,
     parse_int,
 )
+
+
+mm_query = raise_it(parse_field(parse_str, "query"))
+mm_target = raise_it(parse_field(parse_str, "target"))
+mm_qstart = raise_it(parse_field(parse_int, "qstart"))
+mm_qend = raise_it(parse_field(parse_int, "qend"))
+mm_qlen = raise_it(parse_field(parse_int, "qlen"))
+mm_tstart = raise_it(parse_field(parse_int, "tstart"))
+mm_tend = raise_it(parse_field(parse_int, "tend"))
+mm_tlen = raise_it(parse_field(parse_int, "tlen"))
+mm_evalue = raise_it(parse_field(parse_float, "evalue"))
+mm_gapopen = raise_it(parse_field(parse_int, "gapopen"))
+mm_pident = raise_it(parse_field(parse_float, "pident"))
+mm_alnlen = raise_it(parse_field(parse_int, "alnlen"))
+mm_raw = raise_it(parse_field(parse_float, "raw"))
+mm_bits = raise_it(parse_field(parse_float, "bits"))
+mm_cigar = raise_it(parse_field(parse_str, "cigar"))
+mm_mismatch = raise_it(parse_field(parse_int, "mismatch"))
+mm_qcov = raise_it(parse_field(parse_float, "qcov"))
+mm_tcov = raise_it(parse_field(parse_float, "tcov"))
 
 
 class MMSeqs(Analysis):
@@ -118,24 +140,24 @@ class MMSeqs(Analysis):
             )
 
         return cls(
-            parse_string_not_empty(sline[0], "query"),
-            parse_string_not_empty(sline[1], "target"),
-            parse_int(sline[2], "qstart"),
-            parse_int(sline[3], "qend"),
-            parse_int(sline[4], "qlen"),
-            parse_int(sline[5], "tstart"),
-            parse_int(sline[6], "tend"),
-            parse_int(sline[7], "tlen"),
-            parse_float(sline[8], "evalue"),
-            parse_int(sline[9], "gapopen"),
-            parse_float(sline[10], "pident"),
-            parse_int(sline[11], "alnlen"),
-            parse_float(sline[12], "raw"),
-            parse_float(sline[13], "bits"),
-            parse_string_not_empty(sline[14], "cigar"),
-            parse_int(sline[15], "mismatch"),
-            parse_float(sline[16], "qcov"),
-            parse_float(sline[17], "tcov"),
+            mm_query(sline[0]),
+            mm_target(sline[1]),
+            mm_qstart(sline[2]),
+            mm_qend(sline[3]),
+            mm_qlen(sline[4]),
+            mm_tstart(sline[5]),
+            mm_tend(sline[6]),
+            mm_tlen(sline[7]),
+            mm_evalue(sline[8]),
+            mm_gapopen(sline[9]),
+            mm_pident(sline[10]),
+            mm_alnlen(sline[11]),
+            mm_raw(sline[12]),
+            mm_bits(sline[13]),
+            mm_cigar(sline[14]),
+            mm_mismatch(sline[15]),
+            mm_qcov(sline[16]),
+            mm_tcov(sline[17]),
         )
 
     @classmethod
@@ -150,18 +172,8 @@ class MMSeqs(Analysis):
 
             try:
                 yield cls.from_line(sline)
-
-            except LineParseError as e:
-                if hasattr(handle, "name"):
-                    filename: Optional[str] = handle.name
-                else:
-                    filename = None
-
-                raise ParseError(
-                    filename,
-                    i,
-                    e.message
-                )
+            except (LineParseError, FieldParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return
 
 

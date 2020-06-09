@@ -6,12 +6,33 @@ from typing import Iterator
 
 from predectorutils.analyses.base import Analysis
 from predectorutils.analyses.base import float_or_none, str_or_none
-from predectorutils.analyses.parsers import ParseError, LineParseError
-from predectorutils.analyses.parsers import (
-    parse_string_not_empty,
+from predectorutils.parsers import (
+    FieldParseError,
+    LineParseError,
+    parse_field,
+    raise_it,
+    parse_str,
     parse_float,
     is_one_of
 )
+
+
+tp_name = raise_it(parse_field(parse_str, "name"))
+tp_prediction = raise_it(parse_field(
+    is_one_of(["noTP", "SP", "mTP"]),
+    "prediction"
+))
+tp_other = raise_it(parse_field(parse_float, "OTHER"))
+tp_sp = raise_it(parse_field(parse_float, "SP"))
+tp_mtp = raise_it(parse_field(parse_float, "mTP"))
+
+
+pl_prediction = raise_it(parse_field(
+    is_one_of(["OTHER", "SP", "mTP", "cTP", "luTP"]),
+    "prediction"
+))
+pl_ctp = raise_it(parse_field(parse_float, "cTP"))
+pl_lutp = raise_it(parse_field(parse_float, "luTP"))
 
 
 class TargetPNonPlant(Analysis):
@@ -58,21 +79,16 @@ class TargetPNonPlant(Analysis):
                 f"Expected 5 or 6 but got {len(sline)}"
             )
 
-        prediction = is_one_of(
-            sline[1],
-            ["noTP", "SP", "mTP"],
-            "prediction"
-        )
-
+        prediction = tp_prediction(sline[1])
         if prediction == "noTP":
             prediction = "OTHER"
 
         return cls(
-            parse_string_not_empty(sline[0], "name"),
+            tp_name(sline[0]),
             prediction,
-            parse_float(sline[2], "OTHER"),
-            parse_float(sline[3], "SP"),
-            parse_float(sline[4], "mTP"),
+            tp_other(sline[2]),
+            tp_sp(sline[3]),
+            tp_mtp(sline[4]),
             cs_pos=cs_pos,
         )
 
@@ -90,18 +106,8 @@ class TargetPNonPlant(Analysis):
 
             try:
                 yield cls.from_line(sline)
-
-            except LineParseError as e:
-                if hasattr(handle, "name"):
-                    filename: Optional[str] = handle.name
-                else:
-                    filename = None
-
-                raise ParseError(
-                    filename,
-                    i,
-                    e.message
-                )
+            except (LineParseError, FieldParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return
 
 
@@ -156,17 +162,13 @@ class TargetPPlant(Analysis):
             )
 
         return cls(
-            parse_string_not_empty(sline[0], "name"),
-            is_one_of(
-                sline[1],
-                ["OTHER", "SP", "mTP", "cTP", "luTP"],
-                "prediction"
-            ),
-            parse_float(sline[2], "OTHER"),
-            parse_float(sline[3], "SP"),
-            parse_float(sline[4], "mTP"),
-            parse_float(sline[5], "cTP"),
-            parse_float(sline[6], "luTP"),
+            tp_name(sline[0]),
+            pl_prediction(sline[1]),
+            tp_other(sline[2]),
+            tp_sp(sline[3]),
+            tp_mtp(sline[4]),
+            pl_ctp(sline[5]),
+            pl_lutp(sline[6]),
             cs_pos,
         )
 
@@ -181,16 +183,6 @@ class TargetPPlant(Analysis):
 
             try:
                 yield cls.from_line(sline)
-
-            except LineParseError as e:
-                if hasattr(handle, "name"):
-                    filename: Optional[str] = handle.name
-                else:
-                    filename = None
-
-                raise ParseError(
-                    filename,
-                    i,
-                    e.message
-                )
+            except (LineParseError, FieldParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return

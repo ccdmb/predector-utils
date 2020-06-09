@@ -7,16 +7,59 @@ from typing import Iterator
 
 from predectorutils.analyses.base import Analysis
 from predectorutils.analyses.base import str_or_none
-from predectorutils.analyses.parsers import ParseError, LineParseError
-from predectorutils.analyses.parsers import (
-    parse_string_not_empty,
+from predectorutils.parsers import (
+    FieldParseError,
+    LineParseError,
+    parse_field,
+    raise_it,
+    parse_str,
     parse_float,
     parse_int,
     parse_bool,
+    parse_or_none,
     MULTISPACE_REGEX,
 )
 
 ACT_SITE_REGEX = re.compile(r"predicted_active_site\[(?P<sites>[\d,\s]+)\]$")
+
+
+def parse_predicted_active_site(
+    field: str,
+    field_name: str = "active_site",
+) -> str:
+    """ """
+
+    field = field.strip()
+    if not field.startswith("predicted_active_site"):
+        raise LineParseError(
+            f"Invalid value: '{field}' in the column: '{field_name}'. "
+            "Must have the form 'predicted_active_site[1,2,3]'."
+        )
+
+    field = field[len("predicted_active_site"):]
+    sfield = (f.strip("[],; ") for f in field.split('['))
+    return ';'.join(f.replace(' ', '') for f in sfield if len(f) > 0)
+
+
+ps_name = raise_it(parse_field(parse_str, "name"))
+ps_ali_start = raise_it(parse_field(parse_int, "ali_start"))
+ps_ali_end = raise_it(parse_field(parse_int, "ali_end"))
+ps_env_start = raise_it(parse_field(parse_int, "env_start"))
+ps_env_end = raise_it(parse_field(parse_int, "env_end"))
+ps_hmm = raise_it(parse_field(parse_str, "hmm"))
+ps_hmm_name = raise_it(parse_field(parse_str, "hmm_name"))
+ps_hmm_type = raise_it(parse_field(parse_str, "hmm_type"))
+ps_hmm_start = raise_it(parse_field(parse_int, "hmm_start"))
+ps_hmm_end = raise_it(parse_field(parse_int, "hmm_end"))
+ps_hmm_len = raise_it(parse_field(parse_int, "hmm_len"))
+ps_bitscore = raise_it(parse_field(parse_float, "bitscore"))
+ps_evalue = raise_it(parse_field(parse_float, "evalue"))
+ps_is_significant = raise_it(parse_field(
+    parse_bool("1", "0"),
+    "is_significant"
+))
+
+ps_clan = raise_it(parse_field(parse_or_none(parse_str, "No_clan"), "clan"))
 
 
 class PfamScan(Analysis):
@@ -120,27 +163,22 @@ class PfamScan(Analysis):
         else:
             active_sites = parse_predicted_active_site(sline[15])
 
-        if sline[14] == "No_clan":
-            clan: Optional[str] = None
-        else:
-            clan = parse_string_not_empty(sline[14], "clan")
-
         return cls(
-            parse_string_not_empty(sline[0], "name"),
-            parse_int(sline[1], "ali_start"),
-            parse_int(sline[2], "ali_end"),
-            parse_int(sline[3], "env_start"),
-            parse_int(sline[4], "env_end"),
-            parse_string_not_empty(sline[5], "hmm"),
-            parse_string_not_empty(sline[6], "hmm_name"),
-            parse_string_not_empty(sline[7], "hmm_type"),
-            parse_int(sline[8], "hmm_start"),
-            parse_int(sline[9], "hmm_end"),
-            parse_int(sline[10], "hmm_len"),
-            parse_float(sline[11], "bitscore"),
-            parse_float(sline[12], "evalue"),
-            parse_bool(sline[13], "is_significant", "1", "0"),
-            clan,
+            ps_name(sline[0]),
+            ps_ali_start(sline[1]),
+            ps_ali_end(sline[2]),
+            ps_env_start(sline[3]),
+            ps_env_end(sline[4]),
+            ps_hmm(sline[5]),
+            ps_hmm_name(sline[6]),
+            ps_hmm_type(sline[7]),
+            ps_hmm_start(sline[8]),
+            ps_hmm_end(sline[9]),
+            ps_hmm_len(sline[10]),
+            ps_bitscore(sline[11]),
+            ps_evalue(sline[12]),
+            ps_is_significant(sline[13]),
+            ps_clan(sline[14]),
             active_sites,
         )
 
@@ -156,34 +194,6 @@ class PfamScan(Analysis):
 
             try:
                 yield cls.from_line(sline)
-
-            except LineParseError as e:
-                if hasattr(handle, "name"):
-                    filename: Optional[str] = handle.name
-                else:
-                    filename = None
-
-                raise ParseError(
-                    filename,
-                    i,
-                    e.message
-                )
+            except (LineParseError, FieldParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return
-
-
-def parse_predicted_active_site(
-    field: str,
-    field_name: str = "active_site",
-) -> str:
-    """ """
-
-    field = field.strip()
-    if not field.startswith("predicted_active_site"):
-        raise LineParseError(
-            f"Invalid value: '{field}' in the column: '{field_name}'. "
-            "Must have the form 'predicted_active_site[1,2,3]'."
-        )
-
-    field = field[len("predicted_active_site"):]
-    sfield = (f.strip("[],; ") for f in field.split('['))
-    return ';'.join(f.replace(' ', '') for f in sfield if len(f) > 0)

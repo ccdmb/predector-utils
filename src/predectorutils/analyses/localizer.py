@@ -12,9 +12,13 @@ from predectorutils.analyses.base import (
     float_or_none,
     str_or_none
 )
-from predectorutils.analyses.parsers import ParseError, LineParseError
-from predectorutils.analyses.parsers import (
-    parse_string_not_empty,
+from predectorutils.parsers import (
+    FieldParseError,
+    LineParseError,
+    parse_field,
+    raise_it,
+    parse_str,
+    parse_regex
 )
 
 # This matches strings of the form "Y (0.962| 25-49)"
@@ -33,18 +37,13 @@ def parse_tp_field(
 
     if field == "-":
         return (False, None, None, None)
-    else:
-        res = TP_REGEX.match(field)
-        if res is None:
-            raise LineParseError(
-                f"Invalid value: '{field}' in the column: "
-                f"'{field_name}'. "
-                "Must have the form '-' or 'Y (0.50 | 25-39)'"
-            )
-        else:
-            dres = res.groupdict()
-            return (True, float(dres["prob"]),
-                    int(dres["start"]), int(dres["end"]))
+
+    res = parse_field(parse_regex(TP_REGEX), "field_name")(field)
+    if isinstance(res, FieldParseError):
+        raise res
+
+    # This should be safe because we know the regex matched.
+    return (True, float(res["prob"]), int(res["start"]), int(res["end"]))
 
 
 def parse_nuc_field(
@@ -54,15 +53,13 @@ def parse_nuc_field(
 
     if field == "-":
         return (False, None)
-    else:
-        res = NUC_REGEX.match(field)
-        if res is None:
-            raise LineParseError(f"Invalid value: '{field}' in the column: "
-                                 f"nucleus'. "
-                                 "Must have the form '-' or 'Y (LGEV,PKPS)'")
-        else:
-            dres = res.groupdict()
-            return (True, dres["sigs"])
+
+    res = parse_field(parse_regex(NUC_REGEX), "nucleus")(field)
+    if isinstance(res, FieldParseError):
+        raise res
+
+    # This should be safe because we know the regex matched.
+    return (True, res["sigs"])
 
 
 class LOCALIZER(Analysis):
@@ -136,7 +133,7 @@ class LOCALIZER(Analysis):
         (nuc, nuc_sigs) = parse_nuc_field(sline[3])
 
         return cls(
-            parse_string_not_empty(sline[0], "name"),
+            raise_it(parse_field(parse_str, "name"))(sline[0]),
             cp,
             cp_prob,
             cp_start,
@@ -163,15 +160,6 @@ class LOCALIZER(Analysis):
             try:
                 yield cls.from_line(sline)
 
-            except LineParseError as e:
-                if hasattr(handle, "name"):
-                    filename: Optional[str] = handle.name
-                else:
-                    filename = None
-
-                raise ParseError(
-                    filename,
-                    i,
-                    e.message
-                )
+            except (FieldParseError, LineParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return

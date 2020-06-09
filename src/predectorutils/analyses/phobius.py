@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
 
-from typing import Optional
 from typing import TextIO
 from typing import Iterator
 
 from predectorutils.analyses.base import Analysis
-from predectorutils.analyses.parsers import ParseError, LineParseError
-from predectorutils.analyses.parsers import (
-    parse_string_not_empty,
+from predectorutils.parsers import (
+    FieldParseError,
+    LineParseError,
+    parse_field,
+    raise_it,
+    parse_str,
     parse_int,
     parse_bool,
     MULTISPACE_REGEX
 )
+
+pb_name = raise_it(parse_field(parse_str, "name"))
+pb_tm = raise_it(parse_field(parse_int, "tm"))
+pb_sp = raise_it(parse_field(parse_bool("Y", "0"), "sp"))
+pb_topology = raise_it(parse_field(parse_str, "topology"))
 
 
 class Phobius(Analysis):
@@ -51,10 +58,10 @@ class Phobius(Analysis):
             raise LineParseError("The line appears to be the header line")
 
         return cls(
-            parse_string_not_empty(sline[0], "name"),
-            parse_int(sline[1], "tm"),
-            parse_bool(sline[2], "sp", "Y", "0"),
-            parse_string_not_empty(sline[3], "topology")
+            pb_name(sline[0]),
+            pb_tm(sline[1]),
+            pb_sp(sline[2]),
+            pb_topology(sline[3]),
         )
 
     @classmethod
@@ -71,16 +78,6 @@ class Phobius(Analysis):
 
             try:
                 yield cls.from_line(sline)
-
-            except LineParseError as e:
-                if hasattr(handle, "name"):
-                    filename: Optional[str] = handle.name
-                else:
-                    filename = None
-
-                raise ParseError(
-                    filename,
-                    i,
-                    e.message
-                )
+            except (LineParseError, FieldParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return

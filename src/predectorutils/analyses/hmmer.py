@@ -1,18 +1,49 @@
 #!/usr/bin/env python3
 
-from typing import Optional
+from typing import Optional, Union
 from typing import TextIO
 from typing import Iterator
 
 from predectorutils.analyses.base import Analysis
 from predectorutils.analyses.base import str_or_none
-from predectorutils.analyses.parsers import ParseError, LineParseError
-from predectorutils.analyses.parsers import (
-    parse_string_not_empty,
+from predectorutils.parsers import (
+    FieldParseError,
+    LineParseError,
+    ValueParseError,
+    raise_it,
+    parse_field,
+    parse_str,
     parse_float,
     parse_int,
     MULTISPACE_REGEX,
 )
+
+
+def split_hmm(s: str) -> Union[ValueParseError, str]:
+    s1 = parse_str(s)
+    if isinstance(s1, ValueParseError):
+        return s1
+    else:
+        return s.rsplit(".hmm", maxsplit=1)[0]
+
+
+hm_name = raise_it(parse_field(parse_str, "name"))  # query name
+hm_hmm = raise_it(parse_field(split_hmm, "hmm"))  # target name
+hm_hmm_len = raise_it(parse_field(parse_int, "hmm_len"))  # tlen
+hm_query_len = raise_it(parse_field(parse_int, "query_len"))  # qlen
+hm_full_evalue = raise_it(parse_field(parse_float, "full_evalue"))
+hm_full_score = raise_it(parse_field(parse_float, "full_score"))
+hm_full_bias = raise_it(parse_field(parse_float, "full_bias"))
+hm_nmatches = raise_it(parse_field(parse_int, "nmatches"))
+hm_domain_c_evalue = raise_it(parse_field(parse_float, "domain_c_evalue"))
+hm_domain_i_evalue = raise_it(parse_field(parse_float, "domain_i_evalue"))
+hm_domain_score = raise_it(parse_field(parse_float, "domain_score"))
+hm_domain_bias = raise_it(parse_field(parse_float, "domain_bias"))
+hm_hmm_from = raise_it(parse_field(parse_int, "hmm_from"))
+hm_hmm_to = raise_it(parse_field(parse_int, "hmm_to"))
+hm_query_from = raise_it(parse_field(parse_int, "query_from"))
+hm_query_to = raise_it(parse_field(parse_int, "query_to"))
+hm_acc = raise_it(parse_field(parse_float, "acc"))
 
 
 class DomTbl(Analysis):
@@ -127,23 +158,23 @@ class DomTbl(Analysis):
             description = sline[22]
 
         return cls(
-            parse_string_not_empty(sline[3], "name"),  # query name
-            split_hmm(parse_string_not_empty(sline[0], "hmm")),  # target name
-            parse_int(sline[2], "hmm_len"),  # tlen
-            parse_int(sline[5], "query_len"),  # qlen
-            parse_float(sline[6], "full_evalue"),
-            parse_float(sline[7], "full_score"),
-            parse_float(sline[8], "full_bias"),
-            parse_int(sline[10], "nmatches"),
-            parse_float(sline[11], "domain_c_evalue"),
-            parse_float(sline[12], "domain_i_evalue"),
-            parse_float(sline[13], "domain_score"),
-            parse_float(sline[14], "domain_bias"),
-            parse_int(sline[15], "hmm_from"),
-            parse_int(sline[16], "hmm_to"),
-            parse_int(sline[17], "query_from"),
-            parse_int(sline[18], "query_to"),
-            parse_float(sline[21], "acc"),
+            hm_name(sline[3]),
+            hm_hmm(sline[0]),
+            hm_hmm_len(sline[2]),
+            hm_query_len(sline[5]),
+            hm_full_evalue(sline[6]),
+            hm_full_score(sline[7]),
+            hm_full_bias(sline[8]),
+            hm_nmatches(sline[10]),
+            hm_domain_c_evalue(sline[11]),
+            hm_domain_i_evalue(sline[12]),
+            hm_domain_score(sline[13]),
+            hm_domain_bias(sline[14]),
+            hm_hmm_from(sline[15]),
+            hm_hmm_to(sline[16]),
+            hm_query_from(sline[17]),
+            hm_query_to(sline[18]),
+            hm_acc(sline[21]),
             description
         )
 
@@ -160,17 +191,8 @@ class DomTbl(Analysis):
             try:
                 yield cls.from_line(sline)
 
-            except LineParseError as e:
-                if hasattr(handle, "name"):
-                    filename: Optional[str] = handle.name
-                else:
-                    filename = None
-
-                raise ParseError(
-                    filename,
-                    i,
-                    e.message
-                )
+            except (FieldParseError, LineParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return
 
     def coverage(self) -> float:
@@ -196,7 +218,3 @@ class DomTbl(Analysis):
 class DBCAN(DomTbl):
     analysis = "dbcan"
     database = "DBCan"
-
-
-def split_hmm(s: str) -> str:
-    return s.rsplit(".hmm", maxsplit=1)[0]
