@@ -101,5 +101,9 @@ class Analysis(object):
 
 class GFFAble(object):
 
-    def as_gff(self) -> Iterator[GFFRecord]:
+    def as_gff(
+        self,
+        keep_all: bool = False,
+        id_index: int = 1,
+    ) -> Iterator[GFFRecord]:
         raise NotImplementedError()

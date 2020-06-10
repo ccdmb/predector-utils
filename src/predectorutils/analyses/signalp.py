@@ -209,7 +209,11 @@ class SignalP3NN(Analysis, GFFAble):
                 raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return
 
-    def as_gff(self) -> Iterator[GFFRecord]:
+    def as_gff(
+        self,
+        keep_all: bool = False,
+        id_index: int = 1,
+    ) -> Iterator[GFFRecord]:
 
         if not self.d_decision:
             return
@@ -378,7 +382,11 @@ class SignalP3HMM(Analysis):
                 raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return
 
-    def as_gff(self) -> Iterator[GFFRecord]:
+    def as_gff(
+        self,
+        keep_all: bool = False,
+        id_index: int = 1,
+    ) -> Iterator[GFFRecord]:
 
         if not self.is_secreted:
             return
@@ -556,9 +564,13 @@ class SignalP4(Analysis):
                 raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return
 
-    def as_gff(self) -> Iterator[GFFRecord]:
+    def as_gff(
+        self,
+        keep_all: bool = False,
+        id_index: int = 1,
+    ) -> Iterator[GFFRecord]:
 
-        if not self.is_secreted:
+        if not self.decision:
             return
 
         # d_decision = prediction of issecreted.
@@ -694,12 +706,17 @@ class SignalP5(Analysis):
                 raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return
 
-    def as_gff(self) -> Iterator[GFFRecord]:
+    def as_gff(
+        self,
+        keep_all: bool = False,
+        id_index: int = 1,
+    ) -> Iterator[GFFRecord]:
 
-        if not self.is_secreted:
+        if self.cs_pos is None:
             return
-        elif self.cs_pos is None:
-            return
+
+        # dict(cs, cs_prob)
+        cs = s5_cs_actual_pos(self.cs_pos)
 
         # d_decision = prediction of issecreted.
         # ymax = first aa of mature peptide
@@ -707,11 +724,8 @@ class SignalP5(Analysis):
             "prediction": str(self.prediction),
             "prob_signal": str(self.prob_signal),
             "prob_other": str(self.prob_other),
+            "prob_cut_site": str(cs["cs_prob"]),
         })
-        attr.custom["cs_pos"] = self.cs_pos
-
-        # dict(cs, cs_prob)
-        cs = s5_cs_actual_pos(self.cs_pos)
 
         yield GFFRecord(
             seqid=self.name,

@@ -177,9 +177,9 @@ class DomTbl(Analysis, GFFAble):
             hm_domain_i_evalue(sline[12]),
             hm_domain_score(sline[13]),
             hm_domain_bias(sline[14]),
-            hm_hmm_from(sline[15]),
+            hm_hmm_from(sline[15]) - 1,
             hm_hmm_to(sline[16]),
-            hm_query_from(sline[17]),
+            hm_query_from(sline[17]) - 1,
             hm_query_to(sline[18]),
             hm_acc(sline[21]),
             description
@@ -221,7 +221,14 @@ class DomTbl(Analysis, GFFAble):
         else:
             return self.domain_i_evalue < 1e-3
 
-    def as_gff(self) -> Iterator[GFFRecord]:
+    def as_gff(
+        self,
+        keep_all: bool = False,
+        id_index: int = 1,
+    ) -> Iterator[GFFRecord]:
+        if not (keep_all or self.decide_significant()):
+            return
+
         attr = GFFAttributes(
             target=Target(self.hmm, self.hmm_from, self.hmm_to),
             custom={
@@ -245,9 +252,9 @@ class DomTbl(Analysis, GFFAble):
             source=f"{self.software}:{self.database}",
             type="protein_hmm_match",
             start=self.query_from,
-            end=self.query_end,
+            end=self.query_to,
             score=self.domain_i_evalue,
-            strand=Strand.PLUS,
+            strand=Strand.UNSTRANDED,
             attributes=attr
         )
         return

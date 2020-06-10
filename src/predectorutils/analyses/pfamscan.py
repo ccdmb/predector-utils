@@ -5,7 +5,8 @@ from typing import Optional
 from typing import TextIO
 from typing import Iterator
 
-from predectorutils.analyses.base import Analysis
+from predectorutils.gff import GFFRecord, GFFAttributes, Strand, Target
+from predectorutils.analyses.base import Analysis, GFFAble
 from predectorutils.analyses.base import str_or_none
 from predectorutils.parsers import (
     FieldParseError,
@@ -62,7 +63,7 @@ ps_is_significant = raise_it(parse_field(
 ps_clan = raise_it(parse_field(parse_or_none(parse_str, "No_clan"), "clan"))
 
 
-class PfamScan(Analysis):
+class PfamScan(Analysis, GFFAble):
 
     """ """
 
@@ -165,14 +166,14 @@ class PfamScan(Analysis):
 
         return cls(
             ps_name(sline[0]),
-            ps_ali_start(sline[1]),
+            ps_ali_start(sline[1]) - 1,
             ps_ali_end(sline[2]),
-            ps_env_start(sline[3]),
+            ps_env_start(sline[3]) - 1,
             ps_env_end(sline[4]),
             ps_hmm(sline[5]),
             ps_hmm_name(sline[6]),
             ps_hmm_type(sline[7]),
-            ps_hmm_start(sline[8]),
+            ps_hmm_start(sline[8]) - 1,
             ps_hmm_end(sline[9]),
             ps_hmm_len(sline[10]),
             ps_bitscore(sline[11]),
@@ -196,4 +197,52 @@ class PfamScan(Analysis):
                 yield cls.from_line(sline)
             except (LineParseError, FieldParseError) as e:
                 raise e.as_parse_error(line=i).add_filename_from_handle(handle)
+        return
+
+    def as_gff(
+        self,
+        keep_all: bool = False,
+        id_index: int = 1,
+    ) -> Iterator[GFFRecord]:
+        if not (keep_all or self.is_significant):
+            return
+
+        attr = GFFAttributes(
+            target=Target(self.hmm, self.hmm_start, self.hmm_end),
+            custom={
+                "env_start": str(self.env_start),
+                "env_end": str(self.env_end),
+                "hmm_name": str(self.hmm_name),
+                "hmm_type": str(self.hmm_type),
+                "hmm_len": str(self.hmm_len),
+                "bitscore": str(self.bitscore),
+                "evalue": str(self.evalue),
+                "is_significant": "true" if self.is_significant else "false",
+            }
+        )
+
+        if self.clan is not None:
+            attr.custom["clan"] = str(self.clan)
+
+        if self.active_sites is not None:
+            attr.custom["active_sites"] = list(
+                a.strip()
+                for a
+                in self.active_sites
+                .replace("]", ",")
+                .replace("[", ",")
+                .split(",")
+                if a != ""
+            )
+
+        yield GFFRecord(
+            seqid=self.name,
+            source=f"{self.analysis}",
+            type="protein_hmm_match",
+            start=self.ali_start,
+            end=self.ali_end,
+            score=self.evalue,
+            strand=Strand.UNSTRANDED,
+            attributes=attr
+        )
         return

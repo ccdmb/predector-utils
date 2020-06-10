@@ -109,6 +109,7 @@ def flatten_list_of_lists(li: Iterable[Iterable[T]]) -> Iterator[T]:
 def attr_escape(string: str) -> str:
     return (
         string
+        .replace("%", "%25")
         .replace(";", "%3B")
         .replace(",", "%2C")
         .replace("=", "%3D")
@@ -127,6 +128,7 @@ def attr_unescape(string: str) -> str:
         .replace("%09", "\t")
         .replace("%0A", "\n")
         .replace("%0D", "\r")
+        .replace("%25", "%")
     )
 
 
@@ -247,7 +249,7 @@ class Target(object):
             )
 
     def __str__(self) -> str:
-        target_id = attr_escape(self.target_id)
+        target_id = attr_escape(self.target_id).replace(" ", "%20")
 
         # Recode back to 1 based (inclusive)
         start = self.start + 1
@@ -282,7 +284,10 @@ class Target(object):
             )
 
         if unescape:
-            target_id = attr_target_id(attr_unescape(split_string[0]))
+            target_id = attr_target_id(
+                attr_unescape(split_string[0])
+                .replace("%20", " ")
+            )
         else:
             target_id = attr_target_id(split_string[0])
         # We want 0 based exclusive
@@ -1115,6 +1120,8 @@ class GFFAttributes(object):
         for key in keys:
             value = self[key]
             if value is None or value == []:
+                continue
+            elif key == "Is_circular" and not value:
                 continue
 
             if escape:

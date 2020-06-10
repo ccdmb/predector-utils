@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
+import re
+from typing import List, Tuple
 from typing import TextIO
 from typing import Iterator
 
-from predectorutils.analyses.base import Analysis
+from predectorutils.gff import (GFFRecord, Strand)
+from predectorutils.analyses.base import Analysis, GFFAble
 from predectorutils.parsers import (
     FieldParseError,
     LineParseError,
@@ -32,7 +35,23 @@ tm_topology = raise_it(parse_field(
 ))
 
 
-class TMHMM(Analysis):
+def parse_topology(string: str) -> List[Tuple[int, int]]:
+    parts = re.findall(
+        r"(?P<tag>[ncio])(?P<start>\d+)-(?P<end>\d+)",
+        string
+    )
+    out = []
+    for tag, start, end in parts:
+        assert tag in ("i", "o"), string
+        out.append((
+            int(start) - 1,
+            int(end)
+        ))
+
+    return out
+
+
+class TMHMM(Analysis, GFFAble):
 
     """ .
     """
@@ -97,4 +116,21 @@ class TMHMM(Analysis):
             except (LineParseError, FieldParseError) as e:
                 raise e.as_parse_error(line=i).add_filename_from_handle(handle)
 
+        return
+
+    def as_gff(
+        self,
+        keep_all: bool = False,
+        id_index: int = 1
+    ) -> Iterator[GFFRecord]:
+
+        for (start, end) in parse_topology(self.topology):
+            yield GFFRecord(
+                seqid=self.name,
+                source=self.analysis,
+                type="transmembrane_polypeptide_region",
+                start=start,
+                end=end,
+                strand=Strand.UNSTRANDED,
+            )
         return

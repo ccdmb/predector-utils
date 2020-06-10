@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 
+import re
 from typing import TextIO
 from typing import Iterator
+from typing import List, Tuple
 
-from predectorutils.analyses.base import Analysis
+from predectorutils.gff import (
+    GFFRecord,
+    GFFAttributes,
+    Strand,
+)
+from predectorutils.analyses.base import Analysis, GFFAble
 from predectorutils.parsers import (
     FieldParseError,
     LineParseError,
@@ -21,7 +28,36 @@ pb_sp = raise_it(parse_field(parse_bool("Y", "0"), "sp"))
 pb_topology = raise_it(parse_field(parse_str, "topology"))
 
 
-class Phobius(Analysis):
+def parse_topology(string: str) -> List[Tuple[str, int, int]]:
+    parts = re.findall(
+        r"(?P<tag>[ncio])(?P<start>\d+)[-/](?P<end>\d+)",
+        string
+    )
+    out = []
+    for tag, start, end in parts:
+        if tag == "n":
+            out.append(("n_terminal_region", 0, int(start)))
+            out.append((
+                "central_hydrophobic_region_of_signal_peptide",
+                int(start) - 1,
+                int(end)
+            ))
+        elif tag == "c":
+            assert out[-1][0] == "central_hydrophobic_region_of_signal_peptide"
+            lend = int(out[-1][2])
+            out.append(("c_terminal_region", lend, int(end)))
+        else:
+            assert tag in ("i", "o"), string
+            out.append((
+                "transmembrane_polypeptide_region",
+                int(start) - 1,
+                int(end)
+            ))
+
+    return out
+
+
+class Phobius(Analysis, GFFAble):
 
     """ .
     """
@@ -80,4 +116,44 @@ class Phobius(Analysis):
                 yield cls.from_line(sline)
             except (LineParseError, FieldParseError) as e:
                 raise e.as_parse_error(line=i).add_filename_from_handle(handle)
+        return
+
+    def as_gff(
+        self,
+        keep_all: bool = False,
+        id_index: int = 1
+    ) -> Iterator[GFFRecord]:
+
+        records = []
+
+        for (type_, start, end) in parse_topology(self.topology):
+            records.append(GFFRecord(
+                seqid=self.name,
+                source=self.analysis,
+                type=type_,
+                start=start,
+                end=end,
+                strand=Strand.UNSTRANDED,
+            ))
+
+        if self.sp:
+            gff_record = GFFRecord(
+                seqid=self.name,
+                source=self.analysis,
+                type="signal_peptide",
+                start=0,
+                end=1,
+                strand=Strand.UNSTRANDED,
+                attributes=GFFAttributes(id=f"signal_peptide{id_index}"),
+                children=[c
+                          for c
+                          in records
+                          if c.type != "transmembrane_polypeptide_region"]
+            )
+            gff_record.expand_to_children()
+            yield gff_record
+
+        for r in records:
+            r.update_parents()
+            yield r
         return

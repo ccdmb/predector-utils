@@ -90,10 +90,17 @@ class DeepSig(Analysis, GFFAble):
                 raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return
 
-    def as_gff(self) -> Iterator[GFFRecord]:
+    def as_gff(
+        self,
+        keep_all: bool = False,
+        id_index: int = 1,
+    ) -> Iterator[GFFRecord]:
 
         if not self.prediction == "SignalPeptide":
             return
+
+        # THis should always be true for signal peptides i think.
+        assert self.cs_pos is not None
 
         # d_decision = prediction of issecreted.
         # ymax = first aa of mature peptide
@@ -110,7 +117,7 @@ class DeepSig(Analysis, GFFAble):
             start=0,
             end=self.cs_pos,
             score=self.prob,
-            strand=Strand.PLUS,
+            strand=Strand.UNSTRANDED,
             attributes=attr
         )
         return

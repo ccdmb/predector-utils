@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 
+import re
 from typing import Optional
 from typing import TextIO
 from typing import Iterator
 
-from predectorutils.analyses.base import Analysis
+from predectorutils.gff import (
+    GFFRecord,
+    GFFAttributes,
+    Strand,
+)
+from predectorutils.analyses.base import Analysis, GFFAble
 from predectorutils.analyses.base import float_or_none, str_or_none
 from predectorutils.parsers import (
     FieldParseError,
@@ -12,6 +18,7 @@ from predectorutils.parsers import (
     parse_field,
     raise_it,
     parse_str,
+    parse_regex,
     parse_float,
     is_one_of
 )
@@ -34,8 +41,18 @@ pl_prediction = raise_it(parse_field(
 pl_ctp = raise_it(parse_field(parse_float, "cTP"))
 pl_lutp = raise_it(parse_field(parse_float, "luTP"))
 
+CS_POS_REGEX = re.compile(
+    r"CS\s+pos:\s+\d+-(?P<cs>\d+)\.?\s+"
+    r"[A-Za-z]+-[A-Za-z]+\.?\s+"
+    r"Pr: (?P<cs_prob>[-+]?\d*\.?\d+)"
+)
+cs_actual_pos = raise_it(parse_field(
+    parse_regex(CS_POS_REGEX),
+    "cs_pos"
+))
 
-class TargetPNonPlant(Analysis):
+
+class TargetPNonPlant(Analysis, GFFAble):
 
     """ Doesn't have output format documentation yet
     """
@@ -108,6 +125,52 @@ class TargetPNonPlant(Analysis):
                 yield cls.from_line(sline)
             except (LineParseError, FieldParseError) as e:
                 raise e.as_parse_error(line=i).add_filename_from_handle(handle)
+        return
+
+    def as_gff(
+        self,
+        keep_all: bool = False,
+        id_index: int = 1,
+    ) -> Iterator[GFFRecord]:
+
+        if self.cs_pos is None:
+            return
+
+        # dict(cs, cs_prob)
+        cs = cs_actual_pos(self.cs_pos)
+
+        # d_decision = prediction of issecreted.
+        # ymax = first aa of mature peptide
+        attr = GFFAttributes(custom={
+            "prediction": str(self.prediction),
+            "prob_signal": str(self.sp),
+            "prob_mitochondrial": str(self.mtp),
+            "prob_other": str(self.other),
+            "prob_cut_site": str(cs["cs_prob"]),
+        })
+
+        if self.prediction == "SP":
+            type_ = "signal_peptide"
+            prob = self.sp
+
+        elif self.prediction == "mTP":
+            type_ = "mitochondrial_targeting_signal"
+            prob = self.mtp
+
+        else:
+            # Should happen
+            return
+
+        yield GFFRecord(
+            seqid=self.name,
+            source=self.analysis,
+            type=type_,
+            start=0,
+            end=int(cs["cs"]),
+            score=prob,
+            strand=Strand.UNSTRANDED,
+            attributes=attr
+        )
         return
 
 
@@ -185,4 +248,60 @@ class TargetPPlant(Analysis):
                 yield cls.from_line(sline)
             except (LineParseError, FieldParseError) as e:
                 raise e.as_parse_error(line=i).add_filename_from_handle(handle)
+        return
+
+    def as_gff(
+        self,
+        keep_all: bool = False,
+        id_index: int = 1,
+    ) -> Iterator[GFFRecord]:
+
+        if self.cs_pos is None:
+            return
+
+        # dict(cs, cs_prob)
+        cs = cs_actual_pos(self.cs_pos)
+
+        # d_decision = prediction of issecreted.
+        # ymax = first aa of mature peptide
+        attr = GFFAttributes(custom={
+            "prediction": str(self.prediction),
+            "prob_signal": str(self.sp),
+            "prob_mitochondrial": str(self.mtp),
+            "prob_chloroplast": str(self.ctp),
+            "prob_lumen": str(self.lutp),
+            "prob_other": str(self.other),
+            "prob_cut_site": str(cs["cs_prob"]),
+        })
+
+        if self.prediction == "SP":
+            type_ = "signal_peptide"
+            prob = self.sp
+
+        elif self.prediction == "mTP":
+            type_ = "mitochondrial_targeting_signal"
+            prob = self.mtp
+
+        elif self.prediction == "cTP":
+            type_ = "transit_peptide"
+            prob = self.ctp
+
+        elif self.prediction == "luTP":
+            type_ = "transit_peptide"
+            prob = self.lutp
+
+        else:
+            # Should happen
+            return
+
+        yield GFFRecord(
+            seqid=self.name,
+            source=self.analysis,
+            type=type_,
+            start=0,
+            end=int(cs["cs"]),
+            score=prob,
+            strand=Strand.UNSTRANDED,
+            attributes=attr
+        )
         return

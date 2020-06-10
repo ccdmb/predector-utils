@@ -6,7 +6,9 @@ from typing import TextIO
 from typing import Iterator
 from typing import Tuple
 
-from predectorutils.analyses.base import Analysis
+from predectorutils.higher import fmap
+from predectorutils.gff import GFFRecord, GFFAttributes, Strand
+from predectorutils.analyses.base import Analysis, GFFAble
 from predectorutils.analyses.base import (
     int_or_none,
     float_or_none,
@@ -62,7 +64,7 @@ def parse_nuc_field(
     return (True, res["sigs"])
 
 
-class LOCALIZER(Analysis):
+class LOCALIZER(Analysis, GFFAble):
 
     """     """
 
@@ -136,11 +138,11 @@ class LOCALIZER(Analysis):
             raise_it(parse_field(parse_str, "name"))(sline[0]),
             cp,
             cp_prob,
-            cp_start,
+            fmap(lambda x: x - 1, cp_start),
             cp_end,
             mt,
             mt_prob,
-            mt_start,
+            fmap(lambda x: x - 1, mt_start),
             mt_end,
             nuc,
             nuc_sigs
@@ -162,4 +164,54 @@ class LOCALIZER(Analysis):
 
             except (FieldParseError, LineParseError) as e:
                 raise e.as_parse_error(line=i).add_filename_from_handle(handle)
+        return
+
+    def as_gff(
+        self,
+        keep_all: bool = True,
+        id_index: int = 1,
+    ) -> Iterator[GFFRecord]:
+
+        if self.chloroplast_decision:
+            assert self.chloroplast_start is not None
+            assert self.chloroplast_end is not None
+
+            attr = GFFAttributes(
+                note=["Putative internal chloroplast localization peptide"],
+                custom={
+                    "prob": str(self.chloroplast_prob),
+                }
+            )
+
+            yield GFFRecord(
+                seqid=self.name,
+                source=self.analysis,
+                type="peptide_localization_signal",
+                start=self.chloroplast_start,
+                end=self.chloroplast_end,
+                score=self.chloroplast_prob,
+                strand=Strand.PLUS,
+                attributes=attr
+            )
+
+        if self.mitochondria_decision:
+            assert self.mitochondria_start is not None
+            assert self.mitochondria_end is not None
+            attr = GFFAttributes(
+                note=["Putative internal mitochondrial localization peptide"],
+                custom={
+                    "prob": str(self.mitochondria_prob),
+                }
+            )
+
+            yield GFFRecord(
+                seqid=self.name,
+                source=self.analysis,
+                type="mitochondrial_targeting_signal",
+                start=self.mitochondria_start,
+                end=self.mitochondria_end,
+                score=self.mitochondria_prob,
+                strand=Strand.UNSTRANDED,
+                attributes=attr
+            )
         return

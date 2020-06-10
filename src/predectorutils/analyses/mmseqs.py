@@ -1,9 +1,19 @@
 #!/usr/bin/env python3
 
+import re
 from typing import TextIO
 from typing import Iterator
 
-from predectorutils.analyses.base import Analysis
+from predectorutils.gff import (
+    GFFRecord,
+    GFFAttributes,
+    Strand,
+    Target,
+    Gap,
+    GapCode,
+    GapElement
+)
+from predectorutils.analyses.base import Analysis, GFFAble
 from predectorutils.parsers import (
     FieldParseError,
     LineParseError,
@@ -35,7 +45,18 @@ mm_qcov = raise_it(parse_field(parse_float, "qcov"))
 mm_tcov = raise_it(parse_field(parse_float, "tcov"))
 
 
-class MMSeqs(Analysis):
+def parse_cigar(cigar):
+    output = []
+
+    parts = re.findall(r"\d+[MIDFR]", cigar)
+    for part in parts:
+        num = int(part[:-1])
+        code = GapCode.parse(part[-1])
+        output.append(GapElement(code, num))
+    return Gap(output)
+
+
+class MMSeqs(Analysis, GFFAble):
 
     """ """
     columns = [
@@ -142,10 +163,10 @@ class MMSeqs(Analysis):
         return cls(
             mm_query(sline[0]),
             mm_target(sline[1]),
-            mm_qstart(sline[2]),
+            mm_qstart(sline[2]) - 1,
             mm_qend(sline[3]),
             mm_qlen(sline[4]),
-            mm_tstart(sline[5]),
+            mm_tstart(sline[5]) - 1,
             mm_tend(sline[6]),
             mm_tlen(sline[7]),
             mm_evalue(sline[8]),
@@ -174,6 +195,47 @@ class MMSeqs(Analysis):
                 yield cls.from_line(sline)
             except (LineParseError, FieldParseError) as e:
                 raise e.as_parse_error(line=i).add_filename_from_handle(handle)
+        return
+
+    def decide_significant(self, evalue=1e-5, tcov=0.5) -> bool:
+        return (self.evalue <= evalue) and (self.tcov >= tcov)
+
+    def as_gff(
+        self,
+        keep_all: bool = False,
+        id_index: int = 1,
+    ) -> Iterator[GFFRecord]:
+
+        if not (keep_all or self.decide_significant()):
+            return
+
+        attr = GFFAttributes(
+            target=Target(self.target, self.tstart, self.tend),
+            gap=parse_cigar(self.cigar),
+            custom={
+                "tlen": str(self.tlen),
+                "evalue": str(self.evalue),
+                "gapopen": str(self.gapopen),
+                "pident": str(self.pident),
+                "alnlen": str(self.alnlen),
+                "raw": str(self.raw),
+                "bits": str(self.bits),
+                "mismatch": str(self.mismatch),
+                "qcov": str(self.qcov),
+                "tcov": str(self.tcov),
+            }
+        )
+
+        yield GFFRecord(
+            seqid=self.query,
+            source=f"{self.software}:{self.database}",
+            type="protein_match",
+            start=self.qstart,
+            end=self.qend,
+            score=self.evalue,
+            strand=Strand.UNSTRANDED,
+            attributes=attr
+        )
         return
 
 
