@@ -27,7 +27,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
 
     parser.add_argument(
         "-a", "--keep-all",
-        type=bool,
+        action="store_true",
         default=False,
         help="Don't filter out insignificant hits."
     )

@@ -5,7 +5,7 @@ import argparse
 import json
 from collections import defaultdict
 
-from typing import (Set, Dict, List, Union, Tuple)
+from typing import (Set, Dict, List, Union)
 
 from predectorutils.analyses import (
     Analyses,
@@ -32,6 +32,7 @@ from predectorutils.analyses import (
 
 COLUMNS = [
     "name",
+    "score",
     "phibase_effector",
     "phibase_virulence",
     "phibase_lethal",
@@ -86,22 +87,86 @@ COLUMNS = [
     "deeploc_golgi",
     "deeploc_lysosome",
     "deeploc_peroxisome",
+    "signalp3_nn_d",
+    "signalp3_hmm_s",
+    "signalp4_d",
+    "signalp4_dmax_cut",
+    "signalp5_prob",
 ]
+
+DBCAN_DEFAULT = {
+    "CBM50",
+    "AA9",
+    "GH10",
+    "GH11"
+}
+
+
+PFAM_DEFAULT = {
+    "PF00734", "PF03443", "PF01083", "PF03211", "PF00331",
+    "PF00457", "PF00160", "PF04126", "PF10231", "PF18050",
+    "PF00188", "PF00293", "PF00964", "PF03377", "PF05730",
+    "PF07249", "PF16541", "PF03330", "PF11529", "PF18661",
+    "PF18247", "PF18241", "PF14521", "PF11327", "PF01764",
+    "PF14856", "PF08995", "PF05630", "PF09461", "PF11584",
+    "PF18224", "PF00187", "PF01476", "PF01607", "PF02128",
+    "PF07504", "PF02221", "PF01363", "PF06602", "PF16810",
+    "PF18488", "PF18634", "PF00161", "PF00545", "PF00652",
+    "PF11663", "PF14200", "PF16536", "PF16542", "PF00014",
+    "PF00030", "PF00059", "PF00068", "PF00087", "PF00200",
+    "PF00451", "PF00537", "PF00555", "PF00706", "PF00819",
+    "PF01117", "PF01123", "PF01324", "PF01335", "PF01338",
+    "PF01375", "PF01376", "PF01421", "PF01742", "PF01821",
+    "PF02048", "PF02258", "PF02452", "PF02691", "PF02763",
+    "PF02764", "PF02794", "PF02819", "PF02876", "PF02917",
+    "PF02918", "PF02950", "PF03077", "PF03318", "PF03440",
+    "PF03495", "PF03497", "PF03498", "PF03505", "PF03507",
+    "PF03768", "PF03769", "PF03784", "PF03944", "PF03945",
+    "PF04221", "PF04365", "PF04829", "PF05015", "PF05016",
+    "PF05294", "PF05353", "PF05374", "PF05394", "PF05453",
+    "PF05627", "PF05638", "PF05707", "PF05791", "PF05819",
+    "PF05932", "PF06254", "PF06255", "PF06261", "PF06286",
+    "PF06296", "PF06340", "PF06357", "PF06414", "PF06416",
+    "PF06451", "PF06453", "PF06457", "PF06755", "PF06769",
+    "PF07254", "PF07365", "PF07442", "PF07473", "PF07591",
+    "PF07737", "PF07740", "PF07771", "PF07822", "PF07829",
+    "PF07906", "PF07927", "PF07936", "PF07945", "PF07951",
+    "PF07952", "PF07953", "PF07968", "PF08024", "PF08025",
+    "PF08086", "PF08087", "PF08088", "PF08089", "PF08090",
+    "PF08091", "PF08092", "PF08093", "PF08094", "PF08095",
+    "PF08096", "PF08097", "PF08098", "PF08099", "PF08104",
+    "PF08115", "PF08116", "PF08119", "PF08120", "PF08121",
+    "PF08131", "PF08178", "PF08249", "PF08251", "PF08396",
+    "PF08493", "PF08562", "PF08843", "PF08845", "PF08888",
+    "PF09009", "PF09075", "PF09101", "PF09102", "PF09119",
+    "PF09131", "PF09156", "PF09207", "PF09275", "PF09276",
+    "PF09407", "PF09857", "PF09907", "PF10279", "PF10530",
+    "PF10550", "PF11047", "PF11410", "PF11592", "PF12207",
+    "PF12255", "PF12256", "PF12563", "PF12703", "PF12918",
+    "PF13304", "PF13939", "PF13940", "PF13955", "PF13956",
+    "PF13957", "PF13958", "PF13979", "PF13981", "PF14021",
+    "PF14113", "PF14171", "PF14449", "PF14866", "PF15500",
+    "PF15520", "PF15521", "PF15522", "PF15523", "PF15524",
+    "PF15526", "PF15527", "PF15528", "PF15529", "PF15530",
+    "PF15531", "PF15532", "PF15533", "PF15534", "PF15535",
+    "PF15536", "PF15537", "PF15538", "PF15540", "PF15541",
+    "PF15542", "PF15543", "PF15544", "PF15545", "PF15604",
+    "PF15605", "PF15606", "PF15607", "PF15635", "PF15636",
+    "PF15637", "PF15638", "PF15639", "PF15640", "PF15641",
+    "PF15643", "PF15644", "PF15645", "PF15646", "PF15647",
+    "PF15648", "PF15649", "PF15650", "PF15651", "PF15652",
+    "PF15653", "PF15657", "PF15658", "PF15659", "PF15723",
+    "PF15738", "PF15781", "PF15935", "PF16754", "PF16847",
+    "PF16873", "PF16981", "PF17056", "PF17454", "PF17475",
+    "PF17476", "PF17486", "PF17491", "PF17492", "PF17499",
+    "PF17521", "PF17556", "PF17557", "PF17563", "PF17997",
+    "PF18022", "PF18078", "PF18276", "PF18449", "PF18648",
+    "PF18807", "PF06766", "PF16073", "PF11807", "PF00314",
+    "PF16361"
+}
 
 
 def cli(parser: argparse.ArgumentParser) -> None:
-
-    parser.add_argument(
-        "dbcan",
-        type=argparse.FileType('r'),
-        help="The dbcan matches to parse as input. Use '-' for stdin."
-    )
-
-    parser.add_argument(
-        "pfam",
-        type=argparse.FileType('r'),
-        help="The pfam domains to parse as input. Use '-' for stdin."
-    )
 
     parser.add_argument(
         "infile",
@@ -116,10 +181,24 @@ def cli(parser: argparse.ArgumentParser) -> None:
         help="Where to write the output to. Default: stdout"
     )
 
+    parser.add_argument(
+        "--dbcan",
+        type=argparse.FileType('r'),
+        default=None,
+        help="The dbcan matches to parse as input. Use '-' for stdin."
+    )
+
+    parser.add_argument(
+        "--pfam",
+        type=argparse.FileType('r'),
+        default=None,
+        help="The pfam domains to parse as input. Use '-' for stdin."
+    )
+
     return
 
 
-def rank_it(
+def score_it(
     record: Dict[str, Union[None, int, float, str]],
     secreted: float = 3,
     less_trustworthy_signal_prediction: float = 0.25,
@@ -134,35 +213,78 @@ def rank_it(
     effector: float = 5,
     virulence: float = 2,
     lethal: float = -5,
-):
+) -> float:
     """ """
 
-    score = 0
+    score: float = 0
 
-    score += int(record.get("is_secreted", 0)) * secreted
+    is_secreted = record.get("is_secreted", 0)
+    assert isinstance(is_secreted, int)
+    score += int(is_secreted) * secreted
+
     for k in ["signalp3_hmm", "signalp3_nn", "phobius_sp"]:
-        score += record.get(k, 0) * less_trustworthy_signal_prediction
+        v = record.get(k, 0)
+        assert isinstance(v, int)
+        score += v * less_trustworthy_signal_prediction
 
     for k in ["signalp4", "signalp5", "deepsig"]:
-        score += record.get(k, 0) * trustworthy_signal_prediction
+        v = record.get(k, 0)
+        assert isinstance(v, int)
+        score += v * trustworthy_signal_prediction
 
-    score += int(record.get("is_transmembrane", 0)) * transmembrane
+    is_transmembrane = record.get("is_transmembrane", 0)
+    assert isinstance(is_transmembrane, int)
+    score += is_transmembrane * transmembrane
 
-    score += float(record.get("deeploc_extracellular", 0)) * deeploc_extracellular  # noqa
+    deeploc_extracellular_prob = record.get("deeploc_extracellular", 0.0)
+    assert isinstance(deeploc_extracellular_prob, float)
+    score += deeploc_extracellular_prob * deeploc_extracellular  # noqa
     for k in [
         'deeploc_membrane', 'deeploc_nucleus', 'deeploc_cytoplasm',
         'deeploc_mitochondrion', 'deeploc_cell_membrane', 'deeploc_plastid',
         'deeploc_lysosome', 'deeploc_peroxisome'
     ]:
-        score += float(record.get(k, 0)) * deeploc_intracellular
+        v = record.get(k, 0.0)
+        assert isinstance(v, float)
+        score += v * deeploc_intracellular
 
-    score += record["targetp_secreted"] * targetp_secreted
-    score += record["targetp_mitochondrial"] * targetp_mitochondrial
+    targetp_secreted_prob = record.get("targetp_secreted", 0.0)
+    targetp_mitochondrial_prob = record.get("targetp_mitochondrial", 0.0)
 
-    score += 2 * (float(record["effectorp1"]) - 0.5) * effectorp1
-    score += 2 * (float(record["effectorp2"]) - 0.5) * effectorp2
+    assert isinstance(targetp_secreted_prob, float)
+    assert isinstance(targetp_mitochondrial_prob, float)
+    score += targetp_secreted_prob * targetp_secreted
+    score += targetp_mitochondrial_prob * targetp_mitochondrial
 
-    return
+    effectorp1_prob = record.get("effectorp1", 0.0)
+    effectorp2_prob = record.get("effectorp2", 0.0)
+
+    assert isinstance(effectorp1_prob, float)
+    assert isinstance(effectorp2_prob, float)
+    score += 2 * (effectorp1_prob - 0.5) * effectorp1
+    score += 2 * (effectorp2_prob - 0.5) * effectorp2
+
+    assert isinstance(record["phibase_effector"], int)
+    assert isinstance(record["effector_match"], int)
+    assert isinstance(record["dbcan_match"], int)
+    assert isinstance(record["pfam_match"], int)
+    has_effector_match = sum([
+        record["phibase_effector"],
+        record["effector_match"],
+        record["dbcan_match"],
+        record["pfam_match"]
+    ]) > 0
+
+    score += int(has_effector_match) * effector
+
+    assert isinstance(record["phibase_virulence"], int)
+    if not has_effector_match:
+        score += record["phibase_virulence"] * virulence
+
+    assert isinstance(record["phibase_lethal"], int)
+    score += record["phibase_lethal"] * lethal
+
+    return score
 
 
 def get_analysis(dline):
@@ -184,7 +306,6 @@ def get_phibase_phis(i):
 
 
 def decide_any_signal(
-    an: DeepLoc,
     record: Dict[str, Union[None, int, float, str]]
 ) -> None:
     record["any_signal_peptide"] = int(any([
@@ -199,9 +320,13 @@ def decide_any_signal(
 
 
 def decide_is_transmembrane(
-    an: DeepLoc,
     record: Dict[str, Union[None, int, float, str]]
 ) -> None:
+
+    assert isinstance(record["tmhmm_tmcount"], int)
+    assert isinstance(record["phobius_tmcount"], int)
+    assert isinstance(record["tmhmm_first60"], float)
+    assert isinstance(record["any_signal_peptide"], int)
 
     record["is_transmembrane"] = int(
         (record["tmhmm_tmcount"] > 1) or
@@ -214,7 +339,6 @@ def decide_is_transmembrane(
 
 
 def decide_is_secreted(
-    an: DeepLoc,
     record: Dict[str, Union[None, int, float, str]]
 ) -> None:
     record["is_secreted"] = int(
@@ -243,7 +367,7 @@ def get_deeploc_cols(
 
 
 def get_pepstats_cols(
-    an: DeepLoc,
+    an: PepStats,
     record: Dict[str, Union[None, int, float, str]]
 ) -> None:
     record["molecular_weight"] = an.molecular_weight
@@ -287,9 +411,9 @@ def get_phibase_cols(
 
 
 def get_sper_prob_col(
-    an: DeepLoc,
-    positive: Tuple[str]
-) -> None:
+    an: Union[EffectorP1, EffectorP2, ApoplastP],
+    positive: List[str]
+) -> float:
     if an.prediction in positive:
         return an.prob
     else:
@@ -313,15 +437,15 @@ def construct_row(  # noqa
 
     for an in analyses:
         if isinstance(an, ApoplastP):
-            record["apoplastp"] = get_sper_prob_col(an, ("Apoplastic",))
+            record["apoplastp"] = get_sper_prob_col(an, ["Apoplastic"])
         elif isinstance(an, DeepSig):
             record["deepsig"] = int(an.prediction == "SignalPeptide")
         elif isinstance(an, EffectorP1):
-            record["effectorp1"] = get_sper_prob_col(an, ("Effector",))
+            record["effectorp1"] = get_sper_prob_col(an, ["Effector"])
         elif isinstance(an, EffectorP2):
             record["effectorp2"] = get_sper_prob_col(
                 an,
-                ("Effector", "Unlikely effector")
+                ["Effector", "Unlikely effector"]
             )
         elif isinstance(an, Phobius):
             record["phobius_sp"] = int(an.sp)
@@ -373,9 +497,9 @@ def construct_row(  # noqa
                 record["effector_match"] = 1
                 effector_matches.add(an.target)
 
-    decide_any_signal(an, record)
-    decide_is_transmembrane(an, record)
-    decide_is_secreted(an, record)
+    decide_any_signal(record)
+    decide_is_transmembrane(record)
+    decide_is_secreted(record)
 
     get_phibase_cols(phibase_matches, phibase_phenotypes, record)
 
@@ -396,6 +520,8 @@ def construct_row(  # noqa
     if len(dbcan_matches) > 0:
         record["dbcan_matches"] = ",".join(dbcan_matches)
 
+    record["score"] = score_it(record)
+
     line = "\t".join(str(record.get(c, ".")) for c in COLUMNS)
     return line
 
@@ -403,8 +529,11 @@ def construct_row(  # noqa
 def runner(args: argparse.Namespace) -> None:
     records = defaultdict(list)
 
-    dbcan = {l.strip() for l in args.dbcan.readlines()}
-    pfam = {l.strip() for l in args.pfam.readlines()}
+    if args.dbcan is not None:
+        dbcan = {l.strip() for l in args.dbcan.readlines()}
+
+    if args.pfam is not None:
+        pfam = {l.strip() for l in args.pfam.readlines()}
 
     for line in args.infile:
         sline = line.strip()
@@ -414,6 +543,8 @@ def runner(args: argparse.Namespace) -> None:
         dline = json.loads(sline)
         record = get_analysis(dline)
         records[dline["protein_name"]].append(record)
+
+    print("\t".join(COLUMNS), file=args.outfile)
 
     for name, protein_records in records.items():
         line = construct_row(name, protein_records, pfam, dbcan)

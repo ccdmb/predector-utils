@@ -24,6 +24,9 @@ from predectorutils.subcommands.gff import runner as gff_runner
 from predectorutils.subcommands.rank import cli as rank_cli
 from predectorutils.subcommands.rank import runner as rank_runner
 
+from predectorutils.subcommands.decode import cli as decode_cli
+from predectorutils.subcommands.decode import runner as decode_runner
+
 from predectorutils.parsers import ParseError
 from predectorutils.exceptions import (
     EXIT_VALID, EXIT_KEYBOARD, EXIT_UNKNOWN, EXIT_CLI, EXIT_INPUT_FORMAT,
@@ -131,6 +134,15 @@ def cli(prog: str, args: List[str]) -> argparse.Namespace:
 
     rank_cli(rank_subparser)
 
+    decode_subparser = subparsers.add_parser(
+        "decode",
+        help=(
+            "Decode and reduplicate encoded names."
+        )
+    )
+
+    decode_cli(decode_subparser)
+
     parsed = parser.parse_args(args)
 
     if parsed.subparser_name is None:
@@ -160,6 +172,8 @@ def main():  # noqa
             gff_runner(args)
         elif args.subparser_name == "rank":
             rank_runner(args)
+        elif args.subparser_name == "decode":
+            decode_runner(args)
 
     except ParseError as e:
         if e.line is not None:
