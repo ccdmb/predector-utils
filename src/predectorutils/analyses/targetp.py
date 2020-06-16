@@ -135,6 +135,8 @@ class TargetPNonPlant(Analysis, GFFAble):
 
         if self.cs_pos is None:
             return
+        elif "Probable protein fragment" in self.cs_pos:
+            return
 
         # dict(cs, cs_prob)
         cs = cs_actual_pos(self.cs_pos)
@@ -166,7 +168,7 @@ class TargetPNonPlant(Analysis, GFFAble):
             source=self.analysis,
             type=type_,
             start=0,
-            end=int(cs["cs"]),
+            end=int(cs["cs"]) - 1,
             score=prob,
             strand=Strand.UNSTRANDED,
             attributes=attr
@@ -258,6 +260,8 @@ class TargetPPlant(Analysis):
 
         if self.cs_pos is None:
             return
+        elif "Probable protein fragment" in self.cs_pos:
+            return
 
         # dict(cs, cs_prob)
         cs = cs_actual_pos(self.cs_pos)
@@ -276,7 +280,7 @@ class TargetPPlant(Analysis):
 
         if self.prediction == "SP":
             type_ = "signal_peptide"
-            prob = self.sp
+            prob: Optional[float] = self.sp
 
         elif self.prediction == "mTP":
             type_ = "mitochondrial_targeting_signal"
@@ -299,7 +303,7 @@ class TargetPPlant(Analysis):
             source=self.analysis,
             type=type_,
             start=0,
-            end=int(cs["cs"]),
+            end=int(cs["cs"]) - 1,
             score=prob,
             strand=Strand.UNSTRANDED,
             attributes=attr

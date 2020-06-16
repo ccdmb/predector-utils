@@ -15,6 +15,14 @@ from predectorutils.subcommands.encode import runner as encode_runner
 from predectorutils.subcommands.split_fasta import cli as split_fasta_cli
 from predectorutils.subcommands.split_fasta import runner as split_fasta_runner
 
+from predectorutils.subcommands.analysis_tables import cli as tables_cli
+from predectorutils.subcommands.analysis_tables import runner as tables_runner
+
+from predectorutils.subcommands.gff import cli as gff_cli
+from predectorutils.subcommands.gff import runner as gff_runner
+
+from predectorutils.subcommands.rank import cli as rank_cli
+from predectorutils.subcommands.rank import runner as rank_runner
 
 from predectorutils.parsers import ParseError
 from predectorutils.exceptions import (
@@ -96,6 +104,33 @@ def cli(prog: str, args: List[str]) -> argparse.Namespace:
 
     split_fasta_cli(split_fasta_subparser)
 
+    tables_subparser = subparsers.add_parser(
+        "tables",
+        help=(
+            "Split line-delimited json into tsvs for each analysis."
+        )
+    )
+
+    tables_cli(tables_subparser)
+
+    gff_subparser = subparsers.add_parser(
+        "gff",
+        help=(
+            "Write analyses with location information as a GFF3 file."
+        )
+    )
+
+    gff_cli(gff_subparser)
+
+    rank_subparser = subparsers.add_parser(
+        "rank",
+        help=(
+            "Rank effector candidates."
+        )
+    )
+
+    rank_cli(rank_subparser)
+
     parsed = parser.parse_args(args)
 
     if parsed.subparser_name is None:
@@ -119,6 +154,12 @@ def main():  # noqa
             encode_runner(args)
         elif args.subparser_name == "split_fasta":
             split_fasta_runner(args)
+        elif args.subparser_name == "tables":
+            tables_runner(args)
+        elif args.subparser_name == "gff":
+            gff_runner(args)
+        elif args.subparser_name == "rank":
+            rank_runner(args)
 
     except ParseError as e:
         if e.line is not None:

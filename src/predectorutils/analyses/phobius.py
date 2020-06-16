@@ -36,7 +36,7 @@ def parse_topology(string: str) -> List[Tuple[str, int, int]]:
     out = []
     for tag, start, end in parts:
         if tag == "n":
-            out.append(("n_terminal_region", 0, int(start)))
+            out.append(("n_terminal_region", 0, int(start) - 1))
             out.append((
                 "central_hydrophobic_region_of_signal_peptide",
                 int(start) - 1,
@@ -45,7 +45,7 @@ def parse_topology(string: str) -> List[Tuple[str, int, int]]:
         elif tag == "c":
             assert out[-1][0] == "central_hydrophobic_region_of_signal_peptide"
             lend = int(out[-1][2])
-            out.append(("c_terminal_region", lend, int(end)))
+            out.append(("c_terminal_region", lend, int(start)))
         else:
             assert tag in ("i", "o"), string
             out.append((

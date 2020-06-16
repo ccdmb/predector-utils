@@ -241,7 +241,7 @@ class SignalP3NN(Analysis, GFFAble):
             source=self.analysis,
             type="signal_peptide",
             start=0,
-            end=self.ymax_pos,
+            end=self.ymax_pos - 1,
             score=self.d,
             strand=Strand.PLUS,
             attributes=attr
@@ -407,7 +407,7 @@ class SignalP3HMM(Analysis):
             source=self.analysis,
             type="signal_peptide",
             start=0,
-            end=self.cmax_pos,
+            end=self.cmax_pos - 1,
             score=self.sprob,
             strand=Strand.PLUS,
             attributes=attr
@@ -594,7 +594,7 @@ class SignalP4(Analysis):
             source=self.analysis,
             type="signal_peptide",
             start=0,
-            end=self.ymax_pos,
+            end=self.ymax_pos - 1,
             score=self.d,
             strand=Strand.PLUS,
             attributes=attr
@@ -732,7 +732,7 @@ class SignalP5(Analysis):
             source=self.analysis,
             type="signal_peptide",
             start=0,
-            end=int(cs["cs"]),
+            end=int(cs["cs"]) - 1,
             score=self.prob_signal,
             strand=Strand.PLUS,
             attributes=attr
