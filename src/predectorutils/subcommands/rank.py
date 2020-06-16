@@ -195,6 +195,133 @@ def cli(parser: argparse.ArgumentParser) -> None:
         help="The pfam domains to parse as input. Use '-' for stdin."
     )
 
+    parser.add_argument(
+        "--secreted-score",
+        type=float,
+        default=3,
+        help="The score to give a protein if it is predicted to be secreted."
+    )
+
+    parser.add_argument(
+        "--sigpep-good-score",
+        type=float,
+        default=0.5,
+        help=(
+            "The score to give a protein if it is predicted to have a signal "
+            "peptide by one of the more reliable methods."
+        )
+    )
+
+    parser.add_argument(
+        "--sigpep-ok-score",
+        type=float,
+        default=0.25,
+        help=(
+            "The score to give a protein if it is predicted to have a signal "
+            "peptide by one of the reasonably reliable methods."
+        )
+    )
+
+    parser.add_argument(
+        "--transmembrane-score",
+        type=float,
+        default=-10,
+        help=(
+            "The score to give a protein if it is predicted to be "
+            "transmembrane. Use negative numbers to penalise."
+        )
+    )
+
+    parser.add_argument(
+        "--deeploc-extracellular-score",
+        type=float,
+        default=1,
+        help=(
+            "The score to give a protein if it is predicted to be "
+            "extracellular by deeploc."
+        )
+    )
+
+    parser.add_argument(
+        "--deeploc-intracellular-score",
+        type=float,
+        default=-2,
+        help=(
+            "The score to give a protein if it is predicted to be "
+            "intracellular by deeploc. Use negative numbers to penalise."
+        )
+    )
+
+    parser.add_argument(
+        "--targetp-secreted-score",
+        type=float,
+        default=1,
+        help=(
+            "The score to give a protein if it is predicted to be "
+            "secreted by targetp."
+        )
+    )
+
+    parser.add_argument(
+        "--targetp-mitochondrial-score",
+        type=float,
+        default=-2,
+        help=(
+            "The score to give a protein if it is predicted to be "
+            "mitochondrial by targetp. Use negative numbers to penalise."
+        )
+    )
+
+    parser.add_argument(
+        "--effectorp1-score",
+        type=float,
+        default=3,
+        help=(
+            "The score to give a protein if it is predicted to be "
+            "an effector by effectorp1."
+        )
+    )
+
+    parser.add_argument(
+        "--effectorp2-score",
+        type=float,
+        default=3,
+        help=(
+            "The score to give a protein if it is predicted to be "
+            "an effector by effectorp2."
+        )
+    )
+
+    parser.add_argument(
+        "--effector-homology-score",
+        type=float,
+        default=5,
+        help=(
+            "The score to give a protein if it is similar to a known "
+            "effector or effector domain."
+        )
+    )
+
+    parser.add_argument(
+        "--virulence-homology-score",
+        type=float,
+        default=1,
+        help=(
+            "The score to give a protein if it is similar to a known "
+            "protein that may be involved in virulence."
+        )
+    )
+
+    parser.add_argument(
+        "--lethal-homology-score",
+        type=float,
+        default=-5,
+        help=(
+            "The score to give a protein if it is similar to a known "
+            "protein in phibase which caused a lethal phenotype."
+        )
+    )
+
     return
 
 
@@ -424,7 +551,7 @@ def construct_row(  # noqa
     analyses: List[Analysis],
     pfam_domains: Set[str],
     dbcan_domains: Set[str]
-):
+) -> Dict[str, Union[None, int, float, str]]:
 
     phibase_matches: Set[str] = set()
     phibase_phenotypes: Set[str] = set()
@@ -520,8 +647,10 @@ def construct_row(  # noqa
     if len(dbcan_matches) > 0:
         record["dbcan_matches"] = ",".join(dbcan_matches)
 
-    record["score"] = score_it(record)
+    return record
 
+
+def write_line(record: Dict[str, Union[None, int, float, str]]) -> str:
     line = "\t".join(str(record.get(c, ".")) for c in COLUMNS)
     return line
 
@@ -547,6 +676,24 @@ def runner(args: argparse.Namespace) -> None:
     print("\t".join(COLUMNS), file=args.outfile)
 
     for name, protein_records in records.items():
-        line = construct_row(name, protein_records, pfam, dbcan)
+        record = construct_row(name, protein_records, pfam, dbcan)
+        record["score"] = score_it(
+            record,
+            args.secreted_score,
+            args.sigpep_ok_score,
+            args.sigpep_good_score,
+            args.transmembrane_score,
+            args.deeploc_extracellular_score,
+            args.deeploc_intracellular_score,
+            args.targetp_secreted_score,
+            args.targetp_mitochondrial_score,
+            args.effectorp1_score,
+            args.effectorp2_score,
+            args.effector_homology_score,
+            args.virulence_homology_score,
+            args.lethal_homology_score,
+        )
+
+        line = write_line(record)
         print(line, file=args.outfile)
     return
