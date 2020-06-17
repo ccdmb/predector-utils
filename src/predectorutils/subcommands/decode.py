@@ -2,7 +2,7 @@
 
 import sys
 import os
-from os.path import dirname
+from os.path import basename, splitext, dirname
 
 import argparse
 import json
@@ -101,7 +101,13 @@ def runner(args: argparse.Namespace) -> None:
             sys.exit(1)
 
         for table_line in table_lines:
-            filename = args.template.format(filename=table_line.filename)
+            filename_noext = splitext(basename(table_line.filename))[0]
+
+            filename = args.template.format(
+                filename=table_line.filename,
+                filename_noext=filename_noext,
+            )
+
             dline["checksum"] = table_line.checksum
             dline["protein_name"] = table_line.id
             setattr(record, record.name_column, table_line.id)
