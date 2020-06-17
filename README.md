@@ -72,3 +72,70 @@ The `--template` parameter accepts python `.format` style string formatting, and
 is provided the variables `fname` (the input filename) and `index` (the chunk number starting at 1).
 To pad the numbers with zeros for visual ordering in directories, use the something like `--template '{fname}.{index:0>4}.fasta'`.
 Directories in the template will be created for you if they don't exist.
+
+
+## `predutils decode`
+
+The other end of `predutils encode`.
+Takes the common line delimited format from analyses and separates them back
+out into the original filenames.
+
+```bash
+predutils decode \
+  --template 'decoded/{filename}.ldjson' \
+  output_mapping.tsv \
+  results.ldjson
+```
+
+We use the template flag to indicate what the filename output should be, using python format
+style replacement. Available values to `--template` are `filename` and `filename_noext`.
+The latter is just `filename` without the last extension.
+
+
+## `predutils tables`
+
+Take the common line delimited output from `predutils r2js` and recover a tabular version of the raw data.
+Output filenames are controlled by the `--template` parameter, which uses python format style replacement.
+Currently, `analysis` is the only value available to the template parameter.
+Directories in the template will be created automatically.
+
+```
+predutils tables \
+  --template "my_sample-{analysis}.tsv" \
+  results.ldjson
+```
+
+
+## `predutils gff`
+
+Take the common line-delimited json output from `predutils r2js` and get a GFF3 formatted
+set of results for analyses with a positional component (e.g. signal peptides, transmembrane domains, alignment results).
+
+```
+predutils gff \
+  --outfile "my_sample.gff3" \
+  results.ldjson
+```
+
+By default, mmseqs and HMMER search results will be filtered by the built in significance thresholds.
+To include all matches in the output (and possibly filter by your own criterion) supply the flag `--keep-all`.
+
+
+## `predutils rank`
+
+Take the common line-delimited json output from `predutils r2js` and get a summary table
+that includes all of the information commonly used for effector prediction, as well as
+a scoring column to prioritise candidates.
+
+```
+predutils rank \
+  --outfile my_samples-ranked.tsv \
+  results.ldjson
+```
+
+
+To change that Pfam or dbCAN domains that you consider to be predictive of effectors,
+supply a text file with each pfam or dbcan entry on a new line (do not include pfam version number or `.hmm` in the ids) to the parameters `--dbcan` or `--pfam`.
+
+You can also change the weights for how the score columns are calculated.
+See `predutils rank --help` for a full list of parameters.
