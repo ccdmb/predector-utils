@@ -238,7 +238,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--deeploc-extracellular-score",
         type=float,
-        default=1,
+        default=0.5,
         help=(
             "The score to give a protein if it is predicted to be "
             "extracellular by deeploc."
@@ -248,7 +248,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--deeploc-intracellular-score",
         type=float,
-        default=-1,
+        default=-0.5,
         help=(
             "The score to give a protein if it is predicted to be "
             "intracellular by deeploc. Use negative numbers to penalise."
@@ -258,7 +258,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--deeploc-membrane-score",
         type=float,
-        default=-1,
+        default=-0.5,
         help=(
             "The score to give a protein if it is predicted to be "
             "membrane associated by deeploc. Use negative numbers to penalise."
