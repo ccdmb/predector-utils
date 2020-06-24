@@ -4,9 +4,11 @@ import sys
 import argparse
 import json
 from collections import defaultdict
+from statistics import median
 
-from typing import (Set, Dict, List, Union)
+from typing import (Set, Dict, List, Sequence, Union)
 
+from predectorutils.gff import GFFRecord
 from predectorutils.analyses import (
     Analyses,
     Analysis,
@@ -74,9 +76,10 @@ COLUMNS = [
     "signalp5",
     "deepsig",
     "phobius_sp",
+    "is_transmembrane",
     "phobius_tmcount",
     "tmhmm_tmcount",
-    "tmhmm_first60",
+    "tmhmm_first_tm_sp_coverage",
     "targetp_secreted",
     "targetp_mitochondrial",
     "deeploc_membrane",
@@ -199,14 +202,14 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--secreted-score",
+        "--secreted-weight",
         type=float,
         default=3,
         help="The score to give a protein if it is predicted to be secreted."
     )
 
     parser.add_argument(
-        "--sigpep-good-score",
+        "--sigpep-good-weight",
         type=float,
         default=0.5,
         help=(
@@ -216,7 +219,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--sigpep-ok-score",
+        "--sigpep-ok-weight",
         type=float,
         default=0.25,
         help=(
@@ -226,7 +229,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--transmembrane-score",
+        "--transmembrane-weight",
         type=float,
         default=-6,
         help=(
@@ -236,7 +239,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--deeploc-extracellular-score",
+        "--deeploc-extracellular-weight",
         type=float,
         default=0.5,
         help=(
@@ -246,7 +249,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--deeploc-intracellular-score",
+        "--deeploc-intracellular-weight",
         type=float,
         default=-0.5,
         help=(
@@ -256,7 +259,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--deeploc-membrane-score",
+        "--deeploc-membrane-weight",
         type=float,
         default=-0.5,
         help=(
@@ -266,7 +269,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--targetp-secreted-score",
+        "--targetp-secreted-weight",
         type=float,
         default=1,
         help=(
@@ -276,9 +279,9 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--targetp-mitochondrial-score",
+        "--targetp-mitochondrial-weight",
         type=float,
-        default=-1,
+        default=-0.5,
         help=(
             "The score to give a protein if it is predicted to be "
             "mitochondrial by targetp. Use negative numbers to penalise."
@@ -286,7 +289,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--effectorp1-score",
+        "--effectorp1-weight",
         type=float,
         default=3,
         help=(
@@ -296,7 +299,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--effectorp2-score",
+        "--effectorp2-weight",
         type=float,
         default=3,
         help=(
@@ -306,7 +309,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--effector-homology-score",
+        "--effector-homology-weight",
         type=float,
         default=5,
         help=(
@@ -316,7 +319,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--virulence-homology-score",
+        "--virulence-homology-weight",
         type=float,
         default=1,
         help=(
@@ -326,12 +329,23 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--lethal-homology-score",
+        "--lethal-homology-weight",
         type=float,
         default=-5,
         help=(
             "The score to give a protein if it is similar to a known "
             "protein in phibase which caused a lethal phenotype."
+        )
+    )
+
+    parser.add_argument(
+        "--sp-tm-coverage-threshold",
+        type=float,
+        default=0.58,
+        help=(
+            "The minimum proportion of the first tm domain that overlaps a "
+            "predicted signal peptide for the tm to be considered a false "
+            "positive (caused by hydrophobic region in sp)."
         )
     )
 
@@ -479,22 +493,63 @@ def decide_any_signal(
     return
 
 
+def gff_intersection(left: GFFRecord, right: GFFRecord) -> int:
+    lstart = min([left.start, left.end])
+    lend = max([left.start, left.end])
+
+    rstart = min([right.start, right.end])
+    rend = max([right.start, right.end])
+
+    start = max([lstart, rstart])
+    end = min([lend, rend])
+
+    # This will be < 0 if they don't overlap
+    if start < end:
+        return end - start
+    else:
+        return 0
+
+
+def gff_coverage(left: GFFRecord, right: GFFRecord) -> float:
+    noverlap = gff_intersection(left, right)
+    return noverlap / (right.end - right.start)
+
+
+def get_tm_sp_coverage(
+    sp_gff: Sequence[GFFRecord],
+    tm_gff: Sequence[GFFRecord],
+) -> float:
+    if len(sp_gff) == 0:
+        return 0.0
+
+    if len(tm_gff) == 0:
+        return 0.0
+
+    tm = sorted(tm_gff, key=lambda x: x.start)[0]
+    covs = [gff_coverage(sp, tm) for sp in sp_gff]
+    return median(covs)
+
+
 def decide_is_transmembrane(
-    record: Dict[str, Union[None, int, float, str]]
+    record: Dict[str, Union[None, int, float, str]],
+    sp_gff: Sequence[GFFRecord],
+    tm_gff: Sequence[GFFRecord],
+    sp_coverage_threshold: float = 0.5,
 ) -> None:
 
     assert isinstance(record["tmhmm_tmcount"], int)
     assert isinstance(record["phobius_tmcount"], int)
-    assert isinstance(record["tmhmm_first60"], float)
-    assert isinstance(record["any_signal_peptide"], int)
+
+    tm_sp_cov = get_tm_sp_coverage(sp_gff, tm_gff)
 
     record["is_transmembrane"] = int(
         (record["tmhmm_tmcount"] > 1) or
         (record["phobius_tmcount"] > 0) or
-        ((record["tmhmm_first60"] > 10) and
-         (record["tmhmm_tmcount"] == 1) and not
-         bool(record["any_signal_peptide"]))
+        ((record["tmhmm_tmcount"] == 1) and
+            (tm_sp_cov < sp_coverage_threshold))
     )
+
+    record["tmhmm_first_tm_sp_coverage"] = tm_sp_cov
     return
 
 
@@ -600,7 +655,8 @@ def construct_row(  # noqa
     name,
     analyses: List[Analysis],
     pfam_domains: Set[str],
-    dbcan_domains: Set[str]
+    dbcan_domains: Set[str],
+    sp_tm_coverage_threshold: float,
 ) -> Dict[str, Union[None, int, float, str]]:
 
     phibase_matches: Set[str] = set()
@@ -612,50 +668,75 @@ def construct_row(  # noqa
     record: Dict[str, Union[None, int, float, str]] = {"name": name}
     record["effector_match"] = 0
 
+    tm_gff: List[GFFRecord] = []
+    sp_gff: List[GFFRecord] = []
+
     for an in analyses:
         if isinstance(an, ApoplastP):
             record["apoplastp"] = get_sper_prob_col(an, ["Apoplastic"])
+
         elif isinstance(an, DeepSig):
             record["deepsig"] = int(an.prediction == "SignalPeptide")
+            sp_gff.extend(an.as_gff())
+
         elif isinstance(an, EffectorP1):
             record["effectorp1"] = get_sper_prob_col(an, ["Effector"])
+
         elif isinstance(an, EffectorP2):
             record["effectorp2"] = get_sper_prob_col(
                 an,
                 ["Effector", "Unlikely effector"]
             )
+
         elif isinstance(an, Phobius):
             record["phobius_sp"] = int(an.sp)
             record["phobius_tmcount"] = an.tm
+            sp_gff.extend(
+                r for r in an.as_gff()
+                if r.type == "signal_peptide"
+            )
+
         elif isinstance(an, SignalP3HMM):
             record["signalp3_hmm"] = int(an.is_secreted)
             record["signalp3_hmm_s"] = an.sprob
+            sp_gff.extend(an.as_gff())
+
         elif isinstance(an, SignalP3NN):
             record["signalp3_nn"] = int(an.d_decision)
             record["signalp3_nn_d"] = an.d
+            sp_gff.extend(an.as_gff())
+
         elif isinstance(an, SignalP4):
             record["signalp4"] = int(an.decision)
             record["signalp4_d"] = an.d
             record["signalp4_dmax_cut"] = an.dmax_cut
+            sp_gff.extend(an.as_gff())
 
         elif isinstance(an, SignalP5):
             record["signalp5"] = int(an.prediction == "SP(Sec/SPI)")
             record["signalp5_prob"] = an.prob_signal
+            sp_gff.extend(an.as_gff())
+
         elif isinstance(an, TargetPNonPlant):
             record["targetp_secreted"] = an.sp
             record["targetp_mitochondrial"] = an.mtp
+
         elif isinstance(an, TMHMM):
             record["tmhmm_tmcount"] = an.pred_hel
-            record["tmhmm_first60"] = an.first_60
+            tm_gff.extend(an.as_gff())
+
         elif isinstance(an, LOCALIZER):
             record["localizer_nuclear"] = int(an.nucleus_decision)
             record["localizer_chloro"] = int(an.chloroplast_decision)
             record["localizer_mito"] = int(an.mitochondria_decision)
+
         elif isinstance(an, DeepLoc):
             get_deeploc_cols(an, record)
+
         elif isinstance(an, DBCAN):
             if an.decide_significant():
                 dbcan_matches.add(an.hmm)
+
         elif isinstance(an, PfamScan):
             hmm = an.hmm.split('.', maxsplit=1)[0]
             if hmm in pfam_domains:
@@ -675,7 +756,7 @@ def construct_row(  # noqa
                 effector_matches.add(an.target)
 
     decide_any_signal(record)
-    decide_is_transmembrane(record)
+    decide_is_transmembrane(record, sp_gff, tm_gff, sp_tm_coverage_threshold)
     decide_is_secreted(record)
 
     get_phibase_cols(phibase_matches, phibase_phenotypes, record)
@@ -731,31 +812,38 @@ def runner(args: argparse.Namespace) -> None:
     out_records = []
 
     for name, protein_records in records.items():
-        record = construct_row(name, protein_records, pfam, dbcan)
+        record = construct_row(
+            name,
+            protein_records,
+            pfam,
+            dbcan,
+            args.sp_tm_coverage_threshold
+        )
+
         record["secretion_score"] = secretion_score_it(
             record,
-            args.secreted_score,
-            args.sigpep_ok_score,
-            args.sigpep_good_score,
-            args.transmembrane_score,
-            args.deeploc_extracellular_score,
-            args.deeploc_intracellular_score,
-            args.deeploc_membrane_score,
-            args.targetp_secreted_score,
-            args.targetp_mitochondrial_score,
+            args.secreted_weight,
+            args.sigpep_ok_weight,
+            args.sigpep_good_weight,
+            args.transmembrane_weight,
+            args.deeploc_extracellular_weight,
+            args.deeploc_intracellular_weight,
+            args.deeploc_membrane_weight,
+            args.targetp_secreted_weight,
+            args.targetp_mitochondrial_weight,
         )
         record["effector_score"] = effector_score_it(
             record,
-            args.effectorp1_score,
-            args.effectorp2_score,
-            args.effector_homology_score,
-            args.virulence_homology_score,
-            args.lethal_homology_score,
+            args.effectorp1_weight,
+            args.effectorp2_weight,
+            args.effector_homology_weight,
+            args.virulence_homology_weight,
+            args.lethal_homology_weight,
         )
         record["effector_nohom_score"] = effector_score_it(
             record,
-            args.effectorp1_score,
-            args.effectorp2_score,
+            args.effectorp1_weight,
+            args.effectorp2_weight,
             0.0,
             0.0,
             0.0,
