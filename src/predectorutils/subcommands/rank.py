@@ -32,7 +32,9 @@ from predectorutils.analyses import (
 
 COLUMNS = [
     "name",
-    "score",
+    "effector_score",
+    "effector_nohom_score",
+    "secretion_score",
     "phibase_effector",
     "phibase_virulence",
     "phibase_lethal",
@@ -57,6 +59,7 @@ COLUMNS = [
     "aa_charged_number",
     "aa_basic_number",
     "aa_acidic_number",
+    "fykin_gap",
     "effectorp1",
     "effectorp2",
     "apoplastp",
@@ -225,7 +228,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--transmembrane-score",
         type=float,
-        default=-10,
+        default=-6,
         help=(
             "The score to give a protein if it is predicted to be "
             "transmembrane. Use negative numbers to penalise."
@@ -245,10 +248,20 @@ def cli(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--deeploc-intracellular-score",
         type=float,
-        default=-2,
+        default=-1,
         help=(
             "The score to give a protein if it is predicted to be "
             "intracellular by deeploc. Use negative numbers to penalise."
+        )
+    )
+
+    parser.add_argument(
+        "--deeploc-membrane-score",
+        type=float,
+        default=-1,
+        help=(
+            "The score to give a protein if it is predicted to be "
+            "membrane associated by deeploc. Use negative numbers to penalise."
         )
     )
 
@@ -265,7 +278,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--targetp-mitochondrial-score",
         type=float,
-        default=-2,
+        default=-1,
         help=(
             "The score to give a protein if it is predicted to be "
             "mitochondrial by targetp. Use negative numbers to penalise."
@@ -325,16 +338,8 @@ def cli(parser: argparse.ArgumentParser) -> None:
     return
 
 
-def score_it(
+def effector_score_it(
     record: Dict[str, Union[None, int, float, str]],
-    secreted: float = 3,
-    less_trustworthy_signal_prediction: float = 0.25,
-    trustworthy_signal_prediction: float = 0.5,
-    transmembrane: float = -10,
-    deeploc_extracellular: float = 1,
-    deeploc_intracellular: float = -2,
-    targetp_secreted: float = 1,
-    targetp_mitochondrial: float = -2,
     effectorp1: float = 3,
     effectorp2: float = 3,
     effector: float = 5,
@@ -342,46 +347,11 @@ def score_it(
     lethal: float = -5,
 ) -> float:
     """ """
-
     score: float = 0
 
-    is_secreted = record.get("is_secreted", 0)
-    assert isinstance(is_secreted, int)
-    score += int(is_secreted) * secreted
-
-    for k in ["signalp3_hmm", "signalp3_nn", "phobius_sp"]:
-        v = record.get(k, 0)
-        assert isinstance(v, int)
-        score += v * less_trustworthy_signal_prediction
-
-    for k in ["signalp4", "signalp5", "deepsig"]:
-        v = record.get(k, 0)
-        assert isinstance(v, int)
-        score += v * trustworthy_signal_prediction
-
-    is_transmembrane = record.get("is_transmembrane", 0)
-    assert isinstance(is_transmembrane, int)
-    score += is_transmembrane * transmembrane
-
-    deeploc_extracellular_prob = record.get("deeploc_extracellular", 0.0)
-    assert isinstance(deeploc_extracellular_prob, float)
-    score += deeploc_extracellular_prob * deeploc_extracellular  # noqa
-    for k in [
-        'deeploc_membrane', 'deeploc_nucleus', 'deeploc_cytoplasm',
-        'deeploc_mitochondrion', 'deeploc_cell_membrane', 'deeploc_plastid',
-        'deeploc_lysosome', 'deeploc_peroxisome'
-    ]:
-        v = record.get(k, 0.0)
-        assert isinstance(v, float)
-        score += v * deeploc_intracellular
-
-    targetp_secreted_prob = record.get("targetp_secreted", 0.0)
-    targetp_mitochondrial_prob = record.get("targetp_mitochondrial", 0.0)
-
-    assert isinstance(targetp_secreted_prob, float)
-    assert isinstance(targetp_mitochondrial_prob, float)
-    score += targetp_secreted_prob * targetp_secreted
-    score += targetp_mitochondrial_prob * targetp_mitochondrial
+    secretion_score = record.get("secretion_score", 0.0)
+    assert isinstance(secretion_score, float)
+    score += secretion_score
 
     effectorp1_prob = record.get("effectorp1", 0.0)
     effectorp2_prob = record.get("effectorp2", 0.0)
@@ -410,7 +380,70 @@ def score_it(
 
     assert isinstance(record["phibase_lethal"], int)
     score += record["phibase_lethal"] * lethal
+    return score
 
+
+def secretion_score_it(
+    record: Dict[str, Union[None, int, float, str]],
+    secreted: float = 3,
+    less_trustworthy_signal_prediction: float = 0.25,
+    trustworthy_signal_prediction: float = 0.5,
+    transmembrane: float = -10,
+    deeploc_extracellular: float = 1,
+    deeploc_intracellular: float = -2,
+    deeploc_membrane: float = -2,
+    targetp_secreted: float = 1,
+    targetp_mitochondrial: float = -2,
+) -> float:
+    score: float = 0
+
+    is_secreted = record.get("is_secreted", 0)
+    assert isinstance(is_secreted, int)
+    score += int(is_secreted) * secreted
+
+    for k in ["signalp3_hmm", "signalp3_nn", "phobius_sp"]:
+        v = record.get(k, 0)
+        assert isinstance(v, int)
+        score += v * less_trustworthy_signal_prediction
+
+    for k in ["signalp4", "signalp5", "deepsig"]:
+        v = record.get(k, 0)
+        assert isinstance(v, int)
+        score += v * trustworthy_signal_prediction
+
+    is_transmembrane = record.get("is_transmembrane", 0)
+    assert isinstance(is_transmembrane, int)
+    score += is_transmembrane * transmembrane
+
+    deeploc_extracellular_prob = record.get("deeploc_extracellular", 0.0)
+    assert isinstance(deeploc_extracellular_prob, float)
+    score += deeploc_extracellular_prob * deeploc_extracellular  # noqa
+    for k in [
+        'deeploc_nucleus',
+        'deeploc_cytoplasm',
+        'deeploc_mitochondrion',
+        'deeploc_cell_membrane',
+        'deeploc_endoplasmic_reticulum',
+        'deeploc_plastid',
+        'deeploc_golgi',
+        'deeploc_lysosome',
+        'deeploc_peroxisome'
+    ]:
+        v = record.get(k, 0.0)
+        assert isinstance(v, float)
+        score += v * deeploc_intracellular
+
+    deeploc_membrane_prob = record.get("deeploc_membrane", 0.0)
+    assert isinstance(deeploc_membrane_prob, float)
+    score += deeploc_membrane_prob * deeploc_membrane
+
+    targetp_secreted_prob = record.get("targetp_secreted", 0.0)
+    targetp_mitochondrial_prob = record.get("targetp_mitochondrial", 0.0)
+
+    assert isinstance(targetp_secreted_prob, float)
+    assert isinstance(targetp_mitochondrial_prob, float)
+    score += targetp_secreted_prob * targetp_secreted
+    score += targetp_mitochondrial_prob * targetp_mitochondrial
     return score
 
 
@@ -459,7 +492,7 @@ def decide_is_transmembrane(
         (record["tmhmm_tmcount"] > 1) or
         (record["phobius_tmcount"] > 0) or
         ((record["tmhmm_first60"] > 10) and
-         (record["tmhmm_tmcount"] == 1) and
+         (record["tmhmm_tmcount"] == 1) and not
          bool(record["any_signal_peptide"]))
     )
     return
@@ -510,6 +543,22 @@ def get_pepstats_cols(
     record["aa_charged_number"] = an.property_charged_number
     record["aa_basic_number"] = an.property_basic_number
     record["aa_acidic_number"] = an.property_acidic_number
+
+    fykin = (
+        an.residue_f_number +
+        an.residue_k_number +
+        an.residue_y_number +
+        an.residue_i_number +
+        an.residue_n_number
+    )
+
+    gap = (
+        an.residue_g_number +
+        an.residue_a_number +
+        an.residue_p_number
+    )
+
+    record["fykin_gap"] = (float(fykin) + 1) / (float(gap) + 1)
     return
 
 
@@ -545,6 +594,7 @@ def get_sper_prob_col(
         return an.prob
     else:
         return 1 - an.prob
+
 
 def construct_row(  # noqa
     name,
@@ -659,10 +709,14 @@ def runner(args: argparse.Namespace) -> None:
     records = defaultdict(list)
 
     if args.dbcan is not None:
-        dbcan = {l.strip() for l in args.dbcan.readlines()}
+        dbcan = {d.strip() for d in args.dbcan.readlines()}
+    else:
+        dbcan = DBCAN_DEFAULT
 
     if args.pfam is not None:
-        pfam = {l.strip() for l in args.pfam.readlines()}
+        pfam = {d.strip() for d in args.pfam.readlines()}
+    else:
+        pfam = PFAM_DEFAULT
 
     for line in args.infile:
         sline = line.strip()
@@ -674,10 +728,11 @@ def runner(args: argparse.Namespace) -> None:
         records[dline["protein_name"]].append(record)
 
     print("\t".join(COLUMNS), file=args.outfile)
+    out_records = []
 
     for name, protein_records in records.items():
         record = construct_row(name, protein_records, pfam, dbcan)
-        record["score"] = score_it(
+        record["secretion_score"] = secretion_score_it(
             record,
             args.secreted_score,
             args.sigpep_ok_score,
@@ -685,15 +740,31 @@ def runner(args: argparse.Namespace) -> None:
             args.transmembrane_score,
             args.deeploc_extracellular_score,
             args.deeploc_intracellular_score,
+            args.deeploc_membrane_score,
             args.targetp_secreted_score,
             args.targetp_mitochondrial_score,
+        )
+        record["effector_score"] = effector_score_it(
+            record,
             args.effectorp1_score,
             args.effectorp2_score,
             args.effector_homology_score,
             args.virulence_homology_score,
             args.lethal_homology_score,
         )
+        record["effector_nohom_score"] = effector_score_it(
+            record,
+            args.effectorp1_score,
+            args.effectorp2_score,
+            0.0,
+            0.0,
+            0.0,
+        )
+        out_records.append(record)
 
+    out_records.sort(key=lambda r: r["effector_score"], reverse=True)
+
+    for record in out_records:
         line = write_line(record)
         print(line, file=args.outfile)
     return
