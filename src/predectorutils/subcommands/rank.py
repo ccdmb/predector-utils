@@ -79,6 +79,8 @@ COLUMNS = [
     "is_transmembrane",
     "phobius_tmcount",
     "tmhmm_tmcount",
+    "tmhmm_first_60",
+    "tmhmm_exp_aa",
     "tmhmm_first_tm_sp_coverage",
     "targetp_secreted",
     "targetp_mitochondrial",
@@ -205,7 +207,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
         "--secreted-weight",
         type=float,
         default=3,
-        help="The score to give a protein if it is predicted to be secreted."
+        help="The weight to give a protein if it is predicted to be secreted."
     )
 
     parser.add_argument(
@@ -213,7 +215,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=0.5,
         help=(
-            "The score to give a protein if it is predicted to have a signal "
+            "The weight to give a protein if it is predicted to have a signal "
             "peptide by one of the more reliable methods."
         )
     )
@@ -223,7 +225,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=0.25,
         help=(
-            "The score to give a protein if it is predicted to have a signal "
+            "The weight to give a protein if it is predicted to have a signal "
             "peptide by one of the reasonably reliable methods."
         )
     )
@@ -233,7 +235,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=-6,
         help=(
-            "The score to give a protein if it is predicted to be "
+            "The weight to give a protein if it is predicted to be "
             "transmembrane. Use negative numbers to penalise."
         )
     )
@@ -243,7 +245,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=0.5,
         help=(
-            "The score to give a protein if it is predicted to be "
+            "The weight to give a protein if it is predicted to be "
             "extracellular by deeploc."
         )
     )
@@ -253,7 +255,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=-0.5,
         help=(
-            "The score to give a protein if it is predicted to be "
+            "The weigt to give a protein if it is predicted to be "
             "intracellular by deeploc. Use negative numbers to penalise."
         )
     )
@@ -263,7 +265,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=-0.5,
         help=(
-            "The score to give a protein if it is predicted to be "
+            "The weight to give a protein if it is predicted to be "
             "membrane associated by deeploc. Use negative numbers to penalise."
         )
     )
@@ -273,7 +275,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=1,
         help=(
-            "The score to give a protein if it is predicted to be "
+            "The weight to give a protein if it is predicted to be "
             "secreted by targetp."
         )
     )
@@ -283,7 +285,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=-0.5,
         help=(
-            "The score to give a protein if it is predicted to be "
+            "The weight to give a protein if it is predicted to be "
             "mitochondrial by targetp. Use negative numbers to penalise."
         )
     )
@@ -293,7 +295,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=3,
         help=(
-            "The score to give a protein if it is predicted to be "
+            "The weight to give a protein if it is predicted to be "
             "an effector by effectorp1."
         )
     )
@@ -303,7 +305,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=3,
         help=(
-            "The score to give a protein if it is predicted to be "
+            "The weight to give a protein if it is predicted to be "
             "an effector by effectorp2."
         )
     )
@@ -313,7 +315,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=5,
         help=(
-            "The score to give a protein if it is similar to a known "
+            "The weight to give a protein if it is similar to a known "
             "effector or effector domain."
         )
     )
@@ -323,7 +325,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=1,
         help=(
-            "The score to give a protein if it is similar to a known "
+            "The weight to give a protein if it is similar to a known "
             "protein that may be involved in virulence."
         )
     )
@@ -333,13 +335,13 @@ def cli(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=-5,
         help=(
-            "The score to give a protein if it is similar to a known "
+            "The weight to give a protein if it is similar to a known "
             "protein in phibase which caused a lethal phenotype."
         )
     )
 
     parser.add_argument(
-        "--sp-tm-coverage-threshold",
+        "--sigpep-tm-coverage-threshold",
         type=float,
         default=0.58,
         help=(
@@ -723,6 +725,8 @@ def construct_row(  # noqa
 
         elif isinstance(an, TMHMM):
             record["tmhmm_tmcount"] = an.pred_hel
+            record["tmhmm_first_60"] = an.first_60
+            record["tmhmm_exp_aa"] = an.exp_aa
             tm_gff.extend(an.as_gff())
 
         elif isinstance(an, LOCALIZER):
@@ -817,7 +821,7 @@ def runner(args: argparse.Namespace) -> None:
             protein_records,
             pfam,
             dbcan,
-            args.sp_tm_coverage_threshold
+            args.sigpep_tm_coverage_threshold
         )
 
         record["secretion_score"] = secretion_score_it(
