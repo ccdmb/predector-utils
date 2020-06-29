@@ -199,7 +199,10 @@ def cli(parser: argparse.ArgumentParser) -> None:
         "--secreted-score",
         type=float,
         default=3,
-        help="The score to give a protein if it is predicted to be secreted."
+        help=(
+            "The score to give a protein if it is predicted to be secreted "
+            "by any signal peptide method."
+        )
     )
 
     parser.add_argument(
@@ -223,12 +226,25 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--transmembrane-score",
+        "--multiple-transmembrane-score",
         type=float,
         default=-10,
         help=(
-            "The score to give a protein if it is predicted to be "
-            "transmembrane. Use negative numbers to penalise."
+            "The score to give a protein if it is predicted to have"
+            "transmembrane have > 1 TM domains by both TMHMM and Phobius."
+            "Use negative numbers to penalise."
+        )
+    )
+
+    parser.add_argument(
+        "--transmembrane-score",
+        type=float,
+        default=-1,
+        help=(
+            "The score to give a protein if it is predicted to have "
+            "> 0 TM domains by either method and not both > 1 (
+            "mutually exclusive with multiple-transmembrane-score). "
+            "Use negative numbers to penalise."
         )
     )
 
