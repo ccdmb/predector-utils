@@ -716,6 +716,9 @@ class SignalP5(Analysis):
             return
 
         # dict(cs, cs_prob)
+        if self.cs_pos == "CS pos: ?. Probable protein fragment":
+            return
+
         cs = s5_cs_actual_pos(self.cs_pos)
 
         # d_decision = prediction of issecreted.

@@ -4,9 +4,11 @@ import sys
 import argparse
 import json
 from collections import defaultdict
+from statistics import median
 
-from typing import (Set, Dict, List, Union)
+from typing import (Set, Dict, List, Sequence, Union)
 
+from predectorutils.gff import GFFRecord
 from predectorutils.analyses import (
     Analyses,
     Analysis,
@@ -32,7 +34,9 @@ from predectorutils.analyses import (
 
 COLUMNS = [
     "name",
-    "score",
+    "manual_effector_score",
+    "manual_novel_effector_score",
+    "manual_secretion_score",
     "phibase_effector",
     "phibase_virulence",
     "phibase_lethal",
@@ -44,8 +48,15 @@ COLUMNS = [
     "pfam_matches",
     "dbcan_match",
     "dbcan_matches",
+    "effectorp1",
+    "effectorp2",
+    "is_secreted",
+    "any_signal_peptide",
+    "apoplastp",
+    "single_transmembrane",
+    "multiple_transmembrane",
     "molecular_weight",
-    "residues",
+    "residue_number",
     "charge",
     "isoelectric_point",
     "aa_c_number",
@@ -57,14 +68,10 @@ COLUMNS = [
     "aa_charged_number",
     "aa_basic_number",
     "aa_acidic_number",
-    "effectorp1",
-    "effectorp2",
-    "apoplastp",
+    "fykin_gap",
     "localizer_nuclear",
     "localizer_chloro",
     "localizer_mito",
-    "is_secreted",
-    "any_signal_peptide",
     "signalp3_nn",
     "signalp3_hmm",
     "signalp4",
@@ -73,9 +80,12 @@ COLUMNS = [
     "phobius_sp",
     "phobius_tmcount",
     "tmhmm_tmcount",
-    "tmhmm_first60",
+    "tmhmm_first_60",
+    "tmhmm_exp_aa",
+    "tmhmm_first_tm_sp_coverage",
     "targetp_secreted",
-    "targetp_mitochondrial",
+    "targetp_secreted_prob",
+    "targetp_mitochondrial_prob",
     "deeploc_membrane",
     "deeploc_nucleus",
     "deeploc_cytoplasm",
@@ -196,161 +206,165 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--secreted-score",
+        "--secreted-weight",
         type=float,
         default=3,
         help=(
-            "The score to give a protein if it is predicted to be secreted "
+            "The weight to give a protein if it is predicted to be secreted "
             "by any signal peptide method."
         )
     )
 
     parser.add_argument(
-        "--sigpep-good-score",
+        "--sigpep-good-weight",
         type=float,
         default=0.5,
         help=(
-            "The score to give a protein if it is predicted to have a signal "
+            "The weight to give a protein if it is predicted to have a signal "
             "peptide by one of the more reliable methods."
         )
     )
 
     parser.add_argument(
-        "--sigpep-ok-score",
+        "--sigpep-ok-weight",
         type=float,
         default=0.25,
         help=(
-            "The score to give a protein if it is predicted to have a signal "
+            "The weight to give a protein if it is predicted to have a signal "
             "peptide by one of the reasonably reliable methods."
         )
     )
 
     parser.add_argument(
-        "--multiple-transmembrane-score",
+        "--single-transmembrane-weight",
         type=float,
-        default=-10,
+        default=-2,
         help=(
-            "The score to give a protein if it is predicted to have"
+            "The weight to give a protein if it is predicted to have "
+            "> 0 TM domains by either method and not both > 1 (mutually "
+            "exclusive with multiple-transmembrane-score). "
+            "This is not applied if TMHMM first 60 is > 10. "
+            "Use negative numbers to penalise."
+        )
+    )
+
+    parser.add_argument(
+        "--multiple-transmembrane-weight",
+        type=float,
+        default=-6,
+        help=(
+            "The weight to give a protein if it is predicted to have"
             "transmembrane have > 1 TM domains by both TMHMM and Phobius."
             "Use negative numbers to penalise."
         )
     )
 
     parser.add_argument(
-        "--transmembrane-score",
-        type=float,
-        default=-1,
-        help=(
-            "The score to give a protein if it is predicted to have "
-            "> 0 TM domains by either method and not both > 1 (
-            "mutually exclusive with multiple-transmembrane-score). "
-            "Use negative numbers to penalise."
-        )
-    )
-
-    parser.add_argument(
-        "--deeploc-extracellular-score",
+        "--deeploc-extracellular-weight",
         type=float,
         default=1,
         help=(
-            "The score to give a protein if it is predicted to be "
+            "The weight to give a protein if it is predicted to be "
             "extracellular by deeploc."
         )
     )
 
     parser.add_argument(
-        "--deeploc-intracellular-score",
+        "--deeploc-intracellular-weight",
         type=float,
-        default=-2,
+        default=-0.5,
         help=(
-            "The score to give a protein if it is predicted to be "
+            "The weigt to give a protein if it is predicted to be "
             "intracellular by deeploc. Use negative numbers to penalise."
         )
     )
 
     parser.add_argument(
-        "--targetp-secreted-score",
+        "--deeploc-membrane-weight",
         type=float,
-        default=1,
+        default=-1,
         help=(
-            "The score to give a protein if it is predicted to be "
-            "secreted by targetp."
+            "The weight to give a protein if it is predicted to be "
+            "membrane associated by deeploc. Use negative numbers to penalise."
         )
     )
 
     parser.add_argument(
-        "--targetp-mitochondrial-score",
+        "--targetp-mitochondrial-weight",
         type=float,
-        default=-2,
+        default=-0.5,
         help=(
-            "The score to give a protein if it is predicted to be "
+            "The weight to give a protein if it is predicted to be "
             "mitochondrial by targetp. Use negative numbers to penalise."
         )
     )
 
     parser.add_argument(
-        "--effectorp1-score",
+        "--effectorp1-weight",
         type=float,
         default=3,
         help=(
-            "The score to give a protein if it is predicted to be "
+            "The weight to give a protein if it is predicted to be "
             "an effector by effectorp1."
         )
     )
 
     parser.add_argument(
-        "--effectorp2-score",
+        "--effectorp2-weight",
         type=float,
         default=3,
         help=(
-            "The score to give a protein if it is predicted to be "
+            "The weight to give a protein if it is predicted to be "
             "an effector by effectorp2."
         )
     )
 
     parser.add_argument(
-        "--effector-homology-score",
+        "--effector-homology-weight",
         type=float,
         default=5,
         help=(
-            "The score to give a protein if it is similar to a known "
+            "The weight to give a protein if it is similar to a known "
             "effector or effector domain."
         )
     )
 
     parser.add_argument(
-        "--virulence-homology-score",
+        "--virulence-homology-weight",
         type=float,
         default=1,
         help=(
-            "The score to give a protein if it is similar to a known "
+            "The weight to give a protein if it is similar to a known "
             "protein that may be involved in virulence."
         )
     )
 
     parser.add_argument(
-        "--lethal-homology-score",
+        "--lethal-homology-weight",
         type=float,
         default=-5,
         help=(
-            "The score to give a protein if it is similar to a known "
+            "The weight to give a protein if it is similar to a known "
             "protein in phibase which caused a lethal phenotype."
+        )
+    )
+
+    parser.add_argument(
+        "--tmhmm-first-60-threshold",
+        type=float,
+        default=10,
+        help=(
+            "The minimum number of AAs predicted to be transmembrane in the "
+            "first 60 AAs to consider a protein with a single TM domain "
+            "a false positive (caused by hydrophobic region in sp)."
         )
     )
 
     return
 
 
-def score_it(
+def effector_score_it(
     record: Dict[str, Union[None, int, float, str]],
-    secreted: float = 3,
-    less_trustworthy_signal_prediction: float = 0.25,
-    trustworthy_signal_prediction: float = 0.5,
-    transmembrane: float = -10,
-    deeploc_extracellular: float = 1,
-    deeploc_intracellular: float = -2,
-    targetp_secreted: float = 1,
-    targetp_mitochondrial: float = -2,
     effectorp1: float = 3,
     effectorp2: float = 3,
     effector: float = 5,
@@ -358,49 +372,14 @@ def score_it(
     lethal: float = -5,
 ) -> float:
     """ """
-
     score: float = 0
 
-    is_secreted = record.get("is_secreted", 0)
-    assert isinstance(is_secreted, int)
-    score += int(is_secreted) * secreted
+    secretion_score = record["manual_secretion_score"]
+    assert isinstance(secretion_score, float)
+    score += secretion_score
 
-    for k in ["signalp3_hmm", "signalp3_nn", "phobius_sp"]:
-        v = record.get(k, 0)
-        assert isinstance(v, int)
-        score += v * less_trustworthy_signal_prediction
-
-    for k in ["signalp4", "signalp5", "deepsig"]:
-        v = record.get(k, 0)
-        assert isinstance(v, int)
-        score += v * trustworthy_signal_prediction
-
-    is_transmembrane = record.get("is_transmembrane", 0)
-    assert isinstance(is_transmembrane, int)
-    score += is_transmembrane * transmembrane
-
-    deeploc_extracellular_prob = record.get("deeploc_extracellular", 0.0)
-    assert isinstance(deeploc_extracellular_prob, float)
-    score += deeploc_extracellular_prob * deeploc_extracellular  # noqa
-    for k in [
-        'deeploc_membrane', 'deeploc_nucleus', 'deeploc_cytoplasm',
-        'deeploc_mitochondrion', 'deeploc_cell_membrane', 'deeploc_plastid',
-        'deeploc_lysosome', 'deeploc_peroxisome'
-    ]:
-        v = record.get(k, 0.0)
-        assert isinstance(v, float)
-        score += v * deeploc_intracellular
-
-    targetp_secreted_prob = record.get("targetp_secreted", 0.0)
-    targetp_mitochondrial_prob = record.get("targetp_mitochondrial", 0.0)
-
-    assert isinstance(targetp_secreted_prob, float)
-    assert isinstance(targetp_mitochondrial_prob, float)
-    score += targetp_secreted_prob * targetp_secreted
-    score += targetp_mitochondrial_prob * targetp_mitochondrial
-
-    effectorp1_prob = record.get("effectorp1", 0.0)
-    effectorp2_prob = record.get("effectorp2", 0.0)
+    effectorp1_prob = record["effectorp1"]
+    effectorp2_prob = record["effectorp2"]
 
     assert isinstance(effectorp1_prob, float)
     assert isinstance(effectorp2_prob, float)
@@ -426,7 +405,64 @@ def score_it(
 
     assert isinstance(record["phibase_lethal"], int)
     score += record["phibase_lethal"] * lethal
+    return score
 
+
+def secretion_score_it(
+    record: Dict[str, Union[None, int, float, str]],
+    secreted: float = 3,
+    less_trustworthy_signal_prediction: float = 0.25,
+    trustworthy_signal_prediction: float = 0.5,
+    single_transmembrane: float = -1,
+    multiple_transmembrane: float = -10,
+    deeploc_extracellular: float = 1,
+    deeploc_intracellular: float = -2,
+    deeploc_membrane: float = -2,
+    targetp_mitochondrial: float = -2,
+) -> float:
+    score: float = 0
+
+    assert isinstance(record["is_secreted"], int)
+    score += int(record["is_secreted"]) * secreted
+
+    for k in ["signalp3_hmm", "signalp3_nn", "phobius_sp", "deepsig"]:
+        v = record.get(k, 0)
+        assert isinstance(v, int)
+        score += v * less_trustworthy_signal_prediction
+
+    for k in ["signalp4", "signalp5", "targetp_secreted"]:
+        v = record.get(k, 0)
+        assert isinstance(v, int)
+        score += v * trustworthy_signal_prediction
+
+    assert isinstance(record["multiple_transmembrane"], int)
+    score += record["multiple_transmembrane"] * multiple_transmembrane
+
+    assert isinstance(record["single_transmembrane"], int)
+    score += record["single_transmembrane"] * single_transmembrane
+
+    assert isinstance(record["deeploc_extracellular"], float)
+    score += record["deeploc_extracellular"] * deeploc_extracellular  # noqa
+    for k in [
+        'deeploc_nucleus',
+        'deeploc_cytoplasm',
+        'deeploc_mitochondrion',
+        'deeploc_cell_membrane',
+        'deeploc_endoplasmic_reticulum',
+        'deeploc_plastid',
+        'deeploc_golgi',
+        'deeploc_lysosome',
+        'deeploc_peroxisome'
+    ]:
+        v = record.get(k, 0.0)
+        assert isinstance(v, float)
+        score += v * deeploc_intracellular
+
+    assert isinstance(record["deeploc_membrane"], float)
+    score += record["deeploc_membrane"] * deeploc_membrane
+
+    assert isinstance(record["targetp_mitochondrial_prob"], float)
+    score += record["targetp_mitochondrial_prob"] * targetp_mitochondrial
     return score
 
 
@@ -456,28 +492,74 @@ def decide_any_signal(
         for k
         in [
             'signalp3_nn', 'signalp3_hmm', 'signalp4',
-            'signalp5', 'deepsig', 'phobius_sp'
+            'signalp5', 'deepsig', 'phobius_sp', 'targetp_secreted'
         ]
     ]))
     return
 
 
+def gff_intersection(left: GFFRecord, right: GFFRecord) -> int:
+    lstart = min([left.start, left.end])
+    lend = max([left.start, left.end])
+
+    rstart = min([right.start, right.end])
+    rend = max([right.start, right.end])
+
+    start = max([lstart, rstart])
+    end = min([lend, rend])
+
+    # This will be < 0 if they don't overlap
+    if start < end:
+        return end - start
+    else:
+        return 0
+
+
+def gff_coverage(left: GFFRecord, right: GFFRecord) -> float:
+    noverlap = gff_intersection(left, right)
+    return noverlap / (right.end - right.start)
+
+
+def get_tm_sp_coverage(
+    sp_gff: Sequence[GFFRecord],
+    tm_gff: Sequence[GFFRecord],
+) -> float:
+    if len(sp_gff) == 0:
+        return 0.0
+
+    if len(tm_gff) == 0:
+        return 0.0
+
+    tm = sorted(tm_gff, key=lambda x: x.start)[0]
+    covs = [gff_coverage(sp, tm) for sp in sp_gff]
+    return median(covs)
+
+
 def decide_is_transmembrane(
-    record: Dict[str, Union[None, int, float, str]]
+    record: Dict[str, Union[None, int, float, str]],
+    sp_gff: Sequence[GFFRecord],
+    tm_gff: Sequence[GFFRecord],
+    tmhmm_first_60_threshold: float = 10,
 ) -> None:
 
     assert isinstance(record["tmhmm_tmcount"], int)
     assert isinstance(record["phobius_tmcount"], int)
-    assert isinstance(record["tmhmm_first60"], float)
-    assert isinstance(record["any_signal_peptide"], int)
+    assert isinstance(record["tmhmm_first_60"], float)
 
-    record["is_transmembrane"] = int(
+    record["tmhmm_first_tm_sp_coverage"] = get_tm_sp_coverage(sp_gff, tm_gff)
+
+    record["multiple_transmembrane"] = int(
         (record["tmhmm_tmcount"] > 1) or
-        (record["phobius_tmcount"] > 0) or
-        ((record["tmhmm_first60"] > 10) and
-         (record["tmhmm_tmcount"] == 1) and
-         bool(record["any_signal_peptide"]))
+        (record["phobius_tmcount"] > 1)
     )
+
+    record["single_transmembrane"] = int(
+        not bool(record["multiple_transmembrane"])
+        and (record["phobius_tmcount"] == 1
+             or (record["tmhmm_tmcount"] == 1
+                 and (record["tmhmm_first_60"] < tmhmm_first_60_threshold)))
+    )
+
     return
 
 
@@ -486,7 +568,7 @@ def decide_is_secreted(
 ) -> None:
     record["is_secreted"] = int(
         bool(record["any_signal_peptide"]) and not
-        bool(record["is_transmembrane"])
+        bool(record["multiple_transmembrane"])
     )
     return
 
@@ -514,7 +596,7 @@ def get_pepstats_cols(
     record: Dict[str, Union[None, int, float, str]]
 ) -> None:
     record["molecular_weight"] = an.molecular_weight
-    record["residues"] = an.residues
+    record["residue_number"] = an.residues
     record["charge"] = an.charge
     record["isoelectric_point"] = an.isoelectric_point
     record["aa_c_number"] = an.residue_c_number
@@ -526,6 +608,22 @@ def get_pepstats_cols(
     record["aa_charged_number"] = an.property_charged_number
     record["aa_basic_number"] = an.property_basic_number
     record["aa_acidic_number"] = an.property_acidic_number
+
+    fykin = (
+        an.residue_f_number +
+        an.residue_k_number +
+        an.residue_y_number +
+        an.residue_i_number +
+        an.residue_n_number
+    )
+
+    gap = (
+        an.residue_g_number +
+        an.residue_a_number +
+        an.residue_p_number
+    )
+
+    record["fykin_gap"] = (float(fykin) + 1) / (float(gap) + 1)
     return
 
 
@@ -562,11 +660,13 @@ def get_sper_prob_col(
     else:
         return 1 - an.prob
 
+
 def construct_row(  # noqa
     name,
     analyses: List[Analysis],
     pfam_domains: Set[str],
-    dbcan_domains: Set[str]
+    dbcan_domains: Set[str],
+    tmhmm_first_60_threshold: float,
 ) -> Dict[str, Union[None, int, float, str]]:
 
     phibase_matches: Set[str] = set()
@@ -578,50 +678,80 @@ def construct_row(  # noqa
     record: Dict[str, Union[None, int, float, str]] = {"name": name}
     record["effector_match"] = 0
 
+    tm_gff: List[GFFRecord] = []
+    sp_gff: List[GFFRecord] = []
+
     for an in analyses:
         if isinstance(an, ApoplastP):
             record["apoplastp"] = get_sper_prob_col(an, ["Apoplastic"])
+
         elif isinstance(an, DeepSig):
             record["deepsig"] = int(an.prediction == "SignalPeptide")
+            sp_gff.extend(an.as_gff())
+
         elif isinstance(an, EffectorP1):
             record["effectorp1"] = get_sper_prob_col(an, ["Effector"])
+
         elif isinstance(an, EffectorP2):
             record["effectorp2"] = get_sper_prob_col(
                 an,
                 ["Effector", "Unlikely effector"]
             )
+
         elif isinstance(an, Phobius):
             record["phobius_sp"] = int(an.sp)
             record["phobius_tmcount"] = an.tm
+            sp_gff.extend(
+                r for r in an.as_gff()
+                if r.type == "signal_peptide"
+            )
+
         elif isinstance(an, SignalP3HMM):
             record["signalp3_hmm"] = int(an.is_secreted)
             record["signalp3_hmm_s"] = an.sprob
+            sp_gff.extend(an.as_gff())
+
         elif isinstance(an, SignalP3NN):
             record["signalp3_nn"] = int(an.d_decision)
             record["signalp3_nn_d"] = an.d
+            sp_gff.extend(an.as_gff())
+
         elif isinstance(an, SignalP4):
             record["signalp4"] = int(an.decision)
             record["signalp4_d"] = an.d
             record["signalp4_dmax_cut"] = an.dmax_cut
+            sp_gff.extend(an.as_gff())
 
         elif isinstance(an, SignalP5):
             record["signalp5"] = int(an.prediction == "SP(Sec/SPI)")
-            record["signalp5_prob"] = an.prob_signal
+            # For some proteins, this outputs a very high number
+            # so we constrain it here.
+            record["signalp5_prob"] = min([an.prob_signal, 1.0])
+            sp_gff.extend(an.as_gff())
+
         elif isinstance(an, TargetPNonPlant):
-            record["targetp_secreted"] = an.sp
-            record["targetp_mitochondrial"] = an.mtp
+            record["targetp_secreted"] = int(an.prediction == "SP")
+            record["targetp_secreted_prob"] = an.sp
+            record["targetp_mitochondrial_prob"] = an.mtp
+
         elif isinstance(an, TMHMM):
             record["tmhmm_tmcount"] = an.pred_hel
-            record["tmhmm_first60"] = an.first_60
+            record["tmhmm_first_60"] = an.first_60
+            record["tmhmm_exp_aa"] = an.exp_aa
+            tm_gff.extend(an.as_gff())
+
         elif isinstance(an, LOCALIZER):
             record["localizer_nuclear"] = int(an.nucleus_decision)
             record["localizer_chloro"] = int(an.chloroplast_decision)
             record["localizer_mito"] = int(an.mitochondria_decision)
+
         elif isinstance(an, DeepLoc):
             get_deeploc_cols(an, record)
+
         elif isinstance(an, DBCAN):
             if an.decide_significant():
                 dbcan_matches.add(an.hmm)
+
         elif isinstance(an, PfamScan):
             hmm = an.hmm.split('.', maxsplit=1)[0]
             if hmm in pfam_domains:
@@ -641,7 +771,7 @@ def construct_row(  # noqa
                 effector_matches.add(an.target)
 
     decide_any_signal(record)
-    decide_is_transmembrane(record)
+    decide_is_transmembrane(record, sp_gff, tm_gff, tmhmm_first_60_threshold)
     decide_is_secreted(record)
 
     get_phibase_cols(phibase_matches, phibase_phenotypes, record)
@@ -675,10 +805,14 @@ def runner(args: argparse.Namespace) -> None:
     records = defaultdict(list)
 
     if args.dbcan is not None:
-        dbcan = {l.strip() for l in args.dbcan.readlines()}
+        dbcan = {d.strip() for d in args.dbcan.readlines()}
+    else:
+        dbcan = DBCAN_DEFAULT
 
     if args.pfam is not None:
-        pfam = {l.strip() for l in args.pfam.readlines()}
+        pfam = {d.strip() for d in args.pfam.readlines()}
+    else:
+        pfam = PFAM_DEFAULT
 
     for line in args.infile:
         sline = line.strip()
@@ -690,26 +824,50 @@ def runner(args: argparse.Namespace) -> None:
         records[dline["protein_name"]].append(record)
 
     print("\t".join(COLUMNS), file=args.outfile)
+    out_records = []
 
     for name, protein_records in records.items():
-        record = construct_row(name, protein_records, pfam, dbcan)
-        record["score"] = score_it(
-            record,
-            args.secreted_score,
-            args.sigpep_ok_score,
-            args.sigpep_good_score,
-            args.transmembrane_score,
-            args.deeploc_extracellular_score,
-            args.deeploc_intracellular_score,
-            args.targetp_secreted_score,
-            args.targetp_mitochondrial_score,
-            args.effectorp1_score,
-            args.effectorp2_score,
-            args.effector_homology_score,
-            args.virulence_homology_score,
-            args.lethal_homology_score,
+        record = construct_row(
+            name,
+            protein_records,
+            pfam,
+            dbcan,
+            args.tmhmm_first_60_threshold
         )
 
+        record["manual_secretion_score"] = secretion_score_it(
+            record,
+            args.secreted_weight,
+            args.sigpep_ok_weight,
+            args.sigpep_good_weight,
+            args.single_transmembrane_weight,
+            args.multiple_transmembrane_weight,
+            args.deeploc_extracellular_weight,
+            args.deeploc_intracellular_weight,
+            args.deeploc_membrane_weight,
+            args.targetp_mitochondrial_weight,
+        )
+        record["manual_effector_score"] = effector_score_it(
+            record,
+            args.effectorp1_weight,
+            args.effectorp2_weight,
+            args.effector_homology_weight,
+            args.virulence_homology_weight,
+            args.lethal_homology_weight,
+        )
+        record["manual_novel_effector_score"] = effector_score_it(
+            record,
+            args.effectorp1_weight,
+            args.effectorp2_weight,
+            0.0,
+            0.0,
+            0.0,
+        )
+        out_records.append(record)
+
+    out_records.sort(key=lambda r: r["manual_effector_score"], reverse=True)
+
+    for record in out_records:
         line = write_line(record)
         print(line, file=args.outfile)
     return

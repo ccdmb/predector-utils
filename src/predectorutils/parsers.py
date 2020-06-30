@@ -296,7 +296,7 @@ def parse_regex(
             return ValueParseError(
                 value,
                 str(regex),
-                ("Value '{value}' does not match the "
+                ("Value '{got}' does not match the "
                  "regular expression {expected}.")
             )
         else:
@@ -338,7 +338,7 @@ def get_from_dict_or_err(
         if key in d:
             return d[key]
         else:
-            return ValueParseError(key, "", "{key} was missing.")
+            return ValueParseError(key, "", "{got} was missing.")
 
     return inner
 
