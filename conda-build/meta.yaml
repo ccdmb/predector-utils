@@ -23,11 +23,15 @@ requirements:
     - setuptools
     - biopython
     - pandas
+    - numpy
+    - xgboost
     - pip
   run:
     - python {{ python }}
     - biopython
     - pandas
+    - numpy
+    - xgboost
 
 test:
   imports:
