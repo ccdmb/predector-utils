@@ -19,18 +19,19 @@ build:
 
 requirements:
   host:
-    - python {{ python }}
+    - python =3
     - setuptools
     - biopython
     - pandas
     - numpy
-    - xgboost
     - pip
+    - xgboost
   run:
-    - python {{ python }}
+    - python =3
     - biopython
     - pandas
     - numpy
+    - pip
     - xgboost
 
 test:
