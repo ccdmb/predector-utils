@@ -75,7 +75,9 @@ setup(
     # versions of scikit-learn, so I have to keep it fixed.
     install_requires=[
         'biopython>=1.70',
-        'pandas'
+        'pandas',
+        'numpy',
+        'xgboost',
         ],
     py_modules=[splitext(basename(path))[0] for path in glob('src/*.py')],
 
@@ -92,9 +94,9 @@ setup(
     # If there are data files included in your packages that need to be
     # installed, specify them here.  If using Python 2.6 or less, then these
     # have to be included in MANIFEST.in as well.
-    # package_data={
-    #     'catas': ['data/*.json', 'data/*.csv', 'data/*.npz'],
-    # },
+    package_data={
+        'predutils': ['data/*.json', 'data/*.tsv', 'data/*.csv', 'data/*.txt'],
+    },
     include_package_data=True,
 
     # To provide executable scripts, use entry points in preference to the

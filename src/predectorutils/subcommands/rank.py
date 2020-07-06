@@ -3,11 +3,21 @@
 import sys
 import argparse
 import json
+
 from collections import defaultdict
 from statistics import median
 
 from typing import (Set, Dict, List, Sequence, Union)
 
+import numpy as np
+import pandas as pd
+import xgboost as xgb
+
+from predectorutils.data import (
+    get_interesting_dbcan_ids,
+    get_interesting_pfam_ids,
+    get_ltr_model,
+)
 from predectorutils.gff import GFFRecord
 from predectorutils.analyses import (
     Analyses,
@@ -34,8 +44,8 @@ from predectorutils.analyses import (
 
 COLUMNS = [
     "name",
+    "effector_score",
     "manual_effector_score",
-    "manual_novel_effector_score",
     "manual_secretion_score",
     "phibase_effector",
     "phibase_virulence",
@@ -100,80 +110,8 @@ COLUMNS = [
     "signalp3_nn_d",
     "signalp3_hmm_s",
     "signalp4_d",
-    "signalp4_dmax_cut",
     "signalp5_prob",
 ]
-
-DBCAN_DEFAULT = {
-    "CBM50",
-    "AA9",
-    "GH10",
-    "GH11"
-}
-
-
-PFAM_DEFAULT = {
-    "PF00734", "PF03443", "PF01083", "PF03211", "PF00331",
-    "PF00457", "PF00160", "PF04126", "PF10231", "PF18050",
-    "PF00188", "PF00293", "PF00964", "PF03377", "PF05730",
-    "PF07249", "PF16541", "PF03330", "PF11529", "PF18661",
-    "PF18247", "PF18241", "PF14521", "PF11327", "PF01764",
-    "PF14856", "PF08995", "PF05630", "PF09461", "PF11584",
-    "PF18224", "PF00187", "PF01476", "PF01607", "PF02128",
-    "PF07504", "PF02221", "PF01363", "PF06602", "PF16810",
-    "PF18488", "PF18634", "PF00161", "PF00545", "PF00652",
-    "PF11663", "PF14200", "PF16536", "PF16542", "PF00014",
-    "PF00030", "PF00059", "PF00068", "PF00087", "PF00200",
-    "PF00451", "PF00537", "PF00555", "PF00706", "PF00819",
-    "PF01117", "PF01123", "PF01324", "PF01335", "PF01338",
-    "PF01375", "PF01376", "PF01421", "PF01742", "PF01821",
-    "PF02048", "PF02258", "PF02452", "PF02691", "PF02763",
-    "PF02764", "PF02794", "PF02819", "PF02876", "PF02917",
-    "PF02918", "PF02950", "PF03077", "PF03318", "PF03440",
-    "PF03495", "PF03497", "PF03498", "PF03505", "PF03507",
-    "PF03768", "PF03769", "PF03784", "PF03944", "PF03945",
-    "PF04221", "PF04365", "PF04829", "PF05015", "PF05016",
-    "PF05294", "PF05353", "PF05374", "PF05394", "PF05453",
-    "PF05627", "PF05638", "PF05707", "PF05791", "PF05819",
-    "PF05932", "PF06254", "PF06255", "PF06261", "PF06286",
-    "PF06296", "PF06340", "PF06357", "PF06414", "PF06416",
-    "PF06451", "PF06453", "PF06457", "PF06755", "PF06769",
-    "PF07254", "PF07365", "PF07442", "PF07473", "PF07591",
-    "PF07737", "PF07740", "PF07771", "PF07822", "PF07829",
-    "PF07906", "PF07927", "PF07936", "PF07945", "PF07951",
-    "PF07952", "PF07953", "PF07968", "PF08024", "PF08025",
-    "PF08086", "PF08087", "PF08088", "PF08089", "PF08090",
-    "PF08091", "PF08092", "PF08093", "PF08094", "PF08095",
-    "PF08096", "PF08097", "PF08098", "PF08099", "PF08104",
-    "PF08115", "PF08116", "PF08119", "PF08120", "PF08121",
-    "PF08131", "PF08178", "PF08249", "PF08251", "PF08396",
-    "PF08493", "PF08562", "PF08843", "PF08845", "PF08888",
-    "PF09009", "PF09075", "PF09101", "PF09102", "PF09119",
-    "PF09131", "PF09156", "PF09207", "PF09275", "PF09276",
-    "PF09407", "PF09857", "PF09907", "PF10279", "PF10530",
-    "PF10550", "PF11047", "PF11410", "PF11592", "PF12207",
-    "PF12255", "PF12256", "PF12563", "PF12703", "PF12918",
-    "PF13304", "PF13939", "PF13940", "PF13955", "PF13956",
-    "PF13957", "PF13958", "PF13979", "PF13981", "PF14021",
-    "PF14113", "PF14171", "PF14449", "PF14866", "PF15500",
-    "PF15520", "PF15521", "PF15522", "PF15523", "PF15524",
-    "PF15526", "PF15527", "PF15528", "PF15529", "PF15530",
-    "PF15531", "PF15532", "PF15533", "PF15534", "PF15535",
-    "PF15536", "PF15537", "PF15538", "PF15540", "PF15541",
-    "PF15542", "PF15543", "PF15544", "PF15545", "PF15604",
-    "PF15605", "PF15606", "PF15607", "PF15635", "PF15636",
-    "PF15637", "PF15638", "PF15639", "PF15640", "PF15641",
-    "PF15643", "PF15644", "PF15645", "PF15646", "PF15647",
-    "PF15648", "PF15649", "PF15650", "PF15651", "PF15652",
-    "PF15653", "PF15657", "PF15658", "PF15659", "PF15723",
-    "PF15738", "PF15781", "PF15935", "PF16754", "PF16847",
-    "PF16873", "PF16981", "PF17056", "PF17454", "PF17475",
-    "PF17476", "PF17486", "PF17491", "PF17492", "PF17499",
-    "PF17521", "PF17556", "PF17557", "PF17563", "PF17997",
-    "PF18022", "PF18078", "PF18276", "PF18449", "PF18648",
-    "PF18807", "PF06766", "PF16073", "PF11807", "PF00314",
-    "PF16361"
-}
 
 
 def cli(parser: argparse.ArgumentParser) -> None:
@@ -386,12 +324,12 @@ def effector_score_it(
     score += 2 * (effectorp1_prob - 0.5) * effectorp1
     score += 2 * (effectorp2_prob - 0.5) * effectorp2
 
-    assert isinstance(record["phibase_effector"], int)
+    assert isinstance(record["phibase_effector_match"], int)
     assert isinstance(record["effector_match"], int)
     assert isinstance(record["dbcan_match"], int)
     assert isinstance(record["pfam_match"], int)
     has_effector_match = sum([
-        record["phibase_effector"],
+        record["phibase_effector_match"],
         record["effector_match"],
         record["dbcan_match"],
         record["pfam_match"]
@@ -399,12 +337,12 @@ def effector_score_it(
 
     score += int(has_effector_match) * effector
 
-    assert isinstance(record["phibase_virulence"], int)
+    assert isinstance(record["phibase_virulence_match"], int)
     if not has_effector_match:
-        score += record["phibase_virulence"] * virulence
+        score += record["phibase_virulence_match"] * virulence
 
-    assert isinstance(record["phibase_lethal"], int)
-    score += record["phibase_lethal"] * lethal
+    assert isinstance(record["phibase_lethal_match"], int)
+    score += record["phibase_lethal_match"] * lethal
     return score
 
 
@@ -555,9 +493,18 @@ def decide_is_transmembrane(
 
     record["single_transmembrane"] = int(
         not bool(record["multiple_transmembrane"])
-        and (record["phobius_tmcount"] == 1
-             or (record["tmhmm_tmcount"] == 1
-                 and (record["tmhmm_first_60"] < tmhmm_first_60_threshold)))
+        and (
+            record["phobius_tmcount"] == 1
+            or (
+                record["tmhmm_tmcount"] == 1
+                and not bool(record["any_signal_peptide"])
+            )
+            or (
+                record["tmhmm_tmcount"] == 1
+                and bool(record["any_signal_peptide"])
+                and (record["tmhmm_first_60"] < tmhmm_first_60_threshold)
+            )
+        )
     )
 
     return
@@ -632,7 +579,7 @@ def get_phibase_cols(
     phenotypes: Set[str],
     record: Dict[str, Union[None, int, float, str]]
 ) -> None:
-    record["phibase_effector"] = int(len(
+    record["phibase_effector_match"] = int(len(
         phenotypes.intersection([
             "loss_of_pathogenicity",
             "increased_virulence_(hypervirulence)",
@@ -640,8 +587,8 @@ def get_phibase_cols(
         ])
     ) > 0)
 
-    record["phibase_virulence"] = int("reduced_virulence" in phenotypes)
-    record["phibase_lethal"] = int("lethal" in phenotypes)
+    record["phibase_virulence_match"] = int("reduced_virulence" in phenotypes)
+    record["phibase_lethal_match"] = int("lethal" in phenotypes)
 
     if len(phenotypes) > 0:
         record["phibase_phenotypes"] = ",".join(phenotypes)
@@ -796,6 +743,52 @@ def construct_row(  # noqa
     return record
 
 
+def run_ltr(df: pd.DataFrame) -> np.array:
+    df = df.copy()
+
+    df["aa_c_prop"] = df["aa_c_number"] / df["residue_number"]
+    df["aa_tiny_prop"] = df["aa_tiny_number"] / df["residue_number"]
+    df["aa_small_prop"] = df["aa_small_number"] / df["residue_number"]
+    df["aa_aliphatic_prop"] = df["aa_aliphatic_number"] / df["residue_number"]
+    df["aa_aromatic_prop"] = df["aa_aromatic_number"] / df["residue_number"]
+    df["aa_nonpolar_prop"] = df["aa_nonpolar_number"] / df["residue_number"]
+    df["aa_charged_prop"] = df["aa_charged_number"] / df["residue_number"]
+    df["aa_basic_prop"] = df["aa_basic_number"] / df["residue_number"]
+    df["aa_acidic_prop"] = df["aa_acidic_number"] / df["residue_number"]
+
+    df_features = df[[
+        'molecular_weight',
+        'aa_c_prop',
+        'aa_tiny_prop',
+        'aa_small_prop',
+        'aa_nonpolar_prop',
+        'aa_basic_prop',
+        'effectorp1',
+        'effectorp2',
+        'apoplastp',
+        'phobius_tmcount',
+        'tmhmm_tmcount',
+        'tmhmm_first_60',
+        'deeploc_membrane',
+        'deeploc_extracellular',
+        'deepsig',
+        'phobius_sp',
+        'signalp3_nn_d',
+        'signalp3_hmm_s',
+        'signalp4_d',
+        'signalp5_prob',
+        'targetp_secreted_prob',
+    ]]
+
+    dmat = xgb.DMatrix(df_features)
+    model = get_ltr_model()
+    return model.predict(dmat)
+
+
+def record_to_series(record: Dict[str, Union[None, int, float, str]]) -> str:
+    return pd.Series([record.get(c, None) for c in COLUMNS], index=COLUMNS)
+
+
 def write_line(record: Dict[str, Union[None, int, float, str]]) -> str:
     line = "\t".join(str(record.get(c, ".")) for c in COLUMNS)
     return line
@@ -805,14 +798,14 @@ def runner(args: argparse.Namespace) -> None:
     records = defaultdict(list)
 
     if args.dbcan is not None:
-        dbcan = {d.strip() for d in args.dbcan.readlines()}
+        dbcan: Set[str] = {d.strip() for d in args.dbcan.readlines()}
     else:
-        dbcan = DBCAN_DEFAULT
+        dbcan = set(get_interesting_dbcan_ids())
 
     if args.pfam is not None:
-        pfam = {d.strip() for d in args.pfam.readlines()}
+        pfam: Set[str] = {d.strip() for d in args.pfam.readlines()}
     else:
-        pfam = PFAM_DEFAULT
+        pfam = set(get_interesting_pfam_ids())
 
     for line in args.infile:
         sline = line.strip()
@@ -855,19 +848,11 @@ def runner(args: argparse.Namespace) -> None:
             args.virulence_homology_weight,
             args.lethal_homology_weight,
         )
-        record["manual_novel_effector_score"] = effector_score_it(
-            record,
-            args.effectorp1_weight,
-            args.effectorp2_weight,
-            0.0,
-            0.0,
-            0.0,
-        )
         out_records.append(record)
 
-    out_records.sort(key=lambda r: r["manual_effector_score"], reverse=True)
+    df = pd.DataFrame([record_to_series(r) for r in out_records])
+    df["effector_score"] = run_ltr(df)
+    df.sort_values("effector_score", ascending=False, inplace=True)
 
-    for record in out_records:
-        line = write_line(record)
-        print(line, file=args.outfile)
+    df.to_csv(args.outfile, sep="\t", index=False, na_rep=".")
     return
