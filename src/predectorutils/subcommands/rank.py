@@ -816,7 +816,6 @@ def runner(args: argparse.Namespace) -> None:
         record = get_analysis(dline)
         records[dline["protein_name"]].append(record)
 
-    print("\t".join(COLUMNS), file=args.outfile)
     out_records = []
 
     for name, protein_records in records.items():
