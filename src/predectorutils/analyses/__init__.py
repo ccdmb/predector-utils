@@ -6,13 +6,16 @@ import enum
 from predectorutils.analyses.base import Analysis, GFFAble
 from predectorutils.analyses.apoplastp import ApoplastP
 from predectorutils.analyses.deepsig import DeepSig
-from predectorutils.analyses.effectorp import EffectorP1, EffectorP2
+from predectorutils.analyses.effectorp import (
+    EffectorP1, EffectorP2, EffectorP3
+)
 from predectorutils.analyses.phobius import Phobius
 from predectorutils.analyses.signalp import (
     SignalP3NN,
     SignalP3HMM,
     SignalP4,
-    SignalP5
+    SignalP5,
+    SignalP6,
 )
 from predectorutils.analyses.targetp import TargetPNonPlant, TargetPPlant
 from predectorutils.analyses.tmhmm import TMHMM
@@ -26,7 +29,9 @@ from predectorutils.analyses.hhr import HHRAlignment  # noqa
 
 
 __all__ = ["Analysis", "ApoplastP", "DeepSig", "EffectorP1", "EffectorP2",
+           "EffectorP3",
            "Phobius", "SignalP3NN", "SignalP3HMM", "SignalP4", "SignalP5",
+           "SignalP6",
            "TargetPNonPlant", "TargetPPlant", "TMHMM", "LOCALIZER", "DeepLoc",
            "DomTbl", "DBCAN", "GFFAble", "PfamScan", "PepStats", "MMSeqs",
            "PHIBase", "HHRAligmment", "EffectorSearch"]
@@ -53,6 +58,8 @@ class Analyses(enum.Enum):
     phibase = 17
     pepstats = 18
     effectorsearch = 19
+    signalp6 = 20
+    effectorp3 = 21
 
     def __str__(self) -> str:
         return self.name
@@ -73,6 +80,7 @@ NAME_TO_ANALYSIS = {
     Analyses.signalp3_hmm: SignalP3HMM,
     Analyses.signalp4: SignalP4,
     Analyses.signalp5: SignalP5,
+    Analyses.signalp6: SignalP6,
     Analyses.deepsig: DeepSig,
     Analyses.phobius: Phobius,
     Analyses.tmhmm: TMHMM,
@@ -80,6 +88,7 @@ NAME_TO_ANALYSIS = {
     Analyses.targetp_non_plant: TargetPNonPlant,
     Analyses.effectorp1: EffectorP1,
     Analyses.effectorp2: EffectorP2,
+    Analyses.effectorp3: EffectorP3,
     Analyses.apoplastp: ApoplastP,
     Analyses.localizer: LOCALIZER,
     Analyses.deeploc: DeepLoc,

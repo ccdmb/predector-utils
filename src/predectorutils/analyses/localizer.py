@@ -40,7 +40,7 @@ def parse_tp_field(
     if field == "-":
         return (False, None, None, None)
 
-    res = parse_field(parse_regex(TP_REGEX), "field_name")(field)
+    res = parse_field(parse_regex(TP_REGEX), field_name)(field)
     if isinstance(res, FieldParseError):
         raise res
 

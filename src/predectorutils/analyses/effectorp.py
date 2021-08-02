@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+import re
+
+from typing import Optional
 from typing import TextIO
 from typing import Iterator
 
@@ -9,6 +12,7 @@ from predectorutils.parsers import (
     LineParseError,
     raise_it,
     parse_field,
+    parse_regex,
     parse_str,
     parse_float,
     is_one_of
@@ -134,6 +138,113 @@ class EffectorP2(Analysis):
 
     @classmethod
     def from_file(cls, handle: TextIO) -> Iterator["EffectorP2"]:
+        comment = False
+        for i, line in enumerate(handle):
+            sline = line.strip()
+            if comment and sline.startswith("---------"):
+                comment = False
+                continue
+            elif comment and sline.startswith("# Identifier"):
+                comment = False
+                continue
+            elif comment:
+                continue
+            elif (i == 0) and sline.startswith("---------"):
+                comment = True
+                continue
+
+            if sline.startswith("#"):
+                continue
+            elif sline == "":
+                continue
+
+            try:
+                yield cls.from_line(sline)
+            except (LineParseError, FieldParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
+        return
+
+
+e3_name = raise_it(parse_field(parse_str, "name"))
+e3_prediction = raise_it(parse_field(
+    is_one_of([
+        "Cytoplasmic effector", "Apoplastic effector",
+        "Cytoplasmic/apoplastic effector", "Apoplastic/cytoplasmic effector",
+        "Non-effector"
+    ]),
+    "prediction"
+))
+
+E3_REGEX = re.compile(r"^Y \((?P<prob>\d?\.?\d+)\)$")
+
+
+def e3_parse_field(field: str, field_name: str) -> Optional[float]:
+    field = field.strip()
+    if field == "-":
+        return None
+
+    res = parse_field(parse_regex(E3_REGEX), field_name)(field)
+    if isinstance(res, FieldParseError):
+        raise res
+
+    return float(res["prob"])
+
+
+class EffectorP3(Analysis):
+
+    """ """
+
+    columns = [
+        "name",
+        "prediction",
+        "cytoplasmic_prob",
+        "apoplastic_prob",
+        "noneffector_prob",
+    ]
+    types = [str, str, float]
+    analysis = "effectorp3"
+    software = "EffectorP"
+
+    def __init__(
+        self,
+        name: str,
+        prediction: str,
+        cytoplasmic_prob: Optional[float],
+        apoplastic_prob: Optional[float],
+        noneffector_prob: Optional[float],
+    ) -> None:
+        self.name = name
+        self.prediction = prediction
+        self.cytoplasmic_prob = cytoplasmic_prob
+        self.apoplastic_prob = apoplastic_prob
+        self.noneffector_prob = noneffector_prob
+        return
+
+    @classmethod
+    def from_line(cls, line: str) -> "EffectorP3":
+        """ Parse an EffectorP3 line as an object. """
+
+        if line == "":
+            raise LineParseError("The line was empty.")
+
+        sline = line.strip().split("\t")
+
+        if len(sline) != 5:
+            raise LineParseError(
+                "The line had the wrong number of columns. "
+                f"Expected 5 but got {len(sline)}."
+            )
+
+        return cls(
+            e3_name(sline[0]),
+            e3_prediction(sline[4]),
+            e3_parse_field(sline[1], "cytoplasmic_prob"),
+            e3_parse_field(sline[2], "apoplastic_prob"),
+            e3_parse_field(sline[3], "noneffector_prob"),
+        )
+
+    @classmethod
+    def from_file(cls, handle: TextIO) -> Iterator["EffectorP3"]:
         comment = False
         for i, line in enumerate(handle):
             sline = line.strip()

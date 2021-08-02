@@ -264,7 +264,7 @@ s3hmm_sprob_decision = raise_it(parse_field(
 ))
 
 
-class SignalP3HMM(Analysis):
+class SignalP3HMM(Analysis, GFFAble):
 
     """ For each organism class in SignalP; Eukaryote, Gram-negative and
     Gram-positive, two different neural networks are used, one for
@@ -432,7 +432,7 @@ s4_networks_used = raise_it(parse_field(
 ))
 
 
-class SignalP4(Analysis):
+class SignalP4(Analysis, GFFAble):
 
     """ The graphical output from SignalP (neural network) comprises
     three different scores, C, S and Y. Two additional scores are reported
@@ -622,7 +622,7 @@ s5_cs_actual_pos = raise_it(parse_field(
 ))
 
 
-class SignalP5(Analysis):
+class SignalP5(Analysis, GFFAble):
 
     """ One annotation is attributed to each protein, the one that has
     the highest probability. The protein can have a Sec signal peptide
@@ -720,6 +720,133 @@ class SignalP5(Analysis):
             return
 
         cs = s5_cs_actual_pos(self.cs_pos)
+
+        # d_decision = prediction of issecreted.
+        # ymax = first aa of mature peptide
+        attr = GFFAttributes(custom={
+            "prediction": str(self.prediction),
+            "prob_signal": str(self.prob_signal),
+            "prob_other": str(self.prob_other),
+            "prob_cut_site": str(cs["cs_prob"]),
+        })
+
+        yield GFFRecord(
+            seqid=self.name,
+            source=self.analysis,
+            type="signal_peptide",
+            start=0,
+            end=int(cs["cs"]) - 1,
+            score=self.prob_signal,
+            strand=Strand.PLUS,
+            attributes=attr
+        )
+        return
+
+
+s6_name = raise_it(parse_field(parse_str, "name"))
+s6_prediction = raise_it(parse_field(
+    is_one_of(["SP", "NO_SP"]),
+    "prediction"
+))
+s6_prob_signal = raise_it(parse_field(parse_float, "prob_signal"))
+s6_prob_other = raise_it(parse_field(parse_float, "prob_other"))
+s6_cs_pos = raise_it(parse_field(parse_str, "cs_pos"))
+
+SP6_CS_POS_REGEX = re.compile(
+    r"CS\s+pos:\s+\d+-(?P<cs>\d+)\.?\s+"
+    r"Pr: (?P<cs_prob>[-+]?\d*\.?\d+)"
+)
+s6_cs_actual_pos = raise_it(parse_field(
+    parse_regex(SP6_CS_POS_REGEX),
+    "cs_pos"
+))
+
+
+class SignalP6(Analysis, GFFAble):
+
+    name: str
+    prediction: str
+    prob_signal: float
+    prob_other: float
+    cs_pos: Optional[str]
+
+    columns = ["name", "prediction", "prob_signal", "prob_other", "cs_pos"]
+    types = [str, str, float, float, str_or_none]
+    analysis = "signalp6"
+    software = "SignalP"
+
+    def __init__(
+        self,
+        name: str,
+        prediction: str,
+        prob_signal: float,
+        prob_other: float,
+        cs_pos: Optional[str],
+    ) -> None:
+        self.name = name
+        self.prediction = prediction
+        self.prob_signal = prob_signal
+        self.prob_other = prob_other
+        self.cs_pos = cs_pos
+        return
+
+    @classmethod
+    def from_line(cls, line: str) -> "SignalP6":
+        """ Parse a short-format signalp5 line as an object. """
+
+        if line == "":
+            raise LineParseError("The line was empty.")
+
+        sline = line.strip().split("\t")
+
+        if len(sline) == 5:
+            cs_pos: Optional[str] = s6_cs_pos(sline[4])
+        elif len(sline) == 4:
+            cs_pos = None
+        else:
+            raise LineParseError(
+                "The line had the wrong number of columns. "
+                f"Expected 4 or 5 but got {len(sline)}"
+            )
+
+        return cls(
+            s6_name(sline[0]),
+            s6_prediction(sline[1]),
+            s6_prob_signal(sline[2]),
+            s6_prob_other(sline[3]),
+            cs_pos,
+        )
+
+    @classmethod
+    def from_file(cls, handle: TextIO) -> Iterator["SignalP6"]:
+        for i, line in enumerate(handle):
+            sline = line.strip()
+            if sline.startswith("#"):
+                continue
+            elif sline == "":
+                continue
+
+            try:
+                yield cls.from_line(sline)
+
+            except (LineParseError, FieldParseError) as e:
+                raise e.as_parse_error(line=i).add_filename_from_handle(handle)
+        return
+
+    def as_gff(
+        self,
+        keep_all: bool = False,
+        id_index: int = 1,
+    ) -> Iterator[GFFRecord]:
+
+        if self.cs_pos is None:
+            return
+
+        # dict(cs, cs_prob)
+        if self.cs_pos == "CS pos: ?. Probable protein fragment":
+            return
+
+        cs = s6_cs_actual_pos(self.cs_pos)
 
         # d_decision = prediction of issecreted.
         # ymax = first aa of mature peptide
