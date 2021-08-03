@@ -117,6 +117,7 @@ COLUMNS = [
     "signalp3_hmm_s",
     "signalp4_d",
     "signalp5_prob",
+    "signalp6_prob",
 ]
 
 
@@ -651,6 +652,11 @@ def construct_row(  # noqa
                 ["Effector", "Unlikely effector"]
             )
 
+        elif isinstance(an, EffectorP3):
+            record["effectorp3_cytoplasmic"] = an.cytoplasmic_prob
+            record["effectorp3_apoplastic"] = an.apoplastic_prob
+            record["effectorp3_noneffector"] = an.noneffector_prob
+
         elif isinstance(an, Phobius):
             record["phobius_sp"] = int(an.sp)
             record["phobius_tmcount"] = an.tm
@@ -680,6 +686,11 @@ def construct_row(  # noqa
             # For some proteins, this outputs a very high number
             # so we constrain it here.
             record["signalp5_prob"] = min([an.prob_signal, 1.0])
+            sp_gff.extend(an.as_gff())
+
+        elif isinstance(an, SignalP6):
+            record["signalp6"] = int(an.prediction == "SP")
+            record["signalp6_prob"] = min([an.prob_signal, 1.0])
             sp_gff.extend(an.as_gff())
 
         elif isinstance(an, TargetPNonPlant):

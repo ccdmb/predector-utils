@@ -17,6 +17,7 @@ from predectorutils.parsers import (
     parse_float,
     is_one_of
 )
+from predectorutils.analyses.base import float_or_none
 
 
 e1_name = raise_it(parse_field(parse_str, "name"))
@@ -201,7 +202,7 @@ class EffectorP3(Analysis):
         "apoplastic_prob",
         "noneffector_prob",
     ]
-    types = [str, str, float]
+    types = [str, str, float_or_none, float_or_none, float_or_none]
     analysis = "effectorp3"
     software = "EffectorP"
 

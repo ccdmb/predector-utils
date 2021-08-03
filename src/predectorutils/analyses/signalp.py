@@ -812,8 +812,8 @@ class SignalP6(Analysis, GFFAble):
         return cls(
             s6_name(sline[0]),
             s6_prediction(sline[1]),
-            s6_prob_signal(sline[2]),
-            s6_prob_other(sline[3]),
+            s6_prob_signal(sline[3]),
+            s6_prob_other(sline[2]),
             cs_pos,
         )
 
