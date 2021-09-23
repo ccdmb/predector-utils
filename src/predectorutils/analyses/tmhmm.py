@@ -110,6 +110,8 @@ class TMHMM(Analysis, GFFAble):
                 continue
             elif sline == "":
                 continue
+            elif sline.startswith("WARNING"):
+                continue
 
             try:
                 yield cls.from_line(sline)
