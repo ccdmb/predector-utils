@@ -760,7 +760,7 @@ def construct_row(  # noqa
     return record
 
 
-def run_ltr(df: pd.DataFrame) -> np.array:
+def run_ltr(df: pd.DataFrame) -> np.ndarray:
     df = df.copy()
 
     df["aa_c_prop"] = df["aa_c_number"] / df["residue_number"]

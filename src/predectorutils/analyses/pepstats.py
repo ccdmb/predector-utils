@@ -9,16 +9,20 @@ from typing import Callable
 from typing import Tuple
 from typing import List, Sequence
 from typing import Pattern
+from typing import Optional
 
 from typing import Iterable
 
-from predectorutils.analyses.base import Analysis
+from predectorutils.analyses.base import Analysis, float_or_none
 from predectorutils.parsers import (
     ParseError,
     ValueParseError,
     BlockParseError,
     LineParseError,
     parse_regex,
+    parse_or_none,
+    parse_int,
+    raise_it
 )
 
 
@@ -107,9 +111,18 @@ AVWGT_REGEX = re.compile(
     r"(?P<average_residue_weight>[-+]?\d*\.?\d+)\s+"
     r"Charge\s+=\s+(?P<charge>[-+]?\d*\.?\d+)"
 )
+
+# This will match a number or None
+# None will sometimes occur for unknown reasons
 ISOELEC_REGEX = re.compile(
-    r"Isoelectric\s+Point\s+=\s+(?P<isoelectric_point>[-+]?\d*\.?\d+)"
+    r"Isoelectric\s+Point\s+=\s+(?P<isoelectric_point>None|[-+]?\d*\.?\d+)"
 )
+
+# This just converts results of regext to a float or none.
+# It could be simpler because the regex should give us some guarantees,
+# but why not use the things I have.
+parse_isoelec_regex = raise_it(parse_or_none(parse_int, "None"))
+
 A280_MOLAR_REGEX = re.compile(
     r"A280\s+Molar\s+Extinction\s+Coefficients\s+=\s+"
     r"(?P<a280_molar_extinction_coefficients_reduced>\d+)\s+\(reduced\)\s+"
@@ -255,7 +268,8 @@ class PepStats(Analysis):
         "property_acidic_mole",
     ]
     types = [
-        str, float, int, float, float, float, int, float, float, float, float,
+        str, float, int, float, float, float_or_none, int, float, float, float,
+        float,
         int, int, int, int, int, int, int, int, int, int, int, int, int, int,
         int, int, int, int, int, int, int, int, int, int, int, int,
         float, float, float, float, float, float, float, float, float, float,
@@ -277,7 +291,7 @@ class PepStats(Analysis):
         residues: int,
         average_residue_weight: float,
         charge: float,
-        isoelectric_point: float,
+        isoelectric_point: Optional[float],
         a280_molar_extinction_coefficients_reduced: int,
         a280_molar_extinction_coefficients_cysteine_bridges: float,
         a280_1mgml_extinction_coefficients_reduced: float,
@@ -491,6 +505,8 @@ class PepStats(Analysis):
 
     @classmethod
     def from_block(cls, lines: Sequence[str]) -> "PepStats":
+        from copy import copy
+
         record: Dict[str, str] = dict()
 
         if not isinstance(lines, Iterable):
@@ -501,7 +517,9 @@ class PepStats(Analysis):
         parse_regex_line(ilines, NAME_REGEX, record)
         parse_regex_line(ilines, MOLWGT_REGEX, record)
         parse_regex_line(ilines, AVWGT_REGEX, record)
+
         parse_regex_line(ilines, ISOELEC_REGEX, record)
+
         parse_regex_line(ilines, A280_MOLAR_REGEX, record)
         parse_regex_line(ilines, A280_1MGML_REGEX, record)
         parse_regex_line(ilines, IMPROB_REGEX, record)
@@ -525,10 +543,20 @@ class PepStats(Analysis):
 
         record.update(parse_property_table(ilines))
 
+        type_converters_ = tuple(cls.types)
+
+        # 5 is Isoelectric point
+        type_converters = (
+            type_converters_[:5] +
+            (parse_isoelec_regex, ) +
+            type_converters_[6:]
+        )
+        del type_converters_
+
         fields = tuple(
             type_(record.get(cname))
             for cname, type_
-            in zip(cls.columns, cls.types)
+            in zip(cls.columns, type_converters)
         )
 
         return cls(*fields)
