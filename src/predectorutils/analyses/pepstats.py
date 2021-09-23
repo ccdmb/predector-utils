@@ -21,7 +21,7 @@ from predectorutils.parsers import (
     LineParseError,
     parse_regex,
     parse_or_none,
-    parse_int,
+    parse_float,
     raise_it
 )
 
@@ -121,7 +121,7 @@ ISOELEC_REGEX = re.compile(
 # This just converts results of regext to a float or none.
 # It could be simpler because the regex should give us some guarantees,
 # but why not use the things I have.
-parse_isoelec_regex = raise_it(parse_or_none(parse_int, "None"))
+parse_isoelec_regex = raise_it(parse_or_none(parse_float, "None"))
 
 A280_MOLAR_REGEX = re.compile(
     r"A280\s+Molar\s+Extinction\s+Coefficients\s+=\s+"
