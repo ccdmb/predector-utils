@@ -28,10 +28,10 @@ jobs:
         with:
           meta_yaml_dir: conda-build
           python-version: ${{ matrix.python-version }} # Values previously defined in `matrix`
-          platform_linux-64: true
-          platform_osx-64: true
-          platform_win-64: true
           user: predector
           label: auto
           token: ${{ secrets.ANACONDA_TOKEN }} # Replace with the right name of your secret
 
+          #platform_linux-64: true
+          #platform_osx-64: true
+          #platform_win-64: true
