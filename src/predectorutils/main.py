@@ -27,6 +27,9 @@ from predectorutils.subcommands.rank import runner as rank_runner
 from predectorutils.subcommands.decode import cli as decode_cli
 from predectorutils.subcommands.decode import runner as decode_runner
 
+from predectorutils.subcommands.regex import cli as regex_cli
+from predectorutils.subcommands.regex import runner as regex_runner
+
 from predectorutils.parsers import ParseError
 from predectorutils.exceptions import (
     EXIT_VALID, EXIT_KEYBOARD, EXIT_UNKNOWN, EXIT_CLI, EXIT_INPUT_FORMAT,
@@ -143,6 +146,15 @@ def cli(prog: str, args: List[str]) -> argparse.Namespace:
 
     decode_cli(decode_subparser)
 
+    regex_subparser = subparsers.add_parser(
+        "regex",
+        help=(
+            "Search for a regular expression in sequences."
+        )
+    )
+
+    regex_cli(regex_subparser)
+
     parsed = parser.parse_args(args)
 
     if parsed.subparser_name is None:
@@ -174,6 +186,8 @@ def main():  # noqa
             rank_runner(args)
         elif args.subparser_name == "decode":
             decode_runner(args)
+        elif args.subparser_name == "regex":
+            regex_runner(args)
 
     except ParseError as e:
         if e.line is not None:
@@ -191,6 +205,7 @@ def main():  # noqa
             "We can't control these, and they're usually related to your OS.\n"
             "Try running again.\n"
         )
+        raise e
         print(msg, file=sys.stderr)
         print(e.strerror, file=sys.stderr)
         sys.exit(EXIT_SYSERR)
@@ -215,7 +230,7 @@ def main():  # noqa
             "authors.\nWe will be extremely grateful!\n\n"
             "You can email us at {}.\n"
             "Alternatively, you can file the issue directly on the repo "
-            "<https://bitbucket.org/ccdm-curtin/catastrophy/issues>\n\n"
+            "<https://github.com/ccdmb/predector-utils>\n\n"
             "Please attach a copy of the following message:"
         ).format(__email__)
         print(e, file=sys.stderr)

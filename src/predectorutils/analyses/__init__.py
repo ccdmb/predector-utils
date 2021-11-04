@@ -26,6 +26,7 @@ from predectorutils.analyses.pfamscan import PfamScan
 from predectorutils.analyses.pepstats import PepStats
 from predectorutils.analyses.mmseqs import MMSeqs, PHIBase, EffectorSearch
 from predectorutils.analyses.hhr import HHRAlignment  # noqa
+from predectorutils.analyses.regex import RegexAnalysis  # noqa
 
 
 __all__ = ["Analysis", "ApoplastP", "DeepSig", "EffectorP1", "EffectorP2",
@@ -34,7 +35,7 @@ __all__ = ["Analysis", "ApoplastP", "DeepSig", "EffectorP1", "EffectorP2",
            "SignalP6",
            "TargetPNonPlant", "TargetPPlant", "TMHMM", "LOCALIZER", "DeepLoc",
            "DomTbl", "DBCAN", "GFFAble", "PfamScan", "PepStats", "MMSeqs",
-           "PHIBase", "HHRAligmment", "EffectorSearch"]
+           "PHIBase", "HHRAligmment", "EffectorSearch", "RegexAnalysis"]
 
 
 class Analyses(enum.Enum):
@@ -60,6 +61,7 @@ class Analyses(enum.Enum):
     effectorsearch = 19
     signalp6 = 20
     effectorp3 = 21
+    regexanalysis = 22
 
     def __str__(self) -> str:
         return self.name
@@ -97,4 +99,5 @@ NAME_TO_ANALYSIS = {
     Analyses.pepstats: PepStats,
     Analyses.phibase: PHIBase,
     Analyses.effectorsearch: EffectorSearch,
+    Analyses.regexanalysis: RegexAnalysis,
 }

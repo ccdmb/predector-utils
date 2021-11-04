@@ -20,7 +20,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "outfasta",
         type=argparse.FileType('w'),
-        help="Where to write the output to. Default: stdout"
+        help="Where to write the output to."
     )
 
     parser.add_argument(
@@ -85,12 +85,15 @@ def runner(args: argparse.Namespace) -> None:
         for seq in seqs:
             seq.seq = Seq(
                 str(seq.seq)
+                .replace("-", "")
                 .rstrip("*")
                 .upper()
                 .replace("*", "X")
                 .replace("J", "X")
                 .replace("B", "X")
                 .replace("Z", "X")
+                .replace("U", "X")
+                .replace("O", "X")
             )
 
             id_, checksum = get_checksum(seq)
