@@ -271,3 +271,7 @@ class EffectorP3(Analysis):
             except (LineParseError, FieldParseError) as e:
                 raise e.as_parse_error(line=i).add_filename_from_handle(handle)
         return
+
+
+class EffectorP3Fungal(EffectorP3):
+    analysis = "effectorp3_fungal"

@@ -7,7 +7,7 @@ from predectorutils.analyses.base import Analysis, GFFAble
 from predectorutils.analyses.apoplastp import ApoplastP
 from predectorutils.analyses.deepsig import DeepSig
 from predectorutils.analyses.effectorp import (
-    EffectorP1, EffectorP2, EffectorP3
+    EffectorP1, EffectorP2, EffectorP3, EffectorP3Fungal
 )
 from predectorutils.analyses.phobius import Phobius
 from predectorutils.analyses.signalp import (
@@ -27,15 +27,23 @@ from predectorutils.analyses.pepstats import PepStats
 from predectorutils.analyses.mmseqs import MMSeqs, PHIBase, EffectorSearch
 from predectorutils.analyses.hhr import HHRAlignment  # noqa
 from predectorutils.analyses.regex import RegexAnalysis  # noqa
+from predectorutils.analyses.deepredeff import (
+    DeepredeffFungi,
+    DeepredeffOomycete,
+    DeepredeffBacteria
+)
 
 
-__all__ = ["Analysis", "ApoplastP", "DeepSig", "EffectorP1", "EffectorP2",
-           "EffectorP3",
-           "Phobius", "SignalP3NN", "SignalP3HMM", "SignalP4", "SignalP5",
-           "SignalP6",
-           "TargetPNonPlant", "TargetPPlant", "TMHMM", "LOCALIZER", "DeepLoc",
-           "DomTbl", "DBCAN", "GFFAble", "PfamScan", "PepStats", "MMSeqs",
-           "PHIBase", "HHRAligmment", "EffectorSearch", "RegexAnalysis"]
+__all__ = [
+    "Analysis", "ApoplastP", "DeepSig",
+    "EffectorP1", "EffectorP2", "EffectorP3", "EffectorP3Fungal"
+    "Phobius",
+    "SignalP3NN", "SignalP3HMM", "SignalP4", "SignalP5", "SignalP6",
+    "TargetPNonPlant", "TargetPPlant", "TMHMM", "LOCALIZER", "DeepLoc",
+    "DomTbl", "DBCAN", "GFFAble", "PfamScan", "PepStats", "MMSeqs",
+    "PHIBase", "HHRAligmment", "EffectorSearch", "RegexAnalysis",
+    "DeepredeffFungi", "DeepredeffOomycete", "DeepredeffBacteria",
+]
 
 
 class Analyses(enum.Enum):
@@ -61,7 +69,11 @@ class Analyses(enum.Enum):
     effectorsearch = 19
     signalp6 = 20
     effectorp3 = 21
-    regexanalysis = 22
+    effectorp3_fungal = 22
+    regexanalysis = 23
+    deepredeff_fungi = 24
+    deepredeff_oomycete = 25
+    deepredeff_bacteria = 26
 
     def __str__(self) -> str:
         return self.name
@@ -91,6 +103,7 @@ NAME_TO_ANALYSIS = {
     Analyses.effectorp1: EffectorP1,
     Analyses.effectorp2: EffectorP2,
     Analyses.effectorp3: EffectorP3,
+    Analyses.effectorp3_fungal: EffectorP3Fungal,
     Analyses.apoplastp: ApoplastP,
     Analyses.localizer: LOCALIZER,
     Analyses.deeploc: DeepLoc,
@@ -100,4 +113,7 @@ NAME_TO_ANALYSIS = {
     Analyses.phibase: PHIBase,
     Analyses.effectorsearch: EffectorSearch,
     Analyses.regexanalysis: RegexAnalysis,
+    Analyses.deepredeff_fungi: DeepredeffFungi,
+    Analyses.deepredeff_oomycete: DeepredeffOomycete,
+    Analyses.deepredeff_bacteria: DeepredeffBacteria,
 }
