@@ -41,8 +41,11 @@ from predectorutils.analyses import (
     PfamScan,
     PepStats,
     PHIBase,
-    EffectorSearch
+    EffectorSearch,
+    DeepredeffFungi,
 )
+
+#  RegexAnalysis,
 
 COLUMNS = [
     "name",
@@ -65,6 +68,7 @@ COLUMNS = [
     "effectorp3_cytoplasmic",
     "effectorp3_apoplastic",
     "effectorp3_noneffector",
+    "deepredeff_fungi",
     "is_secreted",
     "any_signal_peptide",
     "apoplastp",
@@ -733,6 +737,9 @@ def construct_row(  # noqa
             if an.decide_significant():
                 record["effector_match"] = 1
                 effector_matches.add(an.target)
+
+        elif isinstance(an, DeepredeffFungi):
+            record["deepredeff_fungi"] = float(an.s_score)
 
     decide_any_signal(record)
     decide_is_transmembrane(record, sp_gff, tm_gff, tmhmm_first_60_threshold)

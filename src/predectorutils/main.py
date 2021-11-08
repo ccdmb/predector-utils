@@ -30,6 +30,9 @@ from predectorutils.subcommands.decode import runner as decode_runner
 from predectorutils.subcommands.regex import cli as regex_cli
 from predectorutils.subcommands.regex import runner as regex_runner
 
+from predectorutils.subcommands.precomputed import cli as precomp_cli
+from predectorutils.subcommands.precomputed import runner as precomp_runner
+
 from predectorutils.parsers import ParseError
 from predectorutils.exceptions import (
     EXIT_VALID, EXIT_KEYBOARD, EXIT_UNKNOWN, EXIT_CLI, EXIT_INPUT_FORMAT,
@@ -155,6 +158,15 @@ def cli(prog: str, args: List[str]) -> argparse.Namespace:
 
     regex_cli(regex_subparser)
 
+    precomp_subparser = subparsers.add_parser(
+        "precomputed",
+        help=(
+            "Fetch precomputed results and output remaining sequences."
+        )
+    )
+
+    precomp_cli(precomp_subparser)
+
     parsed = parser.parse_args(args)
 
     if parsed.subparser_name is None:
@@ -188,6 +200,8 @@ def main():  # noqa
             decode_runner(args)
         elif args.subparser_name == "regex":
             regex_runner(args)
+        elif args.subparser_name == "precomputed":
+            precomp_runner(args)
 
     except ParseError as e:
         if e.line is not None:

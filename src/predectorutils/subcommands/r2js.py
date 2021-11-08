@@ -5,8 +5,15 @@ import argparse
 import json
 
 from typing import Dict
+from typing import Tuple
 from typing import Any
 from typing import Optional
+from typing import TextIO
+
+from Bio import SeqIO
+from Bio.SeqRecord import SeqRecord
+from Bio.SeqUtils.CheckSum import seguid
+
 
 from predectorutils import analyses
 
@@ -24,6 +31,12 @@ def cli(parser: argparse.ArgumentParser) -> None:
         "infile",
         type=argparse.FileType('r'),
         help="The text file to parse as input. Use '-' for stdin."
+    )
+
+    parser.add_argument(
+        "infasta",
+        type=argparse.FileType('r'),
+        help="The fasta file used to calculate results"
     )
 
     parser.add_argument(
@@ -72,11 +85,15 @@ def get_line(
     database_version: Optional[str],
     analysis_type: analyses.Analyses,
     analysis: analyses.Analysis,
+    checksums: Dict[str, str]
 ) -> Dict[Any, Any]:
+    name = getattr(analysis, analysis.name_column)
     out = {
-        "protein_name": getattr(analysis, analysis.name_column),
+        "protein_name": name,
         "software": analysis.software,
+        "database": analysis.database,
         "analysis": str(analysis_type),
+        "checksum": checksums.get(name, None),
         "data": analysis.as_dict()
     }
 
@@ -92,7 +109,23 @@ def get_line(
     return out
 
 
+def get_checksum(seq: SeqRecord) -> Tuple[str, str]:
+    checksum = seguid(str(seq.seq))
+    return seq.id, checksum
+
+
+def get_checksums(handle: TextIO) -> Dict[str, str]:
+    seqs = SeqIO.parse(handle, "fasta")
+    out: Dict[str, str] = {}
+
+    for seq in seqs:
+        id_, checksum = get_checksum(seq)
+        out[id_] = checksum
+    return out
+
+
 def runner(args: argparse.Namespace) -> None:
+    checksums = get_checksums(args.infasta)
     analysis = args.format.get_analysis()
     for line in analysis.from_file(args.infile):
         dline = get_line(
@@ -100,7 +133,8 @@ def runner(args: argparse.Namespace) -> None:
             args.software_version,
             args.database_version,
             args.format,
-            line
+            line,
+            checksums
         )
         print(json.dumps(dline), file=args.outfile)
     return
