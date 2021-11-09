@@ -8,13 +8,18 @@ from typing import Iterator
 from typing import Tuple
 from typing import TextIO
 from typing import List, Set, Dict
+from typing import Optional
 
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqUtils.CheckSum import seguid
 
-from predectorutils.indexedresults import AnalysisTuple, IndexedResults
-from predectorutils.analyses import Analysis, Analyses
+import pandas as pd
+
+from predectorutils.indexedresults import IndexedResults
+from predectorutils.analyses import Analyses
+
+ANALYSIS_COLUMNS = ["analysis", "software_version", "database_version"]
 
 
 def cli(parser: argparse.ArgumentParser) -> None:
@@ -37,8 +42,9 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "inldjson",
+        "-p", "--precomputed",
         type=argparse.FileType('r'),
+        default=None,
         help="The ldjson file to parse as input. Use '-' for stdin."
     )
 
@@ -61,40 +67,12 @@ def cli(parser: argparse.ArgumentParser) -> None:
     return
 
 
-def get_targets(infile: TextIO) -> Iterator[AnalysisTuple]:
-    for line in infile:
-        sline = line.strip().split("\n")
-        an = Analyses.from_string(sline[0])
-        yield AnalysisTuple(an, sline[1], sline[2])
-    return
-
-
-def get_precomputed_analysis(results, an_key, checksums) -> Iterator[Analysis]:
-    for line in results[(an_key, )]:
-        sline = line.strip()
-        dline = json.loads(sline)
-        cls = Analyses.from_string(dline["analysis"]).get_analysis()
-        analysis = cls.from_dict(dline["data"])
-        yield analysis
-    return
-
-
-def update_analysis_line(s: str, name: str) -> str:
-    s = s.strip()
-    d = json.loads(s)
-    cls = Analyses.from_string(d["analysis"]).get_analysis()
-    analysis = cls.from_dict(d["data"])
-    setattr(analysis, analysis.name_column, name)
-    d["data"] = analysis.as_dict()
-    return json.dumps(d)
-
-
 def get_checksum(seq: SeqRecord) -> Tuple[str, str]:
     checksum = seguid(str(seq.seq))
     return seq.id, checksum
 
 
-def get_checksums(infile: TextIO) -> Dict[str, str]:
+def get_id_to_checksum(infile: TextIO) -> Dict[str, str]:
     checksums: Dict[str, str] = {}
 
     infile.seek(0)
@@ -107,23 +85,7 @@ def get_checksums(infile: TextIO) -> Dict[str, str]:
     return checksums
 
 
-def filter_seqs_by_done(
-    seqs: Iterator[SeqRecord],
-    an: Analyses,
-    checksums: Dict[str, str],
-    done: Dict[Analyses, Set[str]],
-) -> Iterator[SeqRecord]:
-    if an not in done:
-        return seqs
-
-    for seq in seqs:
-        chk = checksums[seq.id]
-        if chk not in done[an]:
-            yield seq
-    return
-
-
-def get_inv_checksums(checksums: Dict[str, str]) -> Dict[str, List[str]]:
+def get_checksum_to_ids(checksums: Dict[str, str]) -> Dict[str, List[str]]:
     d: Dict[str, List[str]] = dict()
 
     for id_, chk in checksums.items():
@@ -135,48 +97,159 @@ def get_inv_checksums(checksums: Dict[str, str]) -> Dict[str, List[str]]:
     return d
 
 
-def runner(args: argparse.Namespace) -> None:
-    # This thing just keeps the contents on disk.
-    # Helps save memory.
-    precomputed = IndexedResults.parse(args.inldjson)
-    checksums = get_checksums(args.infasta)
-    inv_checksums = get_inv_checksums(checksums)
+def update_analysis_line(s: str, name: str) -> str:
+    s = s.strip()
+    d = json.loads(s)
+    cls = Analyses.from_string(d["analysis"]).get_analysis()
+    analysis = cls.from_dict(d["data"])
+    setattr(analysis, analysis.name_column, name)
+    d["data"] = analysis.as_dict()
+    return json.dumps(d)
 
-    targets = get_targets(args.analyses)
 
-    done: Dict[Analyses, Set[str]] = {}
+def get_an_tuple(s: pd.Series) -> Tuple[str, str, Optional[str]]:
+    analysis = s["analysis"]
+    assert isinstance(analysis, str)
+
+    software_version = s["software_version"]
+    assert isinstance(software_version, str)
+
+    database_version = s["database_version"]
+    if database_version is not None:
+        assert isinstance(database_version, str)
+    return (analysis, software_version, database_version)
+
+
+def fetch_local_precomputed(
+    inhandle: TextIO,
+    targets: pd.DataFrame,
+    checksum_to_ids: Dict[str, List[str]],
+    outhandle: TextIO
+) -> Dict[Tuple[str, str, Optional[str]], Set[str]]:
+    precomputed = IndexedResults.parse(inhandle)
+
+    done_df = pd.merge(
+        targets,
+        precomputed,
+        on=ANALYSIS_COLUMNS,
+        how="inner"
+    )
+
+    done: Dict[Tuple[str, str, Optional[str]], Set[str]] = {}
     buf: List[str] = []
-    for an in targets:
-        for chk in checksums.values():
-            for line in precomputed[(targets, chk)]:
-                if an.analysis in done:
-                    done[an.analysis].add(chk)
-                else:
-                    done[an.analysis] = {chk}
 
-                for id_ in inv_checksums.get(chk, []):
-                    buf_line = update_analysis_line(line, id_)
-                    buf.append(buf_line)
+    for an, line in precomputed.fetch_df(done_df):
+        an_tup = get_an_tuple(an)
+        if an in done:
+            done[an_tup].add(an["checksum"])
+        else:
+            done[an_tup] = {an["checksum"]}
 
-                if len(buf) > 5000:
-                    print("\n".join(buf), file=args.outfile)
-                    buf = []
+        for id_ in checksum_to_ids.get(an["checksum"], []):
+            buf_line = update_analysis_line(line, id_)
+            buf.append(buf_line)
 
-        if len(buf) > 0:
-            print("\n".join(buf), file=args.outfile)
+        if len(buf) > 10000:
+            print("\n".join(buf), file=outhandle)
+            buf = []
 
-        args.infasta.seek(0)
+    if len(buf) > 0:
+        print("\n".join(buf), file=outhandle)
+    return done
+
+
+def find_remaining(
+    checksums: Set[str],
+    targets: pd.DataFrame,
+    done: Dict[Tuple[str, str, Optional[str]], Set[str]]
+) -> Iterator[Dict[str, str]]:
+    for i, row in targets.iterrows():
+        an = get_an_tuple(row)
+        sub_done = done.get(an, set())
+        for checksum in checksums:
+            if checksum in sub_done:
+                continue
+            else:
+                d: Dict[str, str] = {}
+                for k, v in zip(ANALYSIS_COLUMNS, an):
+                    if v is not None:
+                        d[k] = v
+
+                d["checksum"] = checksum
+                yield d
+    return
+
+
+def filter_seqs_by_done(
+    seqs: Iterator[SeqRecord],
+    an: Tuple[str, str, Optional[str]],
+    checksums: Dict[str, str],
+    done: Dict[Tuple[str, str, Optional[str]], Set[str]],
+) -> Iterator[SeqRecord]:
+    if an not in done:
+        return seqs
+
+    for seq in seqs:
+        chk = checksums[seq.id]
+        if chk not in done[an]:
+            yield seq
+    return
+
+
+def write_remaining_seqs(
+    infasta: TextIO,
+    targets: pd.DataFrame,
+    id_to_checksum: Dict[str, str],
+    done: Dict[Tuple[str, str, Optional[str]], Set[str]],
+    template: str
+):
+    for _, an in targets.iterrows():
+        infasta.seek(0)
+        an_tup = get_an_tuple(an)
         filtered = filter_seqs_by_done(
-            SeqIO.parse(args.infasta, "fasta"),
-            an.analysis,
-            checksums,
+            SeqIO.parse(infasta, "fasta"),
+            an_tup,
+            id_to_checksum,
             done,
         )
 
-        fname = args.template.format(analysis=an.analysis)
+        fname = template.format(analysis=an.analysis)
         dname = os.path.dirname(fname)
         if dname != '':
             os.makedirs(dname, exist_ok=True)
 
         SeqIO.write(filtered, fname, "fasta")
+
+    return
+
+
+def runner(args: argparse.Namespace) -> None:
+    id_to_checksum = get_id_to_checksum(args.infasta)
+    checksum_to_ids = get_checksum_to_ids(id_to_checksum)
+
+    targets = pd.read_csv(
+        args.analyses,
+        sep="\t",
+        names=ANALYSIS_COLUMNS
+    )
+
+    # This thing just keeps the contents on disk.
+    # Helps save memory.
+    if args.precomputed is not None:
+        done = fetch_local_precomputed(
+            args.precomputed,
+            targets,
+            checksum_to_ids,
+            args.outfile
+        )
+    else:
+        done = {}
+
+    write_remaining_seqs(
+        args.infasta,
+        targets,
+        id_to_checksum,
+        done,
+        args.template
+    )
     return

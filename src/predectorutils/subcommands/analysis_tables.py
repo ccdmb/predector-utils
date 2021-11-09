@@ -5,6 +5,7 @@ import argparse
 import json
 
 from typing import Iterator
+from typing import Set
 
 import pandas as pd
 
@@ -33,12 +34,11 @@ def cli(parser: argparse.ArgumentParser) -> None:
     return
 
 
-def get_analysis(results, an_key) -> Iterator[Analysis]:
-    for line in results[an_key]:
+def get_analysis(results, subdf) -> Iterator[Analysis]:
+    for _, line in results.fetch_df(subdf):
         sline = line.strip()
         dline = json.loads(sline)
         cls = Analyses.from_string(dline["analysis"]).get_analysis()
-        assert cls == an_key.analysis, cls
         analysis = cls.from_dict(dline["data"])
         yield analysis
     return
@@ -48,9 +48,18 @@ def runner(args: argparse.Namespace) -> None:
     # This thing just keeps the contents on disk.
     # Helps save memory.
     results = IndexedResults.parse(args.infile)
+    seen_analyses: Set[str] = set()
 
-    for analysis in results.analyses():
-        records = get_analysis(results, analysis)
+    for (analysis, _, _), subdf in results.index.groupby([
+        "analysis", "software_version", "database_version"
+    ]):
+        if analysis in seen_analyses:
+            raise ValueError(
+                "You shouldn't reach this point"
+            )
+        else:
+            seen_analyses.add(analysis)
+        records = get_analysis(results, subdf)
         df = pd.DataFrame(map(lambda x: x.as_series(), records))
 
         fname = args.template.format(analysis=analysis.analysis)

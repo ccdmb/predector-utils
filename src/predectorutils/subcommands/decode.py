@@ -88,7 +88,8 @@ def get_inv_checksums(tlines: List[TableLine]) -> Dict[str, List[str]]:
 
 def get_analysis(results, tlines) -> Iterator[str]:
     chk_to_id = get_inv_checksums(tlines)
-    for line in results[(None, list(chk_to_id.keys()))]:
+
+    for _, line in results.fetch(results["checksum"].isin(chk_to_id)):
         sline = line.strip()
         dline = json.loads(sline)
         cls = Analyses.from_string(dline["analysis"]).get_analysis()
@@ -105,7 +106,7 @@ def get_analysis(results, tlines) -> Iterator[str]:
 
 def runner(args: argparse.Namespace) -> None:
 
-    encoded_index = IndexedResults.parse(args.infile)
+    encoded = IndexedResults.parse(args.infile)
     tls = parse_table(args.map)
 
     for fname, tlines in tls.items():
@@ -118,7 +119,7 @@ def runner(args: argparse.Namespace) -> None:
         first_chunk = True
 
         buf = []
-        for line in get_analysis(encoded_index, tlines):
+        for line in get_analysis(encoded, tlines):
             buf.append(line)
             if len(buf) > 10000:
                 if first_chunk:
