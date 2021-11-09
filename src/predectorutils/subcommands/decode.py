@@ -3,6 +3,7 @@
 import sys
 import os
 from os.path import basename, splitext, dirname
+from copy import deepcopy
 
 import argparse
 import json
@@ -58,7 +59,7 @@ def parse_table(handle: TextIO) -> Dict[str, List[TableLine]]:
     out = defaultdict(list)
     for line in handle:
         tl = read_table_line(line)
-        out[tl.encoded].append(tl)
+        out[tl.checksum].append(tl)
 
     return out
 
@@ -91,16 +92,19 @@ def runner(args: argparse.Namespace) -> None:
         dline = json.loads(sline)
         record = get_analysis(dline)
         try:
-            table_lines = tls[dline["protein_name"]]
+            record_name = dline["checksum"]
+            table_lines = tls[record_name]
         except KeyError:
             print(
-                f"ERROR: one of the protein names {dline['protein_name']} was "
+                f"ERROR: one of the protein names {record_name} was "
                 "not in the mapping file.",
                 file=sys.stderr
             )
             sys.exit(1)
 
         for table_line in table_lines:
+            this_dline = deepcopy(dline)
+            this_record = deepcopy(record)
             filename_noext = splitext(basename(table_line.filename))[0]
 
             filename = args.template.format(
@@ -108,12 +112,10 @@ def runner(args: argparse.Namespace) -> None:
                 filename_noext=filename_noext,
             )
 
-            dline["checksum"] = table_line.checksum
-            dline["protein_name"] = table_line.id
-            setattr(record, record.name_column, table_line.id)
-            dline["data"] = record.as_dict()
+            setattr(this_record, this_record.name_column, table_line.id)
+            this_dline["data"] = this_record.as_dict()
 
-            outchunks[filename].append(json.dumps(dline))
+            outchunks[filename].append(json.dumps(this_dline))
 
         if i % 10000 == 0:
             for filename, chunk in outchunks.items():

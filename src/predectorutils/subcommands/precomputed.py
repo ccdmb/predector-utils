@@ -84,7 +84,6 @@ def update_analysis_line(s: str, name: str) -> str:
     d = json.loads(s)
     cls = Analyses.from_string(d["analysis"]).get_analysis()
     analysis = cls.from_dict(d["data"])
-    d["protein_name"] = name
     setattr(analysis, analysis.name_column, name)
     d["data"] = analysis.as_dict()
     return json.dumps(d)

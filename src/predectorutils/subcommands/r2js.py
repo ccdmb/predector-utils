@@ -89,7 +89,6 @@ def get_line(
 ) -> Dict[Any, Any]:
     name = getattr(analysis, analysis.name_column)
     out = {
-        "protein_name": name,
         "software": analysis.software,
         "database": analysis.database,
         "analysis": str(analysis_type),
