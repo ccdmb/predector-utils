@@ -6,6 +6,7 @@ import argparse
 
 from typing import List
 
+from predectorutils import __version__, __email__
 from predectorutils.subcommands.r2js import cli as r2js_cli
 from predectorutils.subcommands.r2js import runner as r2js_runner
 
@@ -38,8 +39,6 @@ from predectorutils.exceptions import (
     EXIT_VALID, EXIT_KEYBOARD, EXIT_UNKNOWN, EXIT_CLI, EXIT_INPUT_FORMAT,
     EXIT_INPUT_NOT_FOUND, EXIT_SYSERR, EXIT_CANT_OUTPUT
 )
-
-__email__ = "darcy.ab.jones@gmail.com"
 
 
 class MyArgumentParser(argparse.ArgumentParser):
@@ -82,6 +81,13 @@ def cli(prog: str, args: List[str]) -> argparse.Namespace:
             f"{EXIT_CANT_OUTPUT} - Can't create output file\n"
             f"{EXIT_UNKNOWN} - Unhandled exception, please file a bug!\n"
         )
+    )
+
+    parser.add_argument(
+        '--version',
+        action='version',
+        version='{}'.format(__version__),
+        help="Print the version of %(prog)s and exit"
     )
 
     subparsers = parser.add_subparsers(dest="subparser_name")
