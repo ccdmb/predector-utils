@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import sys
 import os
 from os.path import basename, splitext, dirname
 from copy import deepcopy
@@ -10,12 +9,13 @@ import json
 from collections import defaultdict
 
 from typing import NamedTuple
-from typing import Any
-from typing import Dict, Set
+from typing import Dict
 from typing import List
 from typing import TextIO
+from typing import Iterator
 
-from predectorutils.analyses import Analysis, Analyses
+from predectorutils.indexedresults import IndexedResults
+from predectorutils.analyses import Analyses
 
 
 def cli(parser: argparse.ArgumentParser) -> None:
@@ -59,7 +59,7 @@ def parse_table(handle: TextIO) -> Dict[str, List[TableLine]]:
     out = defaultdict(list)
     for line in handle:
         tl = read_table_line(line)
-        out[tl.checksum].append(tl)
+        out[tl.filename].append(tl)
 
     return out
 
@@ -72,77 +72,75 @@ def make_outdir(filename: str) -> None:
     return
 
 
-def get_analysis(dline: Dict[Any, Any]) -> Analysis:
-    cls = Analyses.from_string(dline["analysis"]).get_analysis()
-    analysis = cls.from_dict(dline["data"])
-    return analysis
+def get_inv_checksums(tlines: List[TableLine]) -> Dict[str, List[str]]:
+    d: Dict[str, List[str]] = dict()
+
+    for tline in tlines:
+        chk = tline.checksum
+        id_ = tline.id
+        if chk in d:
+            d[chk].append(id_)
+        else:
+            d[chk] = [id_]
+
+    return d
+
+
+def get_analysis(results, tlines) -> Iterator[str]:
+    chk_to_id = get_inv_checksums(tlines)
+    for line in results[(None, list(chk_to_id.keys()))]:
+        sline = line.strip()
+        dline = json.loads(sline)
+        cls = Analyses.from_string(dline["analysis"]).get_analysis()
+        analysis = cls.from_dict(dline["data"])
+
+        for new_id in chk_to_id[dline["checksum"]]:
+            new_analysis = deepcopy(analysis)
+            new_dline = deepcopy(dline)
+            setattr(new_analysis, new_analysis.name_column, new_id)
+            new_dline["data"] = new_analysis.as_dict()
+            yield json.dumps(new_dline)
+    return
 
 
 def runner(args: argparse.Namespace) -> None:
 
-    previously_written: Set[str] = set()
-    outchunks: Dict[str, List[str]] = defaultdict(list)
+    encoded_index = IndexedResults.parse(args.infile)
     tls = parse_table(args.map)
 
-    for i, line in enumerate(args.infile, 1):
-        sline = line.strip()
-        if sline == "":
-            continue
+    for fname, tlines in tls.items():
+        filename_noext = splitext(basename(fname))[0]
+        filename = args.template.format(
+            filename=fname,
+            filename_noext=filename_noext,
+        )
 
-        dline = json.loads(sline)
-        record = get_analysis(dline)
-        try:
-            record_name = dline["checksum"]
-            table_lines = tls[record_name]
-        except KeyError:
-            print(
-                f"ERROR: one of the protein names {record_name} was "
-                "not in the mapping file.",
-                file=sys.stderr
-            )
-            sys.exit(1)
+        first_chunk = True
 
-        for table_line in table_lines:
-            this_dline = deepcopy(dline)
-            this_record = deepcopy(record)
-            filename_noext = splitext(basename(table_line.filename))[0]
-
-            filename = args.template.format(
-                filename=table_line.filename,
-                filename_noext=filename_noext,
-            )
-
-            setattr(this_record, this_record.name_column, table_line.id)
-            this_dline["data"] = this_record.as_dict()
-
-            outchunks[filename].append(json.dumps(this_dline))
-
-        if i % 10000 == 0:
-            for filename, chunk in outchunks.items():
-                if filename in previously_written:
-                    mode = "a"
-                else:
+        buf = []
+        for line in get_analysis(encoded_index, tlines):
+            buf.append(line)
+            if len(buf) > 10000:
+                if first_chunk:
                     make_outdir(filename)
                     mode = "w"
+                    first_chunk = False
+                else:
+                    mode = "a"
 
                 with open(filename, mode) as handle:
-                    print("\n".join(chunk), file=handle)
+                    print("\n".join(buf), file=handle)
+                buf = []
 
-                previously_written.add(filename)
+        if len(buf) > 0:
+            if first_chunk:
+                make_outdir(filename)
+                mode = "w"
+                first_chunk = False
+            else:
+                mode = "a"
 
-            outchunks = defaultdict(list)
-
-    for filename, chunk in outchunks.items():
-        if len(chunk) == 0:
-            continue
-
-        if filename in previously_written:
-            mode = "a"
-        else:
-            make_outdir(filename)
-            mode = "w"
-
-        with open(filename, mode) as handle:
-            print("\n".join(chunk), file=handle)
+            with open(filename, mode) as handle:
+                print("\n".join(buf), file=handle)
 
     return

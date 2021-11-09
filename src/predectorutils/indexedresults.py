@@ -23,6 +23,7 @@ IndexType = Dict[AnalysisTuple, Dict[str, Tuple[int, int]]]
 
 
 class IndexedResults(object):
+    """ There's potential to improve disk read efficiency here. """
 
     def __init__(
         self,
