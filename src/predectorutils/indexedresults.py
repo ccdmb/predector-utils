@@ -38,7 +38,7 @@ class IndexedResults(object):
         return list(self.index.keys())
 
     @classmethod
-    def parse(cls, handle: TextIO):
+    def parse(cls, handle: TextIO) -> "IndexedResults":
         handle.seek(0, 2)  # Seeks to end of file
         EOF = handle.tell()
 

@@ -79,6 +79,17 @@ def get_precomputed_analysis(results, an_key, checksums) -> Iterator[Analysis]:
     return
 
 
+def update_analysis_line(s: str, name: str) -> str:
+    s = s.strip()
+    d = json.loads(s)
+    cls = Analyses.from_string(d["analysis"]).get_analysis()
+    analysis = cls.from_dict(d["data"])
+    d["protein_name"] = name
+    setattr(analysis, analysis.name_column, name)
+    d["data"] = analysis.as_dict()
+    return json.dumps(d)
+
+
 def get_checksum(seq: SeqRecord) -> Tuple[str, str]:
     checksum = seguid(str(seq.seq))
     return seq.id, checksum
@@ -113,11 +124,24 @@ def filter_seqs_by_done(
     return
 
 
+def get_inv_checksums(checksums: Dict[str, str]) -> Dict[str, List[str]]:
+    d: Dict[str, List[str]] = dict()
+
+    for id_, chk in checksums.items():
+        if chk in d:
+            d[chk].append(id_)
+        else:
+            d[chk] = [id_]
+
+    return d
+
+
 def runner(args: argparse.Namespace) -> None:
     # This thing just keeps the contents on disk.
     # Helps save memory.
     precomputed = IndexedResults.parse(args.inldjson)
     checksums = get_checksums(args.infasta)
+    inv_checksums = get_inv_checksums(checksums)
 
     targets = get_targets(args.analyses)
 
@@ -125,21 +149,22 @@ def runner(args: argparse.Namespace) -> None:
     buf: List[str] = []
     for an in targets:
         for chk in checksums.values():
-            line = precomputed[(targets, chk)]
-            if an.analysis in done:
-                done[an.analysis].add(chk)
-            else:
-                done[an.analysis] = {chk}
+            for line in precomputed[(targets, chk)]:
+                if an.analysis in done:
+                    done[an.analysis].add(chk)
+                else:
+                    done[an.analysis] = {chk}
 
-            buf.append(line)
-            if len(buf) > 5000:
-                # The slice returned by Indexed results should include the
-                # newline already.
-                print("".join(buf), file=args.outfile)
-                buf = []
+                for id_ in inv_checksums.get(chk, []):
+                    buf_line = update_analysis_line(line, id_)
+                    buf.append(buf_line)
+
+                if len(buf) > 5000:
+                    print("\n".join(buf), file=args.outfile)
+                    buf = []
 
         if len(buf) > 0:
-            print("".join(buf), file=args.outfile)
+            print("\n".join(buf), file=args.outfile)
 
         args.infasta.seek(0)
         filtered = filter_seqs_by_done(
