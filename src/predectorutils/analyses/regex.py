@@ -44,7 +44,7 @@ class RegexAnalysis(Analysis, GFFAble):
     ]
 
     analysis = "regex"
-    software = "Predector"
+    software = "predutils"
 
     def __init__(
         self,
@@ -132,3 +132,7 @@ class RegexAnalysis(Analysis, GFFAble):
             attributes=attr
         )
         return
+
+
+class Kex2SiteAnalysis(RegexAnalysis):
+    analysis = "kex2_cutsites"
