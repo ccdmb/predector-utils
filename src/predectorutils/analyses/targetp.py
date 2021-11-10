@@ -129,6 +129,8 @@ class TargetPNonPlant(Analysis, GFFAble):
 
     def as_gff(
         self,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
@@ -165,7 +167,7 @@ class TargetPNonPlant(Analysis, GFFAble):
 
         yield GFFRecord(
             seqid=self.name,
-            source=self.analysis,
+            source=self.gen_source(software_version, database_version),
             type=type_,
             start=0,
             end=int(cs["cs"]) - 1,
@@ -176,7 +178,7 @@ class TargetPNonPlant(Analysis, GFFAble):
         return
 
 
-class TargetPPlant(Analysis):
+class TargetPPlant(Analysis, GFFAble):
 
     """ Doesn't have output format documentation yet
     """
@@ -254,10 +256,11 @@ class TargetPPlant(Analysis):
 
     def as_gff(
         self,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
-
         if self.cs_pos is None:
             return
         elif "Probable protein fragment" in self.cs_pos:
@@ -300,7 +303,7 @@ class TargetPPlant(Analysis):
 
         yield GFFRecord(
             seqid=self.name,
-            source=self.analysis,
+            source=self.gen_source(software_version, database_version),
             type=type_,
             start=0,
             end=int(cs["cs"]) - 1,

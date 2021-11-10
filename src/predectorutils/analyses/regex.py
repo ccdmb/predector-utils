@@ -2,6 +2,7 @@
 
 from typing import TextIO
 from typing import Iterator
+from typing import Optional
 
 from predectorutils.gff import GFFRecord, GFFAttributes, Strand
 from predectorutils.analyses.base import Analysis, GFFAble
@@ -107,6 +108,8 @@ class RegexAnalysis(Analysis, GFFAble):
 
     def as_gff(
         self,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = True,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
@@ -123,7 +126,7 @@ class RegexAnalysis(Analysis, GFFAble):
 
         yield GFFRecord(
             seqid=self.name,
-            source=self.analysis,
+            source=self.gen_source(software_version, database_version),
             type=type_,
             start=self.start,
             end=self.end,

@@ -101,9 +101,22 @@ class Analysis(object):
 
 class GFFAble(object):
 
+    software: ClassVar[str] = "software"
+    database: ClassVar[Optional[str]] = None
+
     def as_gff(
         self,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
         raise NotImplementedError()
+
+    def gen_source(
+        self, 
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
+    ) -> str:
+        li = [self.software, software_version, self.database, database_version]
+        return ":".join([s for s in li if s is not None])

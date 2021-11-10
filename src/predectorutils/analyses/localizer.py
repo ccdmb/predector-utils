@@ -168,9 +168,12 @@ class LOCALIZER(Analysis, GFFAble):
 
     def as_gff(
         self,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = True,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
+        source = self.gen_source(software_version, database_version)
 
         if self.chloroplast_decision:
             assert self.chloroplast_start is not None
@@ -185,7 +188,7 @@ class LOCALIZER(Analysis, GFFAble):
 
             yield GFFRecord(
                 seqid=self.name,
-                source=self.analysis,
+                source=source,
                 type="peptide_localization_signal",
                 start=self.chloroplast_start,
                 end=self.chloroplast_end,
@@ -206,7 +209,7 @@ class LOCALIZER(Analysis, GFFAble):
 
             yield GFFRecord(
                 seqid=self.name,
-                source=self.analysis,
+                source=source,
                 type="mitochondrial_targeting_signal",
                 start=self.mitochondria_start,
                 end=self.mitochondria_end,

@@ -223,6 +223,8 @@ class DomTbl(Analysis, GFFAble):
 
     def as_gff(
         self,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
@@ -249,7 +251,7 @@ class DomTbl(Analysis, GFFAble):
 
         yield GFFRecord(
             seqid=self.query,
-            source=f"{self.software}:{self.database}",
+            source=self.gen_source(software_version, database_version),
             type="protein_hmm_match",
             start=self.query_from,
             end=self.query_to,
@@ -263,3 +265,8 @@ class DomTbl(Analysis, GFFAble):
 class DBCAN(DomTbl):
     analysis = "dbcan"
     database = "DBCan"
+
+
+class EffectorDB(DomTbl):
+    analysis = "effectorsearch"
+    database = "effectordb"

@@ -41,7 +41,7 @@ from predectorutils.analyses import (
     PfamScan,
     PepStats,
     PHIBase,
-    EffectorSearch,
+    EffectorDB,
     DeepredeffFungi,
 )
 
@@ -733,10 +733,10 @@ def construct_row(  # noqa
                 phibase_phenotypes.update(parse_phibase_header(an.target))
                 phibase_matches.update(get_phibase_phis(an.target))
 
-        elif isinstance(an, EffectorSearch):
+        elif isinstance(an, EffectorDB):
             if an.decide_significant():
                 record["effector_match"] = 1
-                effector_matches.add(an.target)
+                effector_matches.add(an.hmm)
 
         elif isinstance(an, DeepredeffFungi):
             record["deepredeff_fungi"] = float(an.s_score)
@@ -838,7 +838,7 @@ def runner(args: argparse.Namespace) -> None:
 
         dline = json.loads(sline)
         record = get_analysis(dline)
-        records[dline["protein_name"]].append(record)
+        records[getattr(record, record.name_column)].append(record)
 
     out_records = []
 

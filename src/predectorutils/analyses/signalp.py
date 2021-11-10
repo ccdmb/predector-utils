@@ -211,10 +211,11 @@ class SignalP3NN(Analysis, GFFAble):
 
     def as_gff(
         self,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
-
         if not self.d_decision:
             return
 
@@ -238,7 +239,7 @@ class SignalP3NN(Analysis, GFFAble):
 
         yield GFFRecord(
             seqid=self.name,
-            source=self.analysis,
+            source=self.gen_source(software_version, database_version),
             type="signal_peptide",
             start=0,
             end=self.ymax_pos - 1,
@@ -384,10 +385,11 @@ class SignalP3HMM(Analysis, GFFAble):
 
     def as_gff(
         self,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
-
         if not self.is_secreted:
             return
 
@@ -404,7 +406,7 @@ class SignalP3HMM(Analysis, GFFAble):
 
         yield GFFRecord(
             seqid=self.name,
-            source=self.analysis,
+            source=self.gen_source(software_version, database_version),
             type="signal_peptide",
             start=0,
             end=self.cmax_pos - 1,
@@ -566,10 +568,11 @@ class SignalP4(Analysis, GFFAble):
 
     def as_gff(
         self,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
-
         if not self.decision:
             return
 
@@ -591,7 +594,7 @@ class SignalP4(Analysis, GFFAble):
 
         yield GFFRecord(
             seqid=self.name,
-            source=self.analysis,
+            source=self.gen_source(software_version, database_version),
             type="signal_peptide",
             start=0,
             end=self.ymax_pos - 1,
@@ -708,10 +711,11 @@ class SignalP5(Analysis, GFFAble):
 
     def as_gff(
         self,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
-
         if self.cs_pos is None:
             return
 
@@ -732,7 +736,7 @@ class SignalP5(Analysis, GFFAble):
 
         yield GFFRecord(
             seqid=self.name,
-            source=self.analysis,
+            source=self.gen_source(software_version, database_version),
             type="signal_peptide",
             start=0,
             end=int(cs["cs"]) - 1,
@@ -835,6 +839,8 @@ class SignalP6(Analysis, GFFAble):
 
     def as_gff(
         self,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
@@ -859,7 +865,7 @@ class SignalP6(Analysis, GFFAble):
 
         yield GFFRecord(
             seqid=self.name,
-            source=self.analysis,
+            source=self.gen_source(software_version, database_version),
             type="signal_peptide",
             start=0,
             end=int(cs["cs"]) - 1,
