@@ -2,15 +2,15 @@
 
 import os
 import argparse
-import json
 
 from typing import Iterator
 from typing import Set
 
+import sqlite3
+
 import pandas as pd
 
-from predectorutils.indexedresults import IndexedResults
-from predectorutils.analyses import Analysis, Analyses
+from predectorutils.indexedresults import ResultsTable, TargetRow, ResultRow
 
 
 def cli(parser: argparse.ArgumentParser) -> None:
@@ -31,41 +31,67 @@ def cli(parser: argparse.ArgumentParser) -> None:
         )
     )
 
+    parser.add_argument(
+        "--db",
+        type=str,
+        default=":memory:",
+        help="Where to store the database"
+    )
+
     return
 
 
-def get_analysis(results, subdf) -> Iterator[Analysis]:
-    for _, line in results.fetch_df(subdf):
-        sline = line.strip()
-        dline = json.loads(sline)
-        cls = Analyses.from_string(dline["analysis"]).get_analysis()
-        analysis = cls.from_dict(dline["data"])
-        yield analysis
+def fetch_targets(
+    tab: ResultsTable,
+    table: str = "results"
+) -> Iterator[TargetRow]:
+    assert tab.exists_table(table), f"table {table} does not exist"
+
+    result = tab.cur.execute((
+        "SELECT DISTINCT analysis, software_version, database_version "
+        f"FROM {table}"
+    ))
+    for r in result:
+        yield TargetRow(*r)
     return
 
 
-def runner(args: argparse.Namespace) -> None:
+def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
     # This thing just keeps the contents on disk.
     # Helps save memory.
-    results = IndexedResults.parse(args.infile)
-    seen_analyses: Set[str] = set()
+    cur = con.cursor()
 
-    for (analysis, _, _), subdf in results.index.groupby([
-        "analysis", "software_version", "database_version"
-    ]):
-        if analysis in seen_analyses:
+    tab = ResultsTable(con, cur)
+    tab.create_tables()
+    tab.insert_results(ResultRow.from_file(args.infile))
+
+    targets = list(fetch_targets(tab, "results"))
+
+    seen: Set[str] = set()
+    for target in targets:
+        if target.analysis in seen:
             raise ValueError(
-                "You shouldn't reach this point"
+                "There are multiple versions of the same analysis."
             )
         else:
-            seen_analyses.add(analysis)
-        records = get_analysis(results, subdf)
-        df = pd.DataFrame(map(lambda x: x.as_series(), records))
+            seen.add(target.analysis)
 
-        fname = args.template.format(analysis=analysis.analysis)
+        records = tab.select_target(target, "results")
+        df = pd.DataFrame(map(lambda x: x.as_analysis().as_series(), records))
+
+        fname = args.template.format(analysis=target.analysis)
         dname = os.path.dirname(fname)
         if dname != '':
             os.makedirs(dname, exist_ok=True)
 
         df.to_csv(fname, sep="\t", index=False, na_rep=".")
+
+
+def runner(args: argparse.Namespace) -> None:
+    con = sqlite3.connect(args.db)
+    try:
+        inner(con, args)
+    finally:
+        con.commit()
+        con.close()
     return

@@ -2,20 +2,11 @@
 
 import os
 from os.path import basename, splitext, dirname
-from copy import deepcopy
 
 import argparse
-import json
-from collections import defaultdict
+import sqlite3
 
-from typing import NamedTuple
-from typing import Dict
-from typing import List
-from typing import TextIO
-from typing import Iterator
-
-from predectorutils.indexedresults import IndexedResults
-from predectorutils.analyses import Analyses
+from predectorutils.indexedresults import ResultsTable, ResultRow, DecoderRow
 
 
 def cli(parser: argparse.ArgumentParser) -> None:
@@ -39,29 +30,14 @@ def cli(parser: argparse.ArgumentParser) -> None:
         help="What to name the output files."
     )
 
+    parser.add_argument(
+        "--db",
+        type=str,
+        default=":memory:",
+        help="Where to store the database"
+    )
+
     return
-
-
-class TableLine(NamedTuple):
-
-    encoded: str
-    filename: str
-    id: str
-    checksum: str
-
-
-def read_table_line(line: str) -> TableLine:
-    sline = line.strip().split("\t")
-    return TableLine(sline[0], sline[1], sline[2], sline[3])
-
-
-def parse_table(handle: TextIO) -> Dict[str, List[TableLine]]:
-    out = defaultdict(list)
-    for line in handle:
-        tl = read_table_line(line)
-        out[tl.filename].append(tl)
-
-    return out
 
 
 def make_outdir(filename: str) -> None:
@@ -72,44 +48,15 @@ def make_outdir(filename: str) -> None:
     return
 
 
-def get_inv_checksums(tlines: List[TableLine]) -> Dict[str, List[str]]:
-    d: Dict[str, List[str]] = dict()
+def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
+    cur = con.cursor()
 
-    for tline in tlines:
-        chk = tline.checksum
-        id_ = tline.id
-        if chk in d:
-            d[chk].append(id_)
-        else:
-            d[chk] = [id_]
+    tab = ResultsTable(con, cur)
+    tab.create_tables()
+    tab.insert_results(ResultRow.from_file(args.infile))
+    tab.insert_decoder(DecoderRow.from_file(args.map))
 
-    return d
-
-
-def get_analysis(results, tlines) -> Iterator[str]:
-    chk_to_id = get_inv_checksums(tlines)
-
-    for _, line in results.fetch(results["checksum"].isin(chk_to_id)):
-        sline = line.strip()
-        dline = json.loads(sline)
-        cls = Analyses.from_string(dline["analysis"]).get_analysis()
-        analysis = cls.from_dict(dline["data"])
-
-        for new_id in chk_to_id[dline["checksum"]]:
-            new_analysis = deepcopy(analysis)
-            new_dline = deepcopy(dline)
-            setattr(new_analysis, new_analysis.name_column, new_id)
-            new_dline["data"] = new_analysis.as_dict()
-            yield json.dumps(new_dline)
-    return
-
-
-def runner(args: argparse.Namespace) -> None:
-
-    encoded = IndexedResults.parse(args.infile)
-    tls = parse_table(args.map)
-
-    for fname, tlines in tls.items():
+    for fname, decoded in tab.decode():
         filename_noext = splitext(basename(fname))[0]
         filename = args.template.format(
             filename=fname,
@@ -119,7 +66,7 @@ def runner(args: argparse.Namespace) -> None:
         first_chunk = True
 
         buf = []
-        for line in get_analysis(encoded, tlines):
+        for line in decoded:
             buf.append(line)
             if len(buf) > 10000:
                 if first_chunk:
@@ -145,3 +92,12 @@ def runner(args: argparse.Namespace) -> None:
                 print("\n".join(buf), file=handle)
 
     return
+
+
+def runner(args: argparse.Namespace) -> None:
+    con = sqlite3.connect(args.db)
+    try:
+        inner(con, args)
+    finally:
+        con.commit()
+        con.close()

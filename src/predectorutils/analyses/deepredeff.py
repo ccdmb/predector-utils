@@ -33,7 +33,6 @@ class Deepredeff(Analysis):
 
     types = [
         str,
-        str,
         float,
         str,
     ]
