@@ -27,16 +27,6 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "analyses",
-        type=argparse.FileType('r'),
-        help=(
-            "A 3 column tsv file, no header. "
-            "'analysis<tab>software_version<tab>database_version'. "
-            "database_version should be empty string if None."
-        )
-    )
-
-    parser.add_argument(
         "-p", "--precomputed",
         type=argparse.FileType('r'),
         default=None,
@@ -51,12 +41,6 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "infasta",
-        type=argparse.FileType('r'),
-        help="The fasta file to parse as input. Cannot be stdin."
-    )
-
-    parser.add_argument(
         "-t", "--template",
         type=str,
         default="{analysis}.fasta",
@@ -64,6 +48,22 @@ def cli(parser: argparse.ArgumentParser) -> None:
             "A template for the output filenames. Can use python `.format` "
             "style variable analysis. Directories will be created."
         )
+    )
+
+    parser.add_argument(
+        "analyses",
+        type=argparse.FileType('r'),
+        help=(
+            "A 3 column tsv file, no header. "
+            "'analysis<tab>software_version<tab>database_version'. "
+            "database_version should be empty string if None."
+        )
+    )
+
+    parser.add_argument(
+        "infasta",
+        type=argparse.FileType('r'),
+        help="The fasta file to parse as input. Cannot be stdin."
     )
 
     return
