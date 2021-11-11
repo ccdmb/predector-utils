@@ -138,4 +138,7 @@ class RegexAnalysis(Analysis, GFFAble):
 
 
 class Kex2SiteAnalysis(RegexAnalysis):
-    analysis = "kex2_cutsites"
+    analysis = "kex2_cutsite"
+
+class RXLRLikeAnalysis(RegexAnalysis):
+    analysis = "rxlr_like_motif"

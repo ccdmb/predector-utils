@@ -15,6 +15,7 @@ from ..regex import (
     KEX2_CLASSIC,
     KEX2_OUTRAM_2020,
     KEX2_OUTRAM_2021,
+    RXLRLIKE,
     RegexMatcher,
 )
 
@@ -37,7 +38,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "-k", "--kind",
         default="custom",
-        choices=["Kex2", "custom"],
+        choices=["kex2_cutsite", "rxlr_like_motif", "custom"],
         help=(
             "Which regular expressions to search for. "
             "If custom you must specify a regular expression to --regex. "
@@ -87,11 +88,13 @@ def runner(args: argparse.Namespace) -> None:
             raise ValueError("If --kind is custom, you must specify a regex")
 
         regexes = [re.compile(args.regex, flags=FLAGS)]
-    elif args.kind == "Kex2":
+    elif args.kind == "kex2_cutsite":
         regexes = [
             re.compile(p) for p
             in [KEX2_CLASSIC, KEX2_OUTRAM_2020, KEX2_OUTRAM_2021]
         ]
+    elif args.kind == "rxlr_like_motif":
+        regexes = [re.compile("RXLRLIKE")]
     else:
         raise ValueError("It shouldn't be possible to get to this point")
 
