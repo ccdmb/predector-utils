@@ -114,6 +114,7 @@ def fetch_local_precomputed(
 
         if len(buf) > 10000:
             print("\n".join(buf), file=outfile)
+            buf = []
 
     if len(buf) > 0:
         print("\n".join(buf), file=outfile)
@@ -140,7 +141,8 @@ def write_remaining_seqs(
             for id_ in checksum_to_ids[chk]:
                 these.append(seqs[id_])
 
-        SeqIO.write(these, fname, "fasta")
+        if len(these) > 0:
+            SeqIO.write(these, fname, "fasta")
     return
 
 
@@ -154,6 +156,7 @@ def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
     cur = con.cursor()
 
     tab = ResultsTable(con, cur)
+    tab.create_tables()
 
     if args.precomputed is not None:
         tab.insert_results(ResultRow.from_file(args.precomputed))
