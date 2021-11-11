@@ -43,6 +43,8 @@ from predectorutils.analyses import (
     PHIBase,
     EffectorDB,
     DeepredeffFungi,
+    Kex2SiteAnalysis,
+    RXLRLikeAnalysis
 )
 
 #  RegexAnalysis,
@@ -88,6 +90,8 @@ COLUMNS = [
     "aa_basic_number",
     "aa_acidic_number",
     "fykin_gap",
+    "kex2_cutsites",
+    "rxlr_like_motifs",
     "localizer_nuclear",
     "localizer_chloro",
     "localizer_mito",
@@ -632,6 +636,8 @@ def construct_row(  # noqa
     effector_matches: Set[str] = set()
     pfam_matches: Set[str] = set()
     dbcan_matches: Set[str] = set()
+    kex2_cutsites: Set[str] = set()
+    rxlr_like_motifs: Set[str] = set()
 
     record: Dict[str, Union[None, int, float, str]] = {"name": name}
     record["effector_match"] = 0
@@ -741,11 +747,23 @@ def construct_row(  # noqa
         elif isinstance(an, DeepredeffFungi):
             record["deepredeff_fungi"] = float(an.s_score)
 
+        elif isinstance(an, Kex2SiteAnalysis):
+            kex2_cutsites.add(f"{an.pattern}:{an.start + 1}-{an.end}")
+
+        elif isinstance(an, RXLRLikeAnalysis):
+            rxlr_like_motifs.add(f"{an.pattern}:{an.start + 1}-{an.end}")
+
     decide_any_signal(record)
     decide_is_transmembrane(record, sp_gff, tm_gff, tmhmm_first_60_threshold)
     decide_is_secreted(record)
 
     get_phibase_cols(phibase_matches, phibase_phenotypes, record)
+
+    if len(kex2_cutsites) > 0:
+        record["kex2_cutsites"] = ",".join(kex2_cutsites)
+
+    if len(rxlr_like_motifs) > 0:
+        record["rxlr_like_motifs"] = ",".join(rxlr_like_motifs)
 
     if len(effector_matches) > 0:
         record["effector_matches"] = ",".join(effector_matches)

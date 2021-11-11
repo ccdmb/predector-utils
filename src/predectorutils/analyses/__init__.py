@@ -26,7 +26,12 @@ from predectorutils.analyses.pfamscan import PfamScan
 from predectorutils.analyses.pepstats import PepStats
 from predectorutils.analyses.mmseqs import MMSeqs, PHIBase
 from predectorutils.analyses.hhr import HHRAlignment  # noqa
-from predectorutils.analyses.regex import RegexAnalysis, Kex2SiteAnalysis
+from predectorutils.analyses.regex import (
+        RegexAnalysis,
+        Kex2SiteAnalysis,
+        RXLRLikeAnalysis
+)
+
 from predectorutils.analyses.deepredeff import (
     DeepredeffFungi,
     DeepredeffOomycete,
@@ -43,7 +48,7 @@ __all__ = [
     "DomTbl", "DBCAN", "GFFAble", "PfamScan", "PepStats", "MMSeqs",
     "PHIBase", "HHRAligmment", "EffectorDB", "RegexAnalysis",
     "DeepredeffFungi", "DeepredeffOomycete", "DeepredeffBacteria",
-    "Kex2SiteAnalysis"
+    "Kex2SiteAnalysis", "RXLRLikeAnalysis"
 ]
 
 
@@ -75,7 +80,8 @@ class Analyses(enum.Enum):
     deepredeff_fungi = 24
     deepredeff_oomycete = 25
     deepredeff_bacteria = 26
-    kex2_cutsites = 27
+    kex2_cutsite = 27
+    rxlr_like_motif = 28
 
     def __str__(self) -> str:
         return self.name
@@ -118,5 +124,6 @@ NAME_TO_ANALYSIS = {
     Analyses.deepredeff_fungi: DeepredeffFungi,
     Analyses.deepredeff_oomycete: DeepredeffOomycete,
     Analyses.deepredeff_bacteria: DeepredeffBacteria,
-    Analyses.kex2_cutsites: Kex2SiteAnalysis,
+    Analyses.kex2_cutsite: Kex2SiteAnalysis,
+    Analysis.rxlr_like_motif: RXLRLikeAnalysis,
 }
