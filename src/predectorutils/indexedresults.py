@@ -307,6 +307,17 @@ class ResultsTable(object):
         CREATE TEMP VIEW IF NOT EXISTS decoded
         AS
         SELECT
+            d.encoded,
+            d.filename,
+            d.id,
+            r.analysis,
+            r.software,
+            r.software_version,
+            r.database,
+            r.database_version,
+            r.pipeline_version,
+            r.checksum,
+            r.data
         FROM results r
         INNER JOIN decoder d
             ON r.checksum = d.checksum
@@ -457,10 +468,10 @@ class ResultsTable(object):
             .fetchall()
         )
 
-        for fname in fnames:
+        for fname, in fnames:
             rows = self.cur.execute(
-                "SELECT DISTINCT * FROM decoded WHERE filename = :f",
-                {"f": fname}
+                "SELECT DISTINCT * FROM decoded WHERE filename = :filename",
+                {"filename": fname}
             )
 
             gen = (DecodedRow(*r).as_result_string() for r in rows)

@@ -92,6 +92,8 @@ class DeepSig(Analysis, GFFAble):
 
     def as_gff(
         self,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
@@ -110,9 +112,10 @@ class DeepSig(Analysis, GFFAble):
             "cs_pos": str(self.cs_pos),
         })
 
+
         yield GFFRecord(
             seqid=self.name,
-            source=self.analysis,
+            source=self.gen_source(software_version, database_version),
             type="signal_peptide",
             start=0,
             end=self.cs_pos,

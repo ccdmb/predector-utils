@@ -3,6 +3,7 @@
 import re
 from typing import TextIO
 from typing import Iterator
+from typing import Optional
 
 from predectorutils.gff import (
     GFFRecord,
@@ -202,6 +203,8 @@ class MMSeqs(Analysis, GFFAble):
 
     def as_gff(
         self,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
@@ -228,7 +231,7 @@ class MMSeqs(Analysis, GFFAble):
 
         yield GFFRecord(
             seqid=self.query,
-            source=f"{self.software}:{self.database}",
+            source=self.gen_source(software_version, database_version),
             type="protein_match",
             start=self.qstart,
             end=self.qend,
@@ -243,9 +246,3 @@ class PHIBase(MMSeqs):
     analysis = "phibase"
     software = "MMSeqs2"
     database = "PHIBase"
-
-
-class EffectorSearch(MMSeqs):
-    analysis = "effectorsearch"
-    software = "MMSeqs2"
-    database = "CustomEffectorDatabase"

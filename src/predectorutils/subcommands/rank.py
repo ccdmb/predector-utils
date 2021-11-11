@@ -41,8 +41,10 @@ from predectorutils.analyses import (
     PfamScan,
     PepStats,
     PHIBase,
-    EffectorSearch,
+    EffectorDB,
     DeepredeffFungi,
+    Kex2SiteAnalysis,
+    RXLRLikeAnalysis
 )
 
 #  RegexAnalysis,
@@ -88,9 +90,12 @@ COLUMNS = [
     "aa_basic_number",
     "aa_acidic_number",
     "fykin_gap",
+    "kex2_cutsites",
+    "rxlr_like_motifs",
     "localizer_nuclear",
     "localizer_chloro",
     "localizer_mito",
+    "signal_peptide_cutsites",
     "signalp3_nn",
     "signalp3_hmm",
     "signalp4",
@@ -632,6 +637,8 @@ def construct_row(  # noqa
     effector_matches: Set[str] = set()
     pfam_matches: Set[str] = set()
     dbcan_matches: Set[str] = set()
+    kex2_cutsites: List[Kex2SiteAnalysis] = list()
+    rxlr_like_motifs: List[RXLRLikeAnalysis] = list()
 
     record: Dict[str, Union[None, int, float, str]] = {"name": name}
     record["effector_match"] = 0
@@ -672,30 +679,30 @@ def construct_row(  # noqa
         elif isinstance(an, SignalP3HMM):
             record["signalp3_hmm"] = int(an.is_secreted)
             record["signalp3_hmm_s"] = an.sprob
-            sp_gff.extend(an.as_gff())
+            sp_gff.extend(an.as_gff(software_version="3-HMM"))
 
         elif isinstance(an, SignalP3NN):
             record["signalp3_nn"] = int(an.d_decision)
             record["signalp3_nn_d"] = an.d
-            sp_gff.extend(an.as_gff())
+            sp_gff.extend(an.as_gff(software_version="3-NN"))
 
         elif isinstance(an, SignalP4):
             record["signalp4"] = int(an.decision)
             record["signalp4_d"] = an.d
             record["signalp4_dmax_cut"] = an.dmax_cut
-            sp_gff.extend(an.as_gff())
+            sp_gff.extend(an.as_gff(software_version="4"))
 
         elif isinstance(an, SignalP5):
             record["signalp5"] = int(an.prediction == "SP(Sec/SPI)")
             # For some proteins, this outputs a very high number
             # so we constrain it here.
             record["signalp5_prob"] = min([an.prob_signal, 1.0])
-            sp_gff.extend(an.as_gff())
+            sp_gff.extend(an.as_gff(software_version="5"))
 
         elif isinstance(an, SignalP6):
             record["signalp6"] = int(an.prediction == "SP")
             record["signalp6_prob"] = min([an.prob_signal, 1.0])
-            sp_gff.extend(an.as_gff())
+            sp_gff.extend(an.as_gff(software_version="6"))
 
         elif isinstance(an, TargetPNonPlant):
             record["targetp_secreted"] = int(an.prediction == "SP")
@@ -733,19 +740,50 @@ def construct_row(  # noqa
                 phibase_phenotypes.update(parse_phibase_header(an.target))
                 phibase_matches.update(get_phibase_phis(an.target))
 
-        elif isinstance(an, EffectorSearch):
+        elif isinstance(an, EffectorDB):
             if an.decide_significant():
                 record["effector_match"] = 1
-                effector_matches.add(an.target)
+                effector_matches.add(an.hmm)
 
         elif isinstance(an, DeepredeffFungi):
             record["deepredeff_fungi"] = float(an.s_score)
+
+        elif isinstance(an, Kex2SiteAnalysis):
+            kex2_cutsites.append(an)
+
+        elif isinstance(an, RXLRLikeAnalysis):
+            rxlr_like_motifs.append(an)
 
     decide_any_signal(record)
     decide_is_transmembrane(record, sp_gff, tm_gff, tmhmm_first_60_threshold)
     decide_is_secreted(record)
 
+    if len(sp_gff) > 0:
+        sp_gff.sort(key=lambda g: (g.end, g.source))
+        record["signal_peptide_cutsites"] = ",".join([
+            f"{g.source.replace(':', '')}:{g.end}"
+            for g in
+            sp_gff
+        ])
+
     get_phibase_cols(phibase_matches, phibase_phenotypes, record)
+
+    if len(kex2_cutsites) > 0:
+        kex2_cutsites.sort(key=lambda a: (a.start, a.end))
+
+        record["kex2_cutsites"] = ",".join([
+            f"{k.pattern}:{k.start + 1}-{k.end}"
+            for k in
+            kex2_cutsites
+        ])
+
+    if len(rxlr_like_motifs) > 0:
+        rxlr_like_motifs.sort(key=lambda a: (a.start, a.end))
+        record["rxlr_like_motifs"] = ",".join([
+            f"{r.start + 1}-{r.end}"
+            for r in
+            rxlr_like_motifs
+        ])
 
     if len(effector_matches) > 0:
         record["effector_matches"] = ",".join(effector_matches)
@@ -838,7 +876,7 @@ def runner(args: argparse.Namespace) -> None:
 
         dline = json.loads(sline)
         record = get_analysis(dline)
-        records[dline["protein_name"]].append(record)
+        records[getattr(record, record.name_column)].append(record)
 
     out_records = []
 

@@ -4,6 +4,7 @@ import re
 from typing import TextIO
 from typing import Iterator
 from typing import List, Tuple
+from typing import Optional
 
 from predectorutils.gff import (
     GFFRecord,
@@ -120,16 +121,19 @@ class Phobius(Analysis, GFFAble):
 
     def as_gff(
         self,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1
     ) -> Iterator[GFFRecord]:
 
         records = []
+        source = self.gen_source(software_version, database_version)
 
         for (type_, start, end) in parse_topology(self.topology):
             records.append(GFFRecord(
                 seqid=self.name,
-                source=self.analysis,
+                source=source,
                 type=type_,
                 start=start,
                 end=end,
@@ -139,7 +143,7 @@ class Phobius(Analysis, GFFAble):
         if self.sp:
             gff_record = GFFRecord(
                 seqid=self.name,
-                source=self.analysis,
+                source=source,
                 type="signal_peptide",
                 start=0,
                 end=1,

@@ -11,6 +11,8 @@ KEX2_OUTRAM_2021 = r"[LIJVAP][A-Z][KRTPEI]R"
 KEX2_OUTRAM_2020 = r"L[A-Z][A-Z]R"
 KEX2_CLASSIC = r"[KR]R"
 
+RXLRLIKE = r"[RKH][A-Z][LMIFYW][A-Z]"
+
 
 class RegexMatcher(object):
 

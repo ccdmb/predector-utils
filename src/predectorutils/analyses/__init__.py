@@ -21,12 +21,17 @@ from predectorutils.analyses.targetp import TargetPNonPlant, TargetPPlant
 from predectorutils.analyses.tmhmm import TMHMM
 from predectorutils.analyses.localizer import LOCALIZER
 from predectorutils.analyses.deeploc import DeepLoc
-from predectorutils.analyses.hmmer import DomTbl, DBCAN
+from predectorutils.analyses.hmmer import DomTbl, DBCAN, EffectorDB
 from predectorutils.analyses.pfamscan import PfamScan
 from predectorutils.analyses.pepstats import PepStats
-from predectorutils.analyses.mmseqs import MMSeqs, PHIBase, EffectorSearch
+from predectorutils.analyses.mmseqs import MMSeqs, PHIBase
 from predectorutils.analyses.hhr import HHRAlignment  # noqa
-from predectorutils.analyses.regex import RegexAnalysis, Kex2SiteAnalysis
+from predectorutils.analyses.regex import (
+        RegexAnalysis,
+        Kex2SiteAnalysis,
+        RXLRLikeAnalysis
+)
+
 from predectorutils.analyses.deepredeff import (
     DeepredeffFungi,
     DeepredeffOomycete,
@@ -41,9 +46,9 @@ __all__ = [
     "SignalP3NN", "SignalP3HMM", "SignalP4", "SignalP5", "SignalP6",
     "TargetPNonPlant", "TargetPPlant", "TMHMM", "LOCALIZER", "DeepLoc",
     "DomTbl", "DBCAN", "GFFAble", "PfamScan", "PepStats", "MMSeqs",
-    "PHIBase", "HHRAligmment", "EffectorSearch", "RegexAnalysis",
+    "PHIBase", "HHRAligmment", "EffectorDB", "RegexAnalysis",
     "DeepredeffFungi", "DeepredeffOomycete", "DeepredeffBacteria",
-    "Kex2SiteAnalysis"
+    "Kex2SiteAnalysis", "RXLRLikeAnalysis"
 ]
 
 
@@ -67,7 +72,7 @@ class Analyses(enum.Enum):
     dbcan = 16
     phibase = 17
     pepstats = 18
-    effectorsearch = 19
+    effectordb = 19
     signalp6 = 20
     effectorp3 = 21
     effectorp3_fungal = 22
@@ -75,7 +80,8 @@ class Analyses(enum.Enum):
     deepredeff_fungi = 24
     deepredeff_oomycete = 25
     deepredeff_bacteria = 26
-    kex2_cutsites = 27
+    kex2_cutsite = 27
+    rxlr_like_motif = 28
 
     def __str__(self) -> str:
         return self.name
@@ -113,10 +119,11 @@ NAME_TO_ANALYSIS = {
     Analyses.pfamscan: PfamScan,
     Analyses.pepstats: PepStats,
     Analyses.phibase: PHIBase,
-    Analyses.effectorsearch: EffectorSearch,
+    Analyses.effectordb: EffectorDB,
     Analyses.regexanalysis: RegexAnalysis,
     Analyses.deepredeff_fungi: DeepredeffFungi,
     Analyses.deepredeff_oomycete: DeepredeffOomycete,
     Analyses.deepredeff_bacteria: DeepredeffBacteria,
-    Analyses.kex2_cutsites: Kex2SiteAnalysis,
+    Analyses.kex2_cutsite: Kex2SiteAnalysis,
+    Analyses.rxlr_like_motif: RXLRLikeAnalysis,
 }

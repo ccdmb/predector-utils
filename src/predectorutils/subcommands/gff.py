@@ -57,7 +57,9 @@ def runner(args: argparse.Namespace) -> None:
 
         try:
             records = record.as_gff(
-                args.keep_all,
+                software_version=dline.get("software_version", None),
+                database_version=dline.get("database_version", None),
+                keep_all=args.keep_all,
                 id_index=id_counter[dline["analysis"]]
             )
             gline = "\n".join(map(str, records))
