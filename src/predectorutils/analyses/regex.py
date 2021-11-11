@@ -119,7 +119,7 @@ class RegexAnalysis(Analysis, GFFAble):
             "match": self.match,
         })
 
-        if self.kind == "Kex2":
+        if self.kind == "kex2_cutsite":
             type_ = "propeptide_cleavage_site"
         else:
             type_ = "polypeptide_motif"

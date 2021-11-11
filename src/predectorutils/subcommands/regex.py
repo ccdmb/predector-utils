@@ -94,7 +94,7 @@ def runner(args: argparse.Namespace) -> None:
             in [KEX2_CLASSIC, KEX2_OUTRAM_2020, KEX2_OUTRAM_2021]
         ]
     elif args.kind == "rxlr_like_motif":
-        regexes = [re.compile("RXLRLIKE")]
+        regexes = [re.compile(RXLRLIKE)]
     else:
         raise ValueError("It shouldn't be possible to get to this point")
 
