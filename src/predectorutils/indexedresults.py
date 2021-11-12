@@ -24,7 +24,7 @@ class ResultRow(NamedTuple):
     data: str
 
     @classmethod
-    def from_string(cls, s: str) -> "ResultRow":
+    def from_string(cls, s: str, replace_name: bool = False) -> "ResultRow":
         d = json.loads(s.strip())
         assert isinstance(d["analysis"], str), d
         assert isinstance(d["software"], str), d
@@ -38,6 +38,12 @@ class ResultRow(NamedTuple):
         assert isinstance(pipeline_version, str) or pipeline_version is None, d
         assert isinstance(d["checksum"], str), d
 
+        if replace_name:
+            an_cls = Analyses.from_string(d["analysis"]).get_analysis()
+            an = an_cls.from_dict(d["data"])
+            setattr(an, an.name_column, "dummy")
+            d["data"] = an.as_dict()
+
         return cls(
             d["analysis"],
             d["software"],
@@ -50,7 +56,11 @@ class ResultRow(NamedTuple):
         )
 
     @classmethod
-    def from_file(cls, handle: TextIO) -> Iterator["ResultRow"]:
+    def from_file(
+        cls,
+        handle: TextIO,
+        replace_name: bool = False
+    ) -> Iterator["ResultRow"]:
         for line in handle:
             sline = line.strip()
             if sline == "":
@@ -231,6 +241,24 @@ class ResultsTable(object):
         ON results (analysis, software_version, database_version, checksum);
         """)
 
+        multiples_ok = ", ".join([
+            "'" + str(a) + "'"
+            for a
+            in Analyses
+            if a.multiple_ok()
+        ])
+
+        self.cur.execute(f"""
+        CREATE VIEW IF NOT EXISTS results_deduplicated
+        SELECT DISTINCT * FROM results WHERE analysis IN ({multiples_ok})
+        UNION
+        SELECT *
+        FROM results
+        WHERE analysis NOT IN ({multiples_ok})
+        GROUP BY analysis, software_version, database_version, checksum
+        HAVING ROWID=MIN(ROWID) ORDER BY ROWID
+        """)
+
         self.con.commit()
         return
 
@@ -281,6 +309,20 @@ class ResultsTable(object):
         AS
         SELECT DISTINCT r.*
         FROM results r
+        INNER JOIN targets t
+            ON r.analysis = t.analysis
+            AND r.software_version = t.software_version
+            AND (r.database_version = t.database_version
+                OR (r.database_version IS NULL AND t.database_version IS NULL))
+        """)
+        self.con.commit()
+
+        self.cur.execute("DROP TABLE IF EXISTS subset_deduplicated")
+        self.cur.execute("""
+        CREATE TEMP TABLE IF NOT EXISTS subset_deduplicated
+        AS
+        SELECT DISTINCT r.*
+        FROM results_deduplicated r
         INNER JOIN targets t
             ON r.analysis = t.analysis
             AND r.software_version = t.software_version

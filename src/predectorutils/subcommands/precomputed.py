@@ -109,7 +109,7 @@ def fetch_local_precomputed(
     outfile: TextIO
 ) -> None:
     buf: List[str] = []
-    for precomp in tab.select_checksums(checksums, "subset"):
+    for precomp in tab.select_checksums(checksums, "subset_deduplicated"):
         buf.append(precomp.as_str())
 
         if len(buf) > 10000:
@@ -128,7 +128,7 @@ def write_remaining_seqs(
     checksum_to_ids: Dict[str, Set[str]],
     template: str
 ) -> None:
-    for an, chks in tab.find_remaining(checksums):
+    for an, chks in tab.find_remaining(checksums, "subset_deduplicated"):
         analysis, sversion, dversion = an
 
         fname = template.format(analysis=analysis)
@@ -159,7 +159,12 @@ def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
     tab.create_tables()
 
     if args.precomputed is not None:
-        tab.insert_results(ResultRow.from_file(args.precomputed))
+        tab.insert_results(
+            ResultRow.from_file(
+                args.precomputed,
+                replace_name=True
+            )
+        )
 
     tab.insert_targets(TargetRow.from_file(args.analyses))
 

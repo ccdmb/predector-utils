@@ -34,6 +34,9 @@ from predectorutils.subcommands.regex import runner as regex_runner
 from predectorutils.subcommands.precomputed import cli as precomp_cli
 from predectorutils.subcommands.precomputed import runner as precomp_runner
 
+from predectorutils.subcommands.load_db import cli as load_db_cli
+from predectorutils.subcommands.load_db import runner as load_db_runner
+
 from predectorutils.parsers import ParseError
 from predectorutils.exceptions import (
     EXIT_VALID, EXIT_KEYBOARD, EXIT_UNKNOWN, EXIT_CLI, EXIT_INPUT_FORMAT,
@@ -173,6 +176,15 @@ def cli(prog: str, args: List[str]) -> argparse.Namespace:
 
     precomp_cli(precomp_subparser)
 
+    load_db_subparser = subparsers.add_parser(
+        "load_db",
+        help=(
+            "Load ldjson results into an SQlite database."
+        )
+    )
+
+    load_db_cli(load_db_subparser)
+
     parsed = parser.parse_args(args)
 
     if parsed.subparser_name is None:
@@ -208,6 +220,8 @@ def main():  # noqa
             regex_runner(args)
         elif args.subparser_name == "precomputed":
             precomp_runner(args)
+        elif args.subparser_name == "load_db":
+            load_db_runner(args)
 
     except ParseError as e:
         if e.line is not None:

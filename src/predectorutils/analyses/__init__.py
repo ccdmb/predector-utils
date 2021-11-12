@@ -96,6 +96,9 @@ class Analyses(enum.Enum):
     def get_analysis(self) -> Type[Analysis]:
         return NAME_TO_ANALYSIS[self]
 
+    def multiple_ok(self) -> bool:
+        return MULTIPLE_ACCEPTABLE[self]
+
 
 NAME_TO_ANALYSIS = {
     Analyses.signalp3_nn: SignalP3NN,
@@ -126,4 +129,36 @@ NAME_TO_ANALYSIS = {
     Analyses.deepredeff_bacteria: DeepredeffBacteria,
     Analyses.kex2_cutsite: Kex2SiteAnalysis,
     Analyses.rxlr_like_motif: RXLRLikeAnalysis,
+}
+
+
+MULTIPLE_ACCEPTABLE = {
+    Analyses.signalp3_nn: False,
+    Analyses.signalp3_hmm: False,
+    Analyses.signalp4: False,
+    Analyses.signalp5: False,
+    Analyses.signalp6: False,
+    Analyses.deepsig: False,
+    Analyses.phobius: False,
+    Analyses.tmhmm: False,
+    Analyses.targetp_plant: False,
+    Analyses.targetp_non_plant: False,
+    Analyses.effectorp1: False,
+    Analyses.effectorp2: False,
+    Analyses.effectorp3: False,
+    Analyses.effectorp3_fungal: False,
+    Analyses.apoplastp: False,
+    Analyses.localizer: False,
+    Analyses.deeploc: False,
+    Analyses.dbcan: True,
+    Analyses.pfamscan: True,
+    Analyses.pepstats: False,
+    Analyses.phibase: True,
+    Analyses.effectordb: True,
+    Analyses.regexanalysis: True,
+    Analyses.deepredeff_fungi: False,
+    Analyses.deepredeff_oomycete: False,
+    Analyses.deepredeff_bacteria: False,
+    Analyses.kex2_cutsite: True,
+    Analyses.rxlr_like_motif: True,
 }
