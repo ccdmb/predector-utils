@@ -2,6 +2,7 @@
 
 from os.path import split as psplit
 
+import re
 import argparse
 
 from typing import NamedTuple
@@ -14,6 +15,8 @@ from Bio.SeqRecord import SeqRecord
 from Bio.SeqUtils.CheckSum import seguid
 
 from predectorutils.baseconv import IdConverter
+
+INVALID_CHARS = re.compile(r"[^A-Z]", flags=re.ASCII | re.IGNORECASE)
 
 
 def cli(parser: argparse.ArgumentParser) -> None:
@@ -83,7 +86,7 @@ def runner(args: argparse.Namespace) -> None:
 
         seqs = SeqIO.parse(infile, "fasta")
         for seq in seqs:
-            seq.seq = Seq(
+            new_seq = (
                 str(seq.seq)
                 .replace("-", "")
                 .rstrip("*")
@@ -95,6 +98,11 @@ def runner(args: argparse.Namespace) -> None:
                 .replace("U", "X")
                 .replace("O", "X")
             )
+
+            if INVALID_CHARS.match(new_seq) is not None:
+                raise ValueError(f"The sequence {seq.id} contains invalid characters.")
+
+            seq.seq = Seq(new_seq)
 
             id_, checksum = get_checksum(seq)
             if checksum in checksums:

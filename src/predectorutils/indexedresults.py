@@ -55,6 +55,22 @@ class ResultRow(NamedTuple):
             json.dumps(d["data"]),
         )
 
+    def replace_name(self):
+        d = json.loads(self.data)
+        an_cls = Analyses.from_string(self.analysis).get_analysis()
+        an = an_cls.from_dict(d)
+        setattr(an, an.name_column, "dummy")
+        return self.__class__(
+            self.analysis,
+            self.software,
+            self.software_version,
+            self.database,
+            self.database_version,
+            self.pipeline_version,
+            self.checksum,
+            json.dumps(an.as_dict())
+        )
+
     @classmethod
     def from_file(
         cls,
@@ -65,7 +81,7 @@ class ResultRow(NamedTuple):
             sline = line.strip()
             if sline == "":
                 continue
-            yield cls.from_string(sline)
+            yield cls.from_string(sline, replace_name=replace_name)
         return
 
     def as_str(self) -> str:
@@ -248,15 +264,17 @@ class ResultsTable(object):
             if a.multiple_ok()
         ])
 
+
         self.cur.execute(f"""
         CREATE VIEW IF NOT EXISTS results_deduplicated
+        AS
         SELECT DISTINCT * FROM results WHERE analysis IN ({multiples_ok})
         UNION
         SELECT *
         FROM results
         WHERE analysis NOT IN ({multiples_ok})
         GROUP BY analysis, software_version, database_version, checksum
-        HAVING ROWID=MIN(ROWID) ORDER BY ROWID
+        HAVING ROWID=MIN(ROWID)
         """)
 
         self.con.commit()

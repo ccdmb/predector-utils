@@ -12,7 +12,6 @@ def cli(parser: argparse.ArgumentParser) -> None:
         "--no-replace-name",
         dest="replace_name",
         action="store_false",
-        type=bool,
         default=True,
         help="Don't replace the analysis names with 'dummy'"
     )

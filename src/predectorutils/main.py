@@ -37,6 +37,9 @@ from predectorutils.subcommands.precomputed import runner as precomp_runner
 from predectorutils.subcommands.load_db import cli as load_db_cli
 from predectorutils.subcommands.load_db import runner as load_db_runner
 
+from predectorutils.subcommands.dump_db import cli as dump_db_cli
+from predectorutils.subcommands.dump_db import runner as dump_db_runner
+
 from predectorutils.parsers import ParseError
 from predectorutils.exceptions import (
     EXIT_VALID, EXIT_KEYBOARD, EXIT_UNKNOWN, EXIT_CLI, EXIT_INPUT_FORMAT,
@@ -185,6 +188,15 @@ def cli(prog: str, args: List[str]) -> argparse.Namespace:
 
     load_db_cli(load_db_subparser)
 
+    dump_db_subparser = subparsers.add_parser(
+        "dump_db",
+        help=(
+            "Dump an SQLite database into ldjson results."
+        )
+    )
+
+    dump_db_cli(dump_db_subparser)
+
     parsed = parser.parse_args(args)
 
     if parsed.subparser_name is None:
@@ -222,6 +234,8 @@ def main():  # noqa
             precomp_runner(args)
         elif args.subparser_name == "load_db":
             load_db_runner(args)
+        elif args.subparser_name == "dump_db":
+            dump_db_runner(args)
 
     except ParseError as e:
         if e.line is not None:
