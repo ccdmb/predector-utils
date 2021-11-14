@@ -86,7 +86,7 @@ def runner(args: argparse.Namespace) -> None:
 
         seqs = SeqIO.parse(infile, "fasta")
         for seq in seqs:
-            new_seq = (
+            fixed_seq = (
                 str(seq.seq)
                 .replace("-", "")
                 .rstrip("*")
@@ -99,10 +99,12 @@ def runner(args: argparse.Namespace) -> None:
                 .replace("O", "X")
             )
 
-            if INVALID_CHARS.match(new_seq) is not None:
-                raise ValueError(f"The sequence {seq.id} contains invalid characters.")
+            if INVALID_CHARS.match(fixed_seq) is not None:
+                raise ValueError(
+                    f"The sequence {seq.id} contains invalid characters."
+                )
 
-            seq.seq = Seq(new_seq)
+            seq.seq = Seq(fixed_seq)
 
             id_, checksum = get_checksum(seq)
             if checksum in checksums:
