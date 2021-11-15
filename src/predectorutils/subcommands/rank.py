@@ -24,6 +24,7 @@ from predectorutils.indexedresults import ResultsTable, ResultRow
 
 from predectorutils.gff import GFFRecord
 from predectorutils.analyses import (
+    GFFAble,
     ApoplastP,
     DeepSig,
     EffectorP1,
@@ -1204,6 +1205,7 @@ def get_gff_records(
     for r in cur.execute(query):
         row = ResultRow(*r)
         an = row.as_analysis()
+        assert isinstance(an, GFFAble), f"{an.__class__.__name__} not gffable"
         for gffrow in an.as_gff():
             gffrow.source = an.__class__.__name__
             out.append((getattr(an, an.name_column), row.checksum, gffrow))
