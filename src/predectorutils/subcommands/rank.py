@@ -2,12 +2,13 @@
 
 import sys
 import argparse
-import json
 
 from collections import defaultdict
 from statistics import median
 
-from typing import (Set, Dict, List, Sequence, Union)
+from typing import (Tuple, Dict, Set, List, Sequence)
+
+import sqlite3
 
 import numpy as np
 import pandas as pd
@@ -18,10 +19,11 @@ from predectorutils.data import (
     get_interesting_pfam_ids,
     get_ltr_model,
 )
+
+from predectorutils.indexedresults import ResultsTable, ResultRow
+
 from predectorutils.gff import GFFRecord
 from predectorutils.analyses import (
-    Analyses,
-    Analysis,
     ApoplastP,
     DeepSig,
     EffectorP1,
@@ -37,43 +39,43 @@ from predectorutils.analyses import (
     TMHMM,
     LOCALIZER,
     DeepLoc,
-    DBCAN,
+    DomTbl,
     PfamScan,
     PepStats,
-    PHIBase,
-    EffectorDB,
+    MMSeqs,
     DeepredeffFungi,
-    Kex2SiteAnalysis,
-    RXLRLikeAnalysis
+    DeepredeffOomycete,
+    RegexAnalysis,
 )
 
-#  RegexAnalysis,
 
 COLUMNS = [
     "name",
     "effector_score",
     "manual_effector_score",
     "manual_secretion_score",
-    "phibase_effector",
-    "phibase_virulence",
-    "phibase_lethal",
-    "phibase_phenotypes",
-    "phibase_matches",
-    "effector_match",
     "effector_matches",
-    "pfam_match",
-    "pfam_matches",
-    "dbcan_match",
+    "phibase_genes",
+    "phibase_phenotypes",
+    "phibase_ids",
+    "has_phibase_effector_match",
+    "has_phibase_virulence_match",
+    "has_phibase_lethal_match",
+    "pfam_ids",
+    "pfam_names",
+    "has_pfam_virulence_match",
     "dbcan_matches",
+    "has_dbcan_virulence_match",
     "effectorp1",
     "effectorp2",
     "effectorp3_cytoplasmic",
     "effectorp3_apoplastic",
     "effectorp3_noneffector",
     "deepredeff_fungi",
+    "deepredeff_oomycete",
+    "apoplastp",
     "is_secreted",
     "any_signal_peptide",
-    "apoplastp",
     "single_transmembrane",
     "multiple_transmembrane",
     "molecular_weight",
@@ -92,7 +94,7 @@ COLUMNS = [
     "fykin_gap",
     "kex2_cutsites",
     "rxlr_like_motifs",
-    "localizer_nuclear",
+    "localizer_nucleus",
     "localizer_chloro",
     "localizer_mito",
     "signal_peptide_cutsites",
@@ -136,6 +138,13 @@ def cli(parser: argparse.ArgumentParser) -> None:
         "infile",
         type=argparse.FileType('r'),
         help="The ldjson file to parse as input. Use '-' for stdin."
+    )
+
+    parser.add_argument(
+        "--db",
+        type=str,
+        default=":memory:",
+        help="Where to store the sqlite database."
     )
 
     parser.add_argument(
@@ -274,6 +283,56 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
+        "--effectorp3-apoplastic-weight",
+        type=float,
+        default=3,
+        help=(
+            "The weight to give a protein if it is predicted to be "
+            "an apoplastic effector by effectorp3."
+        )
+    )
+
+    parser.add_argument(
+        "--effectorp3-cytoplasmic-weight",
+        type=float,
+        default=3,
+        help=(
+            "The weight to give a protein if it is predicted to be "
+            "a cytoplasmic effector by effectorp3."
+        )
+    )
+
+    parser.add_argument(
+        "--effectorp3-noneffector-weight",
+        type=float,
+        default=-3,
+        help=(
+            "The weight to give a protein if it is predicted to be "
+            "a non-effector by effectorp3."
+        )
+    )
+
+    parser.add_argument(
+        "--deepredeff-fungi-weight",
+        type=float,
+        default=2,
+        help=(
+            "The weight to give a protein if it is predicted to be "
+            "a fungal effector by deepredeff."
+        )
+    )
+
+    parser.add_argument(
+        "--deepredeff-oomycete-weight",
+        type=float,
+        default=2,
+        help=(
+            "The weight to give a protein if it is predicted to be "
+            "an oomycete effector by deepredeff."
+        )
+    )
+
+    parser.add_argument(
         "--effector-homology-weight",
         type=float,
         default=5,
@@ -317,138 +376,876 @@ def cli(parser: argparse.ArgumentParser) -> None:
     return
 
 
-def effector_score_it(
-    record: Dict[str, Union[None, int, float, str]],
-    effectorp1: float = 3,
-    effectorp2: float = 3,
-    effector: float = 5,
-    virulence: float = 2,
-    lethal: float = -5,
-) -> float:
-    """ """
-    score: float = 0
+def create_tables(
+    tab: ResultsTable,
+    con: sqlite3.Connection,
+    cur: sqlite3.Cursor,
+    pfam_targets: Set[str],
+    dbcan_targets: Set[str],
+    tmhmm_first_60_threshold: float = 10,
+) -> pd.DataFrame:
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS apoplastp
+    AS
+    SELECT
+        json_extract(data, '$.{ApoplastP.name_column}') as name,
+        checksum,
+        json_extract(data, '$.prob') as apoplastp
+    FROM results
+    WHERE (analysis = 'apoplastp'
+        AND json_extract(data, '$.prediction') = 'Apoplastic')
+    UNION
+    SELECT
+        json_extract(data, '$.{ApoplastP.name_column}') as name,
+        checksum,
+        (1 - json_extract(data, '$.prob')) as apoplastp
+    FROM results
+    WHERE (analysis = 'apoplastp'
+        AND NOT json_extract(data, '$.prediction') = 'Apoplastic')
+    """)
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS effectorp1
+    AS
+    SELECT
+        json_extract(data, '$.{EffectorP1.name_column}') as name,
+        checksum,
+        json_extract(data, '$.prob') as effectorp1
+    FROM results
+    WHERE (analysis = 'effectorp1'
+        AND json_extract(data, '$.prediction') = 'Effector')
+    UNION
+    SELECT
+        json_extract(data, '$.{EffectorP1.name_column}') as name,
+        checksum,
+        (1 - json_extract(data, '$.prob')) as effectorp1
+    FROM results
+    WHERE (analysis = 'effectorp1'
+        AND NOT json_extract(data, '$.prediction') = 'Effector')
+    """)
 
-    secretion_score = record["manual_secretion_score"]
-    assert isinstance(secretion_score, float)
-    score += secretion_score
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS effectorp2
+    AS
+    SELECT
+        json_extract(data, '$.{EffectorP2.name_column}') as name,
+        checksum,
+        json_extract(data, '$.prob') as effectorp2
+    FROM results
+    WHERE (
+        analysis = 'effectorp2'
+        AND (json_extract(data, '$.prediction')
+                IN ('Effector', 'Unlikely effector'))
+    )
+    UNION
+    SELECT
+        json_extract(data, '$.{EffectorP2.name_column}') as name,
+        checksum,
+        (1 - json_extract(data, '$.prob')) as effectorp2
+    FROM results
+    WHERE (
+        analysis = 'effectorp2'
+        AND (json_extract(data, '$.prediction')
+                NOT IN ('Effector', 'Unlikely effector'))
+    )
+    """)
 
-    effectorp1_prob = record["effectorp1"]
-    effectorp2_prob = record["effectorp2"]
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS effectorp3
+    AS
+    SELECT
+        json_extract(data, '$.{EffectorP3.name_column}') as name,
+        checksum,
+        json_extract(data, '$.cytoplasmic_prob') as effectorp3_cytoplasmic,
+        json_extract(data, '$.apoplastic_prob') as effectorp3_apoplastic,
+        json_extract(data, '$.noneffector_prob') as effectorp3_noneffector
+    FROM results
+    WHERE analysis = 'effectorp3'
+    """)
 
-    assert isinstance(effectorp1_prob, float)
-    assert isinstance(effectorp2_prob, float)
-    score += 2 * (effectorp1_prob - 0.5) * effectorp1
-    score += 2 * (effectorp2_prob - 0.5) * effectorp2
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS localizer
+    AS
+    SELECT
+        json_extract(data, '$.{LOCALIZER.name_column}') as name,
+        checksum,
+        json_extract(data, '$.nucleus_decision') as localizer_nucleus,
+        json_extract(data, '$.chloroplast_decision') as localizer_chloro,
+        json_extract(data, '$.mitochondria_decision') as localizer_mito
+    FROM results
+    WHERE analysis = 'localizer'
+    """)
 
-    assert isinstance(record["phibase_effector_match"], int)
-    assert isinstance(record["effector_match"], int)
-    assert isinstance(record["dbcan_match"], int)
-    assert isinstance(record["pfam_match"], int)
-    has_effector_match = sum([
-        record["phibase_effector_match"],
-        record["effector_match"],
-        record["dbcan_match"],
-        record["pfam_match"]
-    ]) > 0
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS deepredeff_fungi
+    AS
+    SELECT
+        json_extract(data, '$.{DeepredeffFungi.name_column}') as name,
+        checksum,
+        json_extract(data, '$.s_score') as deepredeff_fungi
+    FROM results
+    WHERE analysis = 'deepredeff_fungi'
+    """)
 
-    score += int(has_effector_match) * effector
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS deepredeff_oomycete
+    AS
+    SELECT
+        json_extract(data, '$.{DeepredeffOomycete.name_column}') as name,
+        checksum,
+        json_extract(data, '$.s_score') as deepredeff_oomycete
+    FROM results
+    WHERE analysis = 'deepredeff_oomycete'
+    """)
 
-    assert isinstance(record["phibase_virulence_match"], int)
-    if not has_effector_match:
-        score += record["phibase_virulence_match"] * virulence
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS signalp3_nn
+    AS
+    SELECT
+        json_extract(data, '$.{SignalP3NN.name_column}') as name,
+        checksum,
+        json_extract(data, '$.d_decision') as signalp3_nn,
+        json_extract(data, '$.d') as signalp3_nn_d
+    FROM results
+    WHERE analysis = 'signalp3_nn'
+    """)
 
-    assert isinstance(record["phibase_lethal_match"], int)
-    score += record["phibase_lethal_match"] * lethal
-    return score
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS signalp3_hmm
+    AS
+    SELECT
+        json_extract(data, '$.{SignalP3HMM.name_column}') as name,
+        checksum,
+        json_extract(data, '$.is_secreted') as signalp3_hmm,
+        json_extract(data, '$.sprob') as signalp3_hmm_s
+    FROM results
+    WHERE analysis = 'signalp3_hmm'
+    """)
+
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS signalp4
+    AS
+    SELECT
+        json_extract(data, '$.{SignalP4.name_column}') as name,
+        checksum,
+        json_extract(data, '$.decision') as signalp4,
+        json_extract(data, '$.d') as signalp4_d,
+        json_extract(data, '$.dmax_cut') as signalp4_dmax_cut
+    FROM results
+    WHERE analysis = 'signalp4'
+    """)
+
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS signalp5
+    AS
+    SELECT
+        json_extract(data, '$.{SignalP5.name_column}') as name,
+        checksum,
+        json_extract(data, '$.prediction') == 'SP(Sec/SPI)' as signalp5,
+        MIN(json_extract(data, '$.prob_signal'), 1.0) as signalp5_prob
+    FROM results
+    WHERE analysis = 'signalp5'
+    """)
+
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS signalp6
+    AS
+    SELECT
+        json_extract(data, '$.{SignalP6.name_column}') as name,
+        checksum,
+        json_extract(data, '$.prediction') == 'SP' as signalp6,
+        MIN(json_extract(data, '$.prob_signal'), 1.0) as signalp6_prob
+    FROM results
+    WHERE analysis = 'signalp6'
+    """)
+
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS deepsig
+    AS
+    SELECT
+        json_extract(data, '$.{DeepSig.name_column}') as name,
+        checksum,
+        json_extract(data, '$.prediction') == 'SignalPeptide' as deepsig,
+        json_extract(data, '$.prob') as deepsig_signal_prob,
+        NULL as deepsig_transmembrane_prob,
+        NULL as deepsig_other_prob
+    FROM results
+    WHERE
+        analysis = 'deepsig'
+        AND json_extract(data, '$.prediction') == 'SignalPeptide'
+    UNION
+    SELECT
+        json_extract(data, '$.{DeepSig.name_column}') as name,
+        checksum,
+        json_extract(data, '$.prediction') == 'SignalPeptide' as deepsig,
+        NULL as deepsig_signal_prob,
+        json_extract(data, '$.prob') as deepsig_transmembrane_prob,
+        NULL as deepsig_other_prob
+    FROM results
+    WHERE
+        analysis = 'deepsig'
+        AND json_extract(data, '$.prediction') == 'Transmembrane'
+    UNION
+    SELECT
+        json_extract(data, '$.{DeepSig.name_column}') as name,
+        checksum,
+        json_extract(data, '$.prediction') == 'SignalPeptide' as deepsig,
+        NULL as deepsig_signal_prob,
+        NULL as deepsig_transmembrane_prob,
+        json_extract(data, '$.prob') as deepsig_other_prob
+    FROM results
+    WHERE
+        analysis = 'deepsig'
+        AND json_extract(data, '$.prediction') == 'Other'
+    """)
+
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS phobius
+    AS
+    SELECT
+        json_extract(data, '$.{Phobius.name_column}') as name,
+        checksum,
+        json_extract(data, '$.sp') as phobius_sp,
+        json_extract(data, '$.tm') as phobius_tmcount
+    FROM results
+    WHERE analysis = 'phobius'
+    """)
+
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS tmhmm
+    AS
+    SELECT
+        json_extract(data, '$.{TMHMM.name_column}') as name,
+        checksum,
+        json_extract(data, '$.pred_hel') as tmhmm_tmcount,
+        json_extract(data, '$.first_60') as tmhmm_first_60,
+        json_extract(data, '$.exp_aa') as tmhmm_exp_aa
+    FROM results
+    WHERE analysis = 'tmhmm'
+    """)
+
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS targetp
+    AS
+    SELECT
+        json_extract(data, '$.{TargetPNonPlant.name_column}') as name,
+        checksum,
+        json_extract(data, '$.prediction') == 'SP' as targetp_secreted,
+        json_extract(data, '$.sp') as targetp_secreted_prob,
+        MIN(json_extract(data, '$.mtp'), 1.0) as targetp_mitochondrial_prob
+    FROM results
+    WHERE analysis = 'targetp_non_plant'
+    """)
+
+    cur.execute(f"""  -- # noqa
+    CREATE TEMP VIEW IF NOT EXISTS deeploc
+    AS
+    SELECT
+        json_extract(data, '$.{DeepLoc.name_column}') as name,
+        checksum,
+        json_extract(data, '$.membrane') as deeploc_membrane,
+        json_extract(data, '$.nucleus') as deeploc_nucleus,
+        json_extract(data, '$.cytoplasm') as deeploc_cytoplasm,
+        json_extract(data, '$.extracellular') as deeploc_extracellular,
+        json_extract(data, '$.mitochondrion') as deeploc_mitochondrion,
+        json_extract(data, '$.cell_membrane') as deeploc_cell_membrane,
+        json_extract(data, '$.endoplasmic_reticulum') as deeploc_endoplasmic_reticulum,
+        json_extract(data, '$.plastid') as deeploc_plastid,
+        json_extract(data, '$.golgi_apparatus') as deeploc_golgi,
+        json_extract(data, '$.lysosome_vacuole') as deeploc_lysosome,
+        json_extract(data, '$.peroxisome') as deeploc_peroxisome
+    FROM results
+    WHERE analysis = 'deeploc'
+    """)
+
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS hmmer_significant
+    AS
+    SELECT
+        checksum,
+        analysis,
+        json_extract(data, '$.{DomTbl.name_column}') as name,
+        ((json_extract(data, '$.hmm_to') - json_extract(data, '$.hmm_from')) /
+                (1.0 * json_extract(data, '$.hmm_len'))) as coverage,
+        (json_extract(data, '$.query_to') -
+                json_extract(data, '$.query_from')) as length,
+        json_extract(data, '$.domain_i_evalue') as evalue,
+        json_extract(data, '$.hmm') as hmm
+    FROM
+        results
+    WHERE analysis IN ("dbcan", "effectordb")
+    """)
+
+    cur.execute("""
+    CREATE TEMP VIEW IF NOT EXISTS hmmer
+    AS
+    SELECT DISTINCT
+        name, checksum, analysis, hmm
+    FROM (
+        SELECT *
+        FROM hmmer_significant
+        WHERE (coverage > 0.3) AND (length > 80) AND (evalue < 1e-5)
+        UNION
+        SELECT *
+        FROM hmmer_significant
+        WHERE (coverage > 0.3) AND (length <= 80) AND (evalue < 1e-3)
+    )
+    ORDER BY evalue ASC
+    """)
+
+    cur.execute("""
+    CREATE TEMP VIEW IF NOT EXISTS effectordb
+    AS
+    SELECT
+        name as name,
+        checksum as checksum,
+        analysis as analysis,
+        GROUP_CONCAT(hmm, ',') as effector_matches
+    FROM
+        hmmer
+    WHERE
+        analysis = "effectordb"
+    GROUP BY
+        name, checksum, analysis
+    """)
+
+    cur.execute("DROP TABLE IF EXISTS dbcan_targets")
+    cur.execute("CREATE TEMP TABLE dbcan_targets (dbcan_ids text NOT NULL)")
+    cur.executemany(
+        "INSERT INTO dbcan_targets VALUES (?)",
+        [(c,) for c in dbcan_targets]
+    )
+
+    cur.execute("""
+    CREATE TEMP VIEW IF NOT EXISTS dbcan
+    AS
+    SELECT
+        name as name,
+        checksum as checksum,
+        analysis as analysis,
+        MAX(dbcan_virulence_related) as has_dbcan_virulence_match,
+        GROUP_CONCAT(hmm, ',') as dbcan_matches
+    FROM (
+        SELECT
+            name,
+            checksum,
+            analysis,
+            (hmm IN dbcan_targets) as dbcan_virulence_related,
+            hmm
+        FROM
+            hmmer
+        WHERE
+            analysis = "dbcan"
+    )
+    GROUP BY
+        name, checksum, analysis
+    """)
+
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS mmseqs
+    AS
+    SELECT DISTINCT
+        json_extract(data, '$.{MMSeqs.name_column}') as name,
+        checksum,
+        analysis,
+        json_extract(data, '$.target') as target
+    FROM results
+    WHERE
+        analysis = 'phibase' AND
+        json_extract(data, '$.evalue') <= 1e-5 AND
+        json_extract(data, '$.tcov') >= 0.5
+    ORDER BY json_extract(data, '$.evalue') ASC
+    """)
+
+    cur.execute("""
+    CREATE TEMP VIEW IF NOT EXISTS phibase
+    AS
+    SELECT
+        name,
+        checksum,
+        GROUP_CONCAT(phibase_ids, ',') as phibase_ids,
+        GROUP_CONCAT(phibase_gene, ',') as phibase_genes,
+        GROUP_CONCAT(phibase_phenotypes, ',') as phibase_phenotypes
+    FROM (
+        SELECT DISTINCT
+            name,
+            checksum,
+            REPLACE(phibase_ids, '__', ',') as phibase_ids,
+            REPLACE(phibase_gene, '__', ',') as phibase_gene,
+            REPLACE(
+                SUBSTR(remaining, INSTR(remaining, '#') + 1),
+                '__',
+                ','
+            ) as phibase_phenotypes
+        FROM (
+            SELECT
+                name,
+                checksum,
+                phibase_ids,
+                phibase_gene,
+                SUBSTR(remaining, INSTR(remaining, '#') + 1) as remaining
+            FROM (
+                SELECT
+                    name,
+                    checksum,
+                    phibase_ids,
+                    SUBSTR(
+                        remaining,
+                        1,
+                        INSTR(remaining, '#') - 1
+                    ) as phibase_gene,
+                    SUBSTR(remaining, INSTR(remaining, '#') + 1) as remaining
+                FROM (
+                    SELECT
+                        name,
+                        checksum,
+                        uniprot_id,
+                        SUBSTR(
+                            remaining,
+                            1,
+                            INSTR(remaining, '#') - 1
+                        ) as phibase_ids,
+                        SUBSTR(
+                            remaining,
+                            INSTR(remaining, '#') + 1
+                        ) as remaining
+                    FROM (
+                        SELECT
+                            name,
+                            checksum,
+                            SUBSTR(
+                                target,
+                                1,
+                                INSTR(target, '#') - 1
+                            ) as uniprot_id,
+                            SUBSTR(target, INSTR(target, '#') + 1) as remaining
+                        FROM mmseqs
+                        where analysis = 'phibase'
+                    )
+                )
+            )
+        )
+    ) GROUP BY name, checksum
+    """)
+
+    cur.execute("DROP TABLE IF EXISTS pfam_targets")
+    cur.execute("CREATE TEMP TABLE pfam_targets (pfam_ids text NOT NULL)")
+    cur.executemany(
+        "INSERT INTO pfam_targets VALUES (?)",
+        [(c,) for c in pfam_targets]
+    )
+
+    cur.execute(f"""
+    CREATE TEMP VIEW pfamscan
+    AS
+    SELECT
+        name,
+        checksum,
+        MAX(virulence_related) as has_pfam_virulence_match,
+        GROUP_CONCAT(hmm, ',') as pfam_ids,
+        GROUP_CONCAT(hmm_name, ',') as pfam_names
+    FROM (
+        SELECT DISTINCT
+            json_extract(data, '$.{PfamScan.name_column}') as name,
+            checksum,
+            (
+                SUBSTR(
+                    json_extract(data, '$.hmm'),
+                    1,
+                    INSTR(json_extract(data, '$.hmm') || '.', '.') - 1
+                )
+                IN pfam_targets
+            ) as virulence_related,
+            SUBSTR(
+                json_extract(data, '$.hmm'),
+                1,
+                INSTR(json_extract(data, '$.hmm') || '.', '.') - 1
+            ) as hmm,
+            (json_extract(data, '$.hmm_type') ||
+                ':' ||
+                json_extract(data, '$.hmm_name')) as hmm_name
+        FROM
+            results
+        WHERE
+            analysis = 'pfamscan'
+        ORDER BY
+            json_extract(data, '$.{PfamScan.name_column}'),
+            checksum,
+            json_extract(data, '$.evalue') ASC
+    )
+    GROUP BY
+        name,
+        checksum
+    """)
+
+    cur.execute(f"""  -- # noqa
+    CREATE TEMP VIEW IF NOT EXISTS pepstats
+    AS
+    SELECT
+        name,
+        checksum,
+        molecular_weight,
+        residue_number,
+        charge,
+        isoelectric_point,
+        aa_c_number,
+        aa_tiny_number,
+        aa_small_number,
+        aa_aliphatic_number,
+        aa_aromatic_number,
+        aa_nonpolar_number,
+        aa_charged_number,
+        aa_basic_number,
+        aa_acidic_number,
+        ((f_number + k_number + y_number + i_number + n_number + 1.0) /
+        (1.0 * (g_number + a_number + p_number + 1.0))) as fykin_gap
+    FROM (
+        SELECT
+            json_extract(data, '$.{PepStats.name_column}') as name,
+            checksum,
+            json_extract(data, '$.molecular_weight') as molecular_weight,
+            json_extract(data, '$.residues') as residue_number,
+            json_extract(data, '$.charge') as charge,
+            json_extract(data, '$.isoelectric_point') as isoelectric_point,
+            json_extract(data, '$.residue_c_number') as aa_c_number,
+            json_extract(data, '$.property_tiny_number') as aa_tiny_number,
+            json_extract(data, '$.property_small_number') as aa_small_number,
+            json_extract(data, '$.property_aliphatic_number') as aa_aliphatic_number,
+            json_extract(data, '$.property_aromatic_number') as aa_aromatic_number,
+            json_extract(data, '$.property_nonpolar_number') as aa_nonpolar_number,
+            json_extract(data, '$.property_charged_number') as aa_charged_number,
+            json_extract(data, '$.property_basic_number') as aa_basic_number,
+            json_extract(data, '$.property_acidic_number') as aa_acidic_number,
+            json_extract(data, '$.residue_f_number') as f_number,
+            json_extract(data, '$.residue_k_number') as k_number,
+            json_extract(data, '$.residue_y_number') as y_number,
+            json_extract(data, '$.residue_i_number') as i_number,
+            json_extract(data, '$.residue_n_number') as n_number,
+            json_extract(data, '$.residue_g_number') as g_number,
+            json_extract(data, '$.residue_a_number') as a_number,
+            json_extract(data, '$.residue_p_number') as p_number
+        FROM results
+        WHERE
+            analysis = 'pepstats'
+    )
+    """)
+
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS kex2_cutsite
+    AS
+    SELECT
+        name,
+        checksum,
+        GROUP_CONCAT(pos, ',') as kex2_cutsites
+    FROM (
+        SELECT DISTINCT
+            json_extract(data, '$.{RegexAnalysis.name_column}') as name,
+            checksum,
+            (json_extract(data, '$.pattern') || ':' ||
+            (json_extract(data, '$.start') + 1) || '-' ||
+            json_extract(data, '$.end')) as pos
+        FROM results
+        WHERE analysis = 'kex2_cutsite'
+        ORDER BY json_extract(data, '$.start')
+    )
+    GROUP BY name, checksum
+    """)
+
+    cur.execute(f"""
+    CREATE TEMP VIEW IF NOT EXISTS rxlr_like_motif
+    AS
+    SELECT
+        name,
+        checksum,
+        GROUP_CONCAT(pos, ',') as rxlr_like_motifs
+    FROM (
+        SELECT DISTINCT
+            json_extract(data, '$.{RegexAnalysis.name_column}') as name,
+            checksum,
+            ((json_extract(data, '$.start') + 1) || '-' ||
+            json_extract(data, '$.end')) as pos
+        FROM results
+        WHERE analysis = 'rxlr_like_motif'
+        ORDER BY json_extract(data, '$.start')
+    )
+    GROUP BY name, checksum
+    """)
+
+    cur.execute("""
+    CREATE TEMP VIEW all_records
+    AS
+    SELECT DISTINCT name, checksum
+    FROM (
+        SELECT name, checksum FROM deeploc
+        UNION
+        SELECT name, checksum FROM apoplastp
+        UNION
+        SELECT name, checksum FROM effectorp1
+        UNION
+        SELECT name, checksum FROM effectorp2
+        UNION
+        SELECT name, checksum FROM effectorp3
+        UNION
+        SELECT name, checksum FROM localizer
+        UNION
+        SELECT name, checksum FROM signalp3_nn
+        UNION
+        SELECT name, checksum FROM signalp3_hmm
+        UNION
+        SELECT name, checksum FROM signalp4
+        UNION
+        SELECT name, checksum FROM signalp5
+        UNION
+        SELECT name, checksum FROM signalp6
+        UNION
+        SELECT name, checksum FROM targetp
+        UNION
+        SELECT name, checksum FROM deepsig
+        UNION
+        SELECT name, checksum FROM tmhmm
+        UNION
+        SELECT name, checksum FROM deepredeff_fungi
+        UNION
+        SELECT name, checksum FROM deepredeff_oomycete
+        UNION
+        SELECT name, checksum FROM phobius
+        UNION
+        SELECT name, checksum FROM effectordb
+        UNION
+        SELECT name, checksum FROM dbcan
+        UNION
+        SELECT name, checksum FROM phibase
+        UNION
+        SELECT name, checksum FROM pfamscan
+        UNION
+        SELECT name, checksum FROM pepstats
+        UNION
+        SELECT name, checksum FROM kex2_cutsite
+        UNION
+        SELECT name, checksum FROM rxlr_like_motif
+    )
+    ORDER BY name, checksum
+    """)
+
+    table = pd.read_sql_query(""" --  # noqa
+    SELECT
+        all_records.name,
+        all_records.checksum,
+        phibase.phibase_ids,
+        phibase.phibase_genes,
+        phibase.phibase_phenotypes,
+        effectordb.effector_matches,
+        pfamscan.pfam_ids,
+        pfamscan.pfam_names,
+        pfamscan.has_pfam_virulence_match,
+        dbcan.dbcan_matches,
+        dbcan.has_dbcan_virulence_match,
+        effectorp1.effectorp1,
+        effectorp2.effectorp2,
+        effectorp3.effectorp3_cytoplasmic,
+        effectorp3.effectorp3_apoplastic,
+        effectorp3.effectorp3_noneffector,
+        deepredeff_fungi.deepredeff_fungi,
+        deepredeff_oomycete.deepredeff_oomycete,
+        apoplastp.apoplastp,
+        pepstats.molecular_weight,
+        pepstats.residue_number,
+        pepstats.charge,
+        pepstats.isoelectric_point,
+        pepstats.aa_c_number,
+        pepstats.aa_tiny_number,
+        pepstats.aa_small_number,
+        pepstats.aa_aliphatic_number,
+        pepstats.aa_aromatic_number,
+        pepstats.aa_nonpolar_number,
+        pepstats.aa_charged_number,
+        pepstats.aa_basic_number,
+        pepstats.aa_acidic_number,
+        pepstats.fykin_gap,
+        kex2_cutsite.kex2_cutsites,
+        rxlr_like_motif.rxlr_like_motifs,
+        localizer.localizer_nucleus,
+        localizer.localizer_chloro,
+        localizer.localizer_mito,
+        signalp3_nn.signalp3_nn,
+        signalp3_hmm.signalp3_hmm,
+        signalp4.signalp4,
+        signalp5.signalp5,
+        signalp6.signalp6,
+        deepsig.deepsig,
+        phobius.phobius_sp,
+        phobius.phobius_tmcount,
+        tmhmm.tmhmm_tmcount,
+        tmhmm.tmhmm_first_60,
+        tmhmm.tmhmm_exp_aa,
+        targetp.targetp_secreted,
+        targetp.targetp_secreted_prob,
+        targetp.targetp_mitochondrial_prob,
+        deeploc.deeploc_membrane,
+        deeploc.deeploc_nucleus,
+        deeploc.deeploc_cytoplasm,
+        deeploc.deeploc_extracellular,
+        deeploc.deeploc_mitochondrion,
+        deeploc.deeploc_cell_membrane,
+        deeploc.deeploc_endoplasmic_reticulum,
+        deeploc.deeploc_plastid,
+        deeploc.deeploc_golgi,
+        deeploc.deeploc_lysosome,
+        deeploc.deeploc_peroxisome,
+        signalp3_nn.signalp3_nn_d,
+        signalp3_hmm.signalp3_hmm_s,
+        signalp4.signalp4_d,
+        signalp5.signalp5_prob,
+        signalp6.signalp6_prob
+    FROM all_records
+    LEFT JOIN phibase
+        ON (all_records.checksum = phibase.checksum) AND (all_records.name = phibase.name)
+    LEFT JOIN effectordb
+        ON (all_records.checksum = effectordb.checksum) AND (all_records.name = effectordb.name)
+    LEFT JOIN pfamscan
+        ON (all_records.checksum = pfamscan.checksum) AND (all_records.name = pfamscan.name)
+    LEFT JOIN dbcan
+        ON (all_records.checksum = dbcan.checksum) AND (all_records.name = dbcan.name)
+    LEFT JOIN effectorp1
+        ON (all_records.checksum = effectorp1.checksum) AND (all_records.name = effectorp1.name)
+    LEFT JOIN effectorp2
+        ON (all_records.checksum = effectorp2.checksum) AND (all_records.name = effectorp2.name)
+    LEFT JOIN effectorp3
+        ON (all_records.checksum = effectorp3.checksum) AND (all_records.name = effectorp3.name)
+    LEFT JOIN deepredeff_fungi
+        ON (all_records.checksum = deepredeff_fungi.checksum) AND (all_records.name = deepredeff_fungi.name)
+    LEFT JOIN deepredeff_oomycete
+        ON (all_records.checksum = deepredeff_oomycete.checksum) AND (all_records.name = deepredeff_oomycete.name)
+    LEFT JOIN apoplastp
+        ON (all_records.checksum = apoplastp.checksum) AND (all_records.name = apoplastp.name)
+    LEFT JOIN pepstats
+        ON (all_records.checksum = pepstats.checksum) AND (all_records.name = pepstats.name)
+    LEFT JOIN kex2_cutsite
+        ON (all_records.checksum = kex2_cutsite.checksum) AND (all_records.name = kex2_cutsite.name)
+    LEFT JOIN rxlr_like_motif
+        ON (all_records.checksum = rxlr_like_motif.checksum) AND (all_records.name = rxlr_like_motif.name)
+    LEFT JOIN localizer
+        ON (all_records.checksum = localizer.checksum) AND (all_records.name = localizer.name)
+    LEFT JOIN signalp3_nn
+        ON (all_records.checksum = signalp3_nn.checksum) AND (all_records.name = signalp3_nn.name)
+    LEFT JOIN signalp3_hmm
+        ON (all_records.checksum = signalp3_hmm.checksum) AND (all_records.name = signalp3_hmm.name)
+    LEFT JOIN signalp4
+        ON (all_records.checksum = signalp4.checksum) AND (all_records.name = signalp4.name)
+    LEFT JOIN signalp5
+        ON (all_records.checksum = signalp5.checksum) AND (all_records.name = signalp5.name)
+    LEFT JOIN signalp6
+        ON (all_records.checksum = signalp6.checksum) AND (all_records.name = signalp6.name)
+    LEFT JOIN deepsig
+        ON (all_records.checksum = deepsig.checksum) AND (all_records.name = deepsig.name)
+    LEFT JOIN phobius
+        ON (all_records.checksum = phobius.checksum) AND (all_records.name = phobius.name)
+    LEFT JOIN tmhmm
+        ON (all_records.checksum = tmhmm.checksum) AND (all_records.name = tmhmm.name)
+    LEFT JOIN targetp
+        ON (all_records.checksum = targetp.checksum) AND (all_records.name = targetp.name)
+    LEFT JOIN deeploc
+        ON (all_records.checksum = deeploc.checksum) AND (all_records.name = deeploc.name)
+    """, con)
+
+    table["has_pfam_virulence_match"] = (
+        table["has_pfam_virulence_match"].fillna(0)
+    )
+
+    table["has_dbcan_virulence_match"] = (
+        table["has_dbcan_virulence_match"].fillna(0)
+    )
+
+    sp_gffs = get_gff_records("""
+    SELECT * FROM results
+    WHERE analysis IN ('signalp3_nn', 'signalp3_hmm', 'signalp4',
+                       'signalp5', 'signalp6', 'phobius', 'deepsig')
+    """, cur)
+
+    tm_gffs = get_gff_records(
+        "SELECT * FROM results WHERE analysis = 'tmhmm'",
+        cur
+    )
+
+    tm_sp_coverage = get_tm_sp_coverage(sp_gffs, tm_gffs)
+    table["tmhmm_first_tm_sp_coverage"] = table[["name", "checksum"]].apply(
+        lambda r: tm_sp_coverage.get((r["name"], r["checksum"]), 0.0),
+        axis=1
+    )
+
+    sp_sites = fetch_sp_sites(sp_gffs)
+    table["signal_peptide_cutsites"] = table[["name", "checksum"]].apply(
+        lambda r: sp_sites.get((r["name"], r["checksum"]), None),
+        axis=1
+    )
+
+    # mutates
+    decide_any_signal(table)
+
+    # mutates
+    decide_is_transmembrane(
+        table,
+        tmhmm_first_60_threshold=tmhmm_first_60_threshold
+    )
+
+    # mutates
+    decide_is_secreted(table)
+
+    # mutates
+    get_phibase_cols(table)
+
+    return table
 
 
-def secretion_score_it(
-    record: Dict[str, Union[None, int, float, str]],
-    secreted: float = 3,
-    less_trustworthy_signal_prediction: float = 0.25,
-    trustworthy_signal_prediction: float = 0.5,
-    single_transmembrane: float = -1,
-    multiple_transmembrane: float = -10,
-    deeploc_extracellular: float = 1,
-    deeploc_intracellular: float = -2,
-    deeploc_membrane: float = -2,
-    targetp_mitochondrial: float = -2,
-) -> float:
-    score: float = 0
-
-    assert isinstance(record["is_secreted"], int)
-    score += int(record["is_secreted"]) * secreted
-
-    for k in ["signalp3_hmm", "signalp3_nn", "phobius_sp", "deepsig"]:
-        v = record.get(k, 0)
-        assert isinstance(v, int)
-        score += v * less_trustworthy_signal_prediction
-
-    for k in ["signalp4", "signalp5", "targetp_secreted"]:
-        v = record.get(k, 0)
-        assert isinstance(v, int)
-        score += v * trustworthy_signal_prediction
-
-    assert isinstance(record["multiple_transmembrane"], int)
-    score += record["multiple_transmembrane"] * multiple_transmembrane
-
-    assert isinstance(record["single_transmembrane"], int)
-    score += record["single_transmembrane"] * single_transmembrane
-
-    assert isinstance(record["deeploc_extracellular"], float)
-    score += record["deeploc_extracellular"] * deeploc_extracellular  # noqa
-    for k in [
-        'deeploc_nucleus',
-        'deeploc_cytoplasm',
-        'deeploc_mitochondrion',
-        'deeploc_cell_membrane',
-        'deeploc_endoplasmic_reticulum',
-        'deeploc_plastid',
-        'deeploc_golgi',
-        'deeploc_lysosome',
-        'deeploc_peroxisome'
-    ]:
-        v = record.get(k, 0.0)
-        assert isinstance(v, float)
-        score += v * deeploc_intracellular
-
-    assert isinstance(record["deeploc_membrane"], float)
-    score += record["deeploc_membrane"] * deeploc_membrane
-
-    assert isinstance(record["targetp_mitochondrial_prob"], float)
-    score += record["targetp_mitochondrial_prob"] * targetp_mitochondrial
-    return score
+def get_gff_records(
+    query: str,
+    cur: sqlite3.Cursor,
+) -> List[Tuple[str, str, GFFRecord]]:
+    out = []
+    for r in cur.execute(query):
+        row = ResultRow(*r)
+        an = row.as_analysis()
+        for gffrow in an.as_gff():
+            gffrow.source = an.__class__.__name__
+            out.append((getattr(an, an.name_column), row.checksum, gffrow))
+    return out
 
 
-def get_analysis(dline):
-    cls = Analyses.from_string(dline["analysis"]).get_analysis()
-    analysis = cls.from_dict(dline["data"])
-    return analysis
+def fetch_sp_sites(
+    gff: Sequence[Tuple[str, str, GFFRecord]]
+) -> Dict[Tuple[str, str], str]:
+    d = defaultdict(list)
 
+    for name, chk, gffrow in gff:
+        if gffrow.type != "signal_peptide":
+            continue
+        d[(name, chk)].append(gffrow)
 
-def parse_phibase_header(i):
-    si = i.split("#")
-    assert len(si) == 6
-    return set(si[5].lower().split("__"))
+    out = dict()
+    for (name, chk), gffrows in d.items():
+        str_gffrows = ",".join([
+            f"{r.source}:{r.end}"
+            for r
+            in sorted(gffrows, key=lambda k: k.end)
+        ])
+        out[(name, chk)] = str_gffrows
 
-
-def get_phibase_phis(i):
-    si = i.split("#")
-    assert len(si) == 6
-    return set(si[1].split("__"))
+    return out
 
 
 def decide_any_signal(
-    record: Dict[str, Union[None, int, float, str]]
+    table: pd.DataFrame
 ) -> None:
-    record["any_signal_peptide"] = int(any([
-        record.get(k, None) == 1
-        for k
-        in [
-            'signalp3_nn', 'signalp3_hmm', 'signalp4',
-            'signalp5', 'deepsig', 'phobius_sp', 'targetp_secreted'
-        ]
-    ]))
+    table["any_signal_peptide"] = (
+        table.loc[:, [
+            'signalp3_nn', 'signalp3_hmm', 'signalp4', 'signalp5',
+            'signalp6', 'deepsig', 'phobius_sp'
+        ]]
+        .copy()
+        .fillna(0)
+        .astype(bool)
+        .any(axis=1)
+        .astype(int)
+    )
     return
 
 
@@ -475,334 +1272,262 @@ def gff_coverage(left: GFFRecord, right: GFFRecord) -> float:
 
 
 def get_tm_sp_coverage(
-    sp_gff: Sequence[GFFRecord],
-    tm_gff: Sequence[GFFRecord],
-) -> float:
-    if len(sp_gff) == 0:
-        return 0.0
+    sp_gff: Sequence[Tuple[str, str, GFFRecord]],
+    tm_gff: Sequence[Tuple[str, str, GFFRecord]],
+) -> Dict[Tuple[str, str], float]:
+    sp_d = defaultdict(list)
+    tm_d = defaultdict(list)
 
-    if len(tm_gff) == 0:
-        return 0.0
+    for name, chk, gffrow in sp_gff:
+        if gffrow.type != "signal_peptide":
+            continue
+        sp_d[(name, chk)].append(gffrow)
 
-    tm = sorted(tm_gff, key=lambda x: x.start)[0]
-    covs = [gff_coverage(sp, tm) for sp in sp_gff]
-    return median(covs)
+    for name, chk, gffrow in tm_gff:
+        tm_d[(name, chk)].append(gffrow)
+
+    all_keys = set(sp_d.keys())
+    all_keys.update(tm_d.keys())
+
+    out = dict()
+    for name, chk in all_keys:
+        sp_gffrows = sp_d.get((name, chk), [])
+        tm_gffrows = tm_d.get((name, chk), [])
+
+        if len(sp_gffrows) == 0:
+            out[(name, chk)] = 0.0
+            continue
+
+        elif len(tm_gffrows) == 0:
+            out[(name, chk)] = 0.0
+            continue
+
+        tm = sorted(tm_gffrows, key=lambda x: x.start)[0]
+        covs = [gff_coverage(sp, tm) for sp in sp_gffrows]
+        out[(name, chk)] = median(covs)
+
+    return out
 
 
 def decide_is_transmembrane(
-    record: Dict[str, Union[None, int, float, str]],
-    sp_gff: Sequence[GFFRecord],
-    tm_gff: Sequence[GFFRecord],
+    table: pd.DataFrame,
     tmhmm_first_60_threshold: float = 10,
 ) -> None:
 
-    assert isinstance(record["tmhmm_tmcount"], int)
-    assert isinstance(record["phobius_tmcount"], int)
-    assert isinstance(record["tmhmm_first_60"], float)
+    table["multiple_transmembrane"] = (
+        (table["tmhmm_tmcount"] > 1) |
+        (table["phobius_tmcount"] > 1)
+    ).astype(int)
 
-    record["tmhmm_first_tm_sp_coverage"] = get_tm_sp_coverage(sp_gff, tm_gff)
-
-    record["multiple_transmembrane"] = int(
-        (record["tmhmm_tmcount"] > 1) or
-        (record["phobius_tmcount"] > 1)
-    )
-
-    record["single_transmembrane"] = int(
-        not bool(record["multiple_transmembrane"])
-        and (
-            record["phobius_tmcount"] == 1
-            or (
-                record["tmhmm_tmcount"] == 1
-                and not bool(record["any_signal_peptide"])
+    table["single_transmembrane"] = (
+        ~table["multiple_transmembrane"].astype(bool)
+        & (
+            table["phobius_tmcount"] == 1
+            | (
+                (table["tmhmm_tmcount"] == 1)
+                & ~table["any_signal_peptide"].astype(bool)
             )
-            or (
-                record["tmhmm_tmcount"] == 1
-                and bool(record["any_signal_peptide"])
-                and (record["tmhmm_first_60"] < tmhmm_first_60_threshold)
+            | (
+                (table["tmhmm_tmcount"] == 1)
+                & table["any_signal_peptide"].astype(bool)
+                & (table["tmhmm_first_60"] < tmhmm_first_60_threshold)
             )
         )
-    )
+    ).astype(int)
 
     return
 
 
 def decide_is_secreted(
-    record: Dict[str, Union[None, int, float, str]]
+    table: pd.DataFrame
 ) -> None:
-    record["is_secreted"] = int(
-        bool(record["any_signal_peptide"]) and not
-        bool(record["multiple_transmembrane"])
-    )
+    table["is_secreted"] = (
+        table["any_signal_peptide"].astype(bool) & ~
+        table["multiple_transmembrane"].astype(bool)
+    ).astype(int)
     return
 
 
-def get_deeploc_cols(
-    an: DeepLoc,
-    record: Dict[str, Union[None, int, float, str]]
-) -> None:
-    record["deeploc_membrane"] = an.membrane
-    record["deeploc_nucleus"] = an.nucleus
-    record["deeploc_cytoplasm"] = an.cytoplasm
-    record["deeploc_extracellular"] = an.extracellular
-    record["deeploc_mitochondrion"] = an.mitochondrion
-    record["deeploc_cell_membrane"] = an.cell_membrane
-    record["deeploc_endoplasmic_reticulum"] = an.endoplasmic_reticulum
-    record["deeploc_plastid"] = an.plastid
-    record["deeploc_golgi"] = an.golgi_apparatus
-    record["deeploc_lysosome"] = an.lysosome_vacuole
-    record["deeploc_peroxisome"] = an.peroxisome
-    return
-
-
-def get_pepstats_cols(
-    an: PepStats,
-    record: Dict[str, Union[None, int, float, str]]
-) -> None:
-    record["molecular_weight"] = an.molecular_weight
-    record["residue_number"] = an.residues
-    record["charge"] = an.charge
-    record["isoelectric_point"] = an.isoelectric_point
-    record["aa_c_number"] = an.residue_c_number
-    record["aa_tiny_number"] = an.property_tiny_number
-    record["aa_small_number"] = an.property_small_number
-    record["aa_aliphatic_number"] = an.property_aliphatic_number
-    record["aa_aromatic_number"] = an.property_aromatic_number
-    record["aa_nonpolar_number"] = an.property_nonpolar_number
-    record["aa_charged_number"] = an.property_charged_number
-    record["aa_basic_number"] = an.property_basic_number
-    record["aa_acidic_number"] = an.property_acidic_number
-
-    fykin = (
-        an.residue_f_number +
-        an.residue_k_number +
-        an.residue_y_number +
-        an.residue_i_number +
-        an.residue_n_number
-    )
-
-    gap = (
-        an.residue_g_number +
-        an.residue_a_number +
-        an.residue_p_number
-    )
-
-    record["fykin_gap"] = (float(fykin) + 1) / (float(gap) + 1)
-    return
-
-
-def get_phibase_cols(
-    matches: Set[str],
-    phenotypes: Set[str],
-    record: Dict[str, Union[None, int, float, str]]
-) -> None:
-    record["phibase_effector_match"] = int(len(
-        phenotypes.intersection([
+def get_phibase_cols(table: pd.DataFrame) -> None:
+    effector_phenotypes = {
             "loss_of_pathogenicity",
             "increased_virulence_(hypervirulence)",
             "effector_(plant_avirulence_determinant)"
-        ])
-    ) > 0)
+    }
 
-    record["phibase_virulence_match"] = int("reduced_virulence" in phenotypes)
-    record["phibase_lethal_match"] = int("lethal" in phenotypes)
+    phenotypes = (
+        table["phibase_phenotypes"].fillna('').str.split(',')
+        .apply(set)
+    )
 
-    if len(phenotypes) > 0:
-        record["phibase_phenotypes"] = ",".join(phenotypes)
+    table["has_phibase_effector_match"] = (
+        phenotypes
+        .apply(lambda s: len(s.intersection(effector_phenotypes)) > 0)
+        .astype(int)
+    )
 
-    if len(matches) > 0:
-        record["phibase_matches"] = ",".join(matches)
+    table["has_phibase_virulence_match"] = (
+        phenotypes
+        .apply(lambda s: "reduced_virulence" in s)
+        .astype(int)
+    )
+
+    table["has_phibase_lethal_match"] = (
+        phenotypes
+        .apply(lambda s: "lethal" in s)
+        .astype(int)
+    )
+
     return
 
 
-def get_sper_prob_col(
-    an: Union[EffectorP1, EffectorP2, ApoplastP],
-    positive: List[str]
-) -> float:
-    if an.prediction in positive:
-        return an.prob
-    else:
-        return 1 - an.prob
+def effector_score_it(
+    table: pd.DataFrame,
+    effectorp1: float = 3,
+    effectorp2: float = 3,
+    effectorp3_apoplastic: float = 3,
+    effectorp3_cytoplasmic: float = 3,
+    effectorp3_noneffector: float = -3,
+    deepredeff_fungi: float = 2,
+    deepredeff_oomycete: float = 2,
+    effector: float = 5,
+    virulence: float = 2,
+    lethal: float = -5,
+) -> pd.Series:
+    """ """
+    score = table["manual_secretion_score"].copy()
+
+    score += (
+        table["effectorp1"]
+        .fillna(0.5)
+        .astype(float)
+        - 0.5
+    ) * 2 * effectorp1
+
+    score += (
+        table["effectorp2"]
+        .fillna(0.5)
+        .astype(float)
+        - 0.5
+    ) * 2 * effectorp2
+
+    score += (
+        table["effectorp3_apoplastic"]
+        .fillna(0.0)
+        .astype(float)
+        * effectorp3_apoplastic
+    )
+
+    score += (
+        table["effectorp3_cytoplasmic"]
+        .fillna(0.0)
+        .astype(float)
+        * effectorp3_cytoplasmic
+    )
+
+    score += (
+        table["effectorp3_noneffector"]
+        .fillna(0.0)
+        .astype(float)
+        * effectorp3_noneffector
+    )
+
+    score += (
+        table["deepredeff_fungi"]
+        .fillna(0.5)
+        .astype(float)
+        - 0.5
+    ) * 2 * deepredeff_fungi
+
+    score += (
+        table["deepredeff_oomycete"]
+        .fillna(0.5)
+        .astype(float)
+        - 0.5
+    ) * 2 * deepredeff_oomycete
+
+    has_effector_match = (
+        table["has_phibase_effector_match"].fillna(0).astype(bool) |
+        table["effector_matches"].notnull().astype(bool) |
+        table["has_dbcan_virulence_match"].fillna(0).astype(bool) |
+        table["has_pfam_virulence_match"].fillna(0).astype(bool)
+    ).astype(int)
+
+    score += has_effector_match * effector
+
+    score += (
+        (~has_effector_match) *
+        table["has_phibase_virulence_match"].fillna(0).astype(int) *
+        virulence
+    )
+
+    score += table["has_phibase_lethal_match"].fillna(0).astype(int) * lethal
+    return score
 
 
-def construct_row(  # noqa
-    name,
-    analyses: List[Analysis],
-    pfam_domains: Set[str],
-    dbcan_domains: Set[str],
-    tmhmm_first_60_threshold: float,
-) -> Dict[str, Union[None, int, float, str]]:
+def secretion_score_it(
+    table,
+    secreted: float = 3.,
+    less_trustworthy_signal_prediction: float = 0.25,
+    trustworthy_signal_prediction: float = 0.5,
+    single_transmembrane: float = -1,
+    multiple_transmembrane: float = -10,
+    deeploc_extracellular: float = 1,
+    deeploc_intracellular: float = -2,
+    deeploc_membrane: float = -2,
+    targetp_mitochondrial: float = -2,
+) -> pd.Series:
+    score = 1.0 * table["is_secreted"].astype(int).fillna(0) * secreted
 
-    phibase_matches: Set[str] = set()
-    phibase_phenotypes: Set[str] = set()
-    effector_matches: Set[str] = set()
-    pfam_matches: Set[str] = set()
-    dbcan_matches: Set[str] = set()
-    kex2_cutsites: List[Kex2SiteAnalysis] = list()
-    rxlr_like_motifs: List[RXLRLikeAnalysis] = list()
+    for k in ["signalp3_hmm", "signalp3_nn", "phobius_sp", "deepsig"]:
+        col = table[k].astype(int).fillna(0)
+        score += 1.0 * col * less_trustworthy_signal_prediction
 
-    record: Dict[str, Union[None, int, float, str]] = {"name": name}
-    record["effector_match"] = 0
+    for k in ["signalp4", "signalp5", "signalp6", "targetp_secreted"]:
+        col = table[k].astype(int).fillna(0)
+        score += 1.0 * col * trustworthy_signal_prediction
 
-    tm_gff: List[GFFRecord] = []
-    sp_gff: List[GFFRecord] = []
+    score += (
+        1.0 *
+        table["multiple_transmembrane"].astype(int).fillna(0) *
+        multiple_transmembrane
+    )
 
-    for an in analyses:
-        if isinstance(an, ApoplastP):
-            record["apoplastp"] = get_sper_prob_col(an, ["Apoplastic"])
+    score += (
+        1.0 *
+        table["single_transmembrane"].astype(int).fillna(0) *
+        single_transmembrane
+    )
 
-        elif isinstance(an, DeepSig):
-            record["deepsig"] = int(an.prediction == "SignalPeptide")
-            sp_gff.extend(an.as_gff())
+    score += (
+        table["deeploc_extracellular"].astype(float).fillna(0.0) *
+        deeploc_extracellular
+    )
 
-        elif isinstance(an, EffectorP1):
-            record["effectorp1"] = get_sper_prob_col(an, ["Effector"])
+    for k in [
+        'deeploc_nucleus',
+        'deeploc_cytoplasm',
+        'deeploc_mitochondrion',
+        'deeploc_cell_membrane',
+        'deeploc_endoplasmic_reticulum',
+        'deeploc_plastid',
+        'deeploc_golgi',
+        'deeploc_lysosome',
+        'deeploc_peroxisome'
+    ]:
+        col = table[k].astype(float).fillna(0.0)
+        score += col * deeploc_intracellular
 
-        elif isinstance(an, EffectorP2):
-            record["effectorp2"] = get_sper_prob_col(
-                an,
-                ["Effector", "Unlikely effector"]
-            )
+    score += (
+        table["deeploc_membrane"].astype(float).fillna(0.0) *
+        deeploc_membrane
+    )
 
-        elif isinstance(an, EffectorP3):
-            record["effectorp3_cytoplasmic"] = an.cytoplasmic_prob
-            record["effectorp3_apoplastic"] = an.apoplastic_prob
-            record["effectorp3_noneffector"] = an.noneffector_prob
-
-        elif isinstance(an, Phobius):
-            record["phobius_sp"] = int(an.sp)
-            record["phobius_tmcount"] = an.tm
-            sp_gff.extend(
-                r for r in an.as_gff()
-                if r.type == "signal_peptide"
-            )
-
-        elif isinstance(an, SignalP3HMM):
-            record["signalp3_hmm"] = int(an.is_secreted)
-            record["signalp3_hmm_s"] = an.sprob
-            sp_gff.extend(an.as_gff(software_version="3-HMM"))
-
-        elif isinstance(an, SignalP3NN):
-            record["signalp3_nn"] = int(an.d_decision)
-            record["signalp3_nn_d"] = an.d
-            sp_gff.extend(an.as_gff(software_version="3-NN"))
-
-        elif isinstance(an, SignalP4):
-            record["signalp4"] = int(an.decision)
-            record["signalp4_d"] = an.d
-            record["signalp4_dmax_cut"] = an.dmax_cut
-            sp_gff.extend(an.as_gff(software_version="4"))
-
-        elif isinstance(an, SignalP5):
-            record["signalp5"] = int(an.prediction == "SP(Sec/SPI)")
-            # For some proteins, this outputs a very high number
-            # so we constrain it here.
-            record["signalp5_prob"] = min([an.prob_signal, 1.0])
-            sp_gff.extend(an.as_gff(software_version="5"))
-
-        elif isinstance(an, SignalP6):
-            record["signalp6"] = int(an.prediction == "SP")
-            record["signalp6_prob"] = min([an.prob_signal, 1.0])
-            sp_gff.extend(an.as_gff(software_version="6"))
-
-        elif isinstance(an, TargetPNonPlant):
-            record["targetp_secreted"] = int(an.prediction == "SP")
-            record["targetp_secreted_prob"] = an.sp
-            record["targetp_mitochondrial_prob"] = an.mtp
-
-        elif isinstance(an, TMHMM):
-            record["tmhmm_tmcount"] = an.pred_hel
-            record["tmhmm_first_60"] = an.first_60
-            record["tmhmm_exp_aa"] = an.exp_aa
-            tm_gff.extend(an.as_gff())
-
-        elif isinstance(an, LOCALIZER):
-            record["localizer_nuclear"] = int(an.nucleus_decision)
-            record["localizer_chloro"] = int(an.chloroplast_decision)
-            record["localizer_mito"] = int(an.mitochondria_decision)
-
-        elif isinstance(an, DeepLoc):
-            get_deeploc_cols(an, record)
-
-        elif isinstance(an, DBCAN):
-            if an.decide_significant():
-                dbcan_matches.add(an.hmm)
-
-        elif isinstance(an, PfamScan):
-            hmm = an.hmm.split('.', maxsplit=1)[0]
-            if hmm in pfam_domains:
-                pfam_matches.add(hmm)
-
-        elif isinstance(an, PepStats):
-            get_pepstats_cols(an, record)
-
-        elif isinstance(an, PHIBase):
-            if an.decide_significant():
-                phibase_phenotypes.update(parse_phibase_header(an.target))
-                phibase_matches.update(get_phibase_phis(an.target))
-
-        elif isinstance(an, EffectorDB):
-            if an.decide_significant():
-                record["effector_match"] = 1
-                effector_matches.add(an.hmm)
-
-        elif isinstance(an, DeepredeffFungi):
-            record["deepredeff_fungi"] = float(an.s_score)
-
-        elif isinstance(an, Kex2SiteAnalysis):
-            kex2_cutsites.append(an)
-
-        elif isinstance(an, RXLRLikeAnalysis):
-            rxlr_like_motifs.append(an)
-
-    decide_any_signal(record)
-    decide_is_transmembrane(record, sp_gff, tm_gff, tmhmm_first_60_threshold)
-    decide_is_secreted(record)
-
-    if len(sp_gff) > 0:
-        sp_gff.sort(key=lambda g: (g.end, g.source))
-        record["signal_peptide_cutsites"] = ",".join([
-            f"{g.source.replace(':', '')}:{g.end}"
-            for g in
-            sp_gff
-        ])
-
-    get_phibase_cols(phibase_matches, phibase_phenotypes, record)
-
-    if len(kex2_cutsites) > 0:
-        kex2_cutsites.sort(key=lambda a: (a.start, a.end))
-
-        record["kex2_cutsites"] = ",".join([
-            f"{k.pattern}:{k.start + 1}-{k.end}"
-            for k in
-            kex2_cutsites
-        ])
-
-    if len(rxlr_like_motifs) > 0:
-        rxlr_like_motifs.sort(key=lambda a: (a.start, a.end))
-        record["rxlr_like_motifs"] = ",".join([
-            f"{r.start + 1}-{r.end}"
-            for r in
-            rxlr_like_motifs
-        ])
-
-    if len(effector_matches) > 0:
-        record["effector_matches"] = ",".join(effector_matches)
-
-    record["pfam_match"] = int(len(
-        pfam_matches.intersection(pfam_domains)
-    ) > 0)
-
-    record["dbcan_match"] = int(len(
-        dbcan_matches.intersection(dbcan_domains)
-    ) > 0)
-
-    if len(pfam_matches) > 0:
-        record["pfam_matches"] = ",".join(pfam_matches)
-
-    if len(dbcan_matches) > 0:
-        record["dbcan_matches"] = ",".join(dbcan_matches)
-
-    return record
+    score += (
+        table["targetp_mitochondrial_prob"].astype(float).fillna(0.0) *
+        targetp_mitochondrial
+    )
+    return score.astype(float)
 
 
 def run_ltr(df: pd.DataFrame) -> np.ndarray:
@@ -847,17 +1572,15 @@ def run_ltr(df: pd.DataFrame) -> np.ndarray:
     return model.predict(dmat)
 
 
-def record_to_series(record: Dict[str, Union[None, int, float, str]]) -> str:
-    return pd.Series([record.get(c, None) for c in COLUMNS], index=COLUMNS)
+def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
+    cur = con.cursor()
 
+    tab = ResultsTable(con, cur)
+    tab.create_tables()
 
-def write_line(record: Dict[str, Union[None, int, float, str]]) -> str:
-    line = "\t".join(str(record.get(c, ".")) for c in COLUMNS)
-    return line
-
-
-def runner(args: argparse.Namespace) -> None:
-    records = defaultdict(list)
+    tab.insert_results(
+        ResultRow.from_file(args.infile, replace_name=False)
+    )
 
     if args.dbcan is not None:
         dbcan: Set[str] = {d.strip() for d in args.dbcan.readlines()}
@@ -869,51 +1592,59 @@ def runner(args: argparse.Namespace) -> None:
     else:
         pfam = set(get_interesting_pfam_ids())
 
-    for line in args.infile:
-        sline = line.strip()
-        if sline == "":
-            continue
+    df = create_tables(
+        tab,
+        con,
+        cur,
+        pfam,
+        dbcan,
+        args.tmhmm_first_60_threshold
+    )
 
-        dline = json.loads(sline)
-        record = get_analysis(dline)
-        records[getattr(record, record.name_column)].append(record)
+    df["manual_secretion_score"] = secretion_score_it(
+        df,
+        args.secreted_weight,
+        args.sigpep_ok_weight,
+        args.sigpep_good_weight,
+        args.single_transmembrane_weight,
+        args.multiple_transmembrane_weight,
+        args.deeploc_extracellular_weight,
+        args.deeploc_intracellular_weight,
+        args.deeploc_membrane_weight,
+        args.targetp_mitochondrial_weight,
+    )
 
-    out_records = []
+    df["manual_effector_score"] = effector_score_it(
+        df,
+        args.effectorp1_weight,
+        args.effectorp2_weight,
+        args.effectorp3_apoplastic_weight,
+        args.effectorp3_cytoplasmic_weight,
+        args.effectorp3_noneffector_weight,
+        args.deepredeff_fungi_weight,
+        args.deepredeff_oomycete_weight,
+        args.effector_homology_weight,
+        args.virulence_homology_weight,
+        args.lethal_homology_weight,
+    )
 
-    for name, protein_records in records.items():
-        record = construct_row(
-            name,
-            protein_records,
-            pfam,
-            dbcan,
-            args.tmhmm_first_60_threshold
-        )
-
-        record["manual_secretion_score"] = secretion_score_it(
-            record,
-            args.secreted_weight,
-            args.sigpep_ok_weight,
-            args.sigpep_good_weight,
-            args.single_transmembrane_weight,
-            args.multiple_transmembrane_weight,
-            args.deeploc_extracellular_weight,
-            args.deeploc_intracellular_weight,
-            args.deeploc_membrane_weight,
-            args.targetp_mitochondrial_weight,
-        )
-        record["manual_effector_score"] = effector_score_it(
-            record,
-            args.effectorp1_weight,
-            args.effectorp2_weight,
-            args.effector_homology_weight,
-            args.virulence_homology_weight,
-            args.lethal_homology_weight,
-        )
-        out_records.append(record)
-
-    df = pd.DataFrame([record_to_series(r) for r in out_records])
     df["effector_score"] = run_ltr(df)
     df.sort_values("effector_score", ascending=False, inplace=True)
+    df[COLUMNS].to_csv(
+        args.outfile,
+        sep="\t",
+        index=False,
+        na_rep=".",
+        float_format="{:.4f}".format
+    )
+    return
 
-    df.to_csv(args.outfile, sep="\t", index=False, na_rep=".")
+
+def runner(args: argparse.Namespace) -> None:
+    con = sqlite3.connect(args.db)
+    try:
+        inner(con, args)
+    finally:
+        con.commit()
+        con.close()
     return
