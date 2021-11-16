@@ -138,11 +138,11 @@ class LOCALIZER(Analysis, GFFAble):
             raise_it(parse_field(parse_str, "name"))(sline[0]),
             cp,
             cp_prob,
-            fmap(lambda x: x - 1, cp_start),
+            fmap(lambda x: x - 1 + 20, cp_start),
             cp_end,
             mt,
             mt_prob,
-            fmap(lambda x: x - 1, mt_start),
+            fmap(lambda x: x - 1 + 20, mt_start),
             mt_end,
             nuc,
             nuc_sigs
