@@ -386,7 +386,7 @@ def create_tables(
     tmhmm_first_60_threshold: float = 10,
 ) -> pd.DataFrame:
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS apoplastp
+    CREATE TEMP TABLE IF NOT EXISTS apoplastp
     AS
     SELECT
         json_extract(data, '$.{ApoplastP.name_column}') as name,
@@ -405,7 +405,7 @@ def create_tables(
         AND NOT json_extract(data, '$.prediction') = 'Apoplastic')
     """)
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS effectorp1
+    CREATE TEMP TABLE IF NOT EXISTS effectorp1
     AS
     SELECT
         json_extract(data, '$.{EffectorP1.name_column}') as name,
@@ -425,7 +425,7 @@ def create_tables(
     """)
 
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS effectorp2
+    CREATE TEMP TABLE IF NOT EXISTS effectorp2
     AS
     SELECT
         json_extract(data, '$.{EffectorP2.name_column}') as name,
@@ -451,7 +451,7 @@ def create_tables(
     """)
 
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS effectorp3
+    CREATE TEMP TABLE IF NOT EXISTS effectorp3
     AS
     SELECT
         json_extract(data, '$.{EffectorP3.name_column}') as name,
@@ -464,7 +464,7 @@ def create_tables(
     """)
 
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS localizer
+    CREATE TEMP TABLE IF NOT EXISTS localizer
     AS
     SELECT
         json_extract(data, '$.{LOCALIZER.name_column}') as name,
@@ -477,7 +477,7 @@ def create_tables(
     """)
 
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS deepredeff_fungi
+    CREATE TEMP TABLE IF NOT EXISTS deepredeff_fungi
     AS
     SELECT
         json_extract(data, '$.{DeepredeffFungi.name_column}') as name,
@@ -488,7 +488,7 @@ def create_tables(
     """)
 
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS deepredeff_oomycete
+    CREATE TEMP TABLE IF NOT EXISTS deepredeff_oomycete
     AS
     SELECT
         json_extract(data, '$.{DeepredeffOomycete.name_column}') as name,
@@ -499,7 +499,7 @@ def create_tables(
     """)
 
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS signalp3_nn
+    CREATE TEMP TABLE IF NOT EXISTS signalp3_nn
     AS
     SELECT
         json_extract(data, '$.{SignalP3NN.name_column}') as name,
@@ -511,7 +511,7 @@ def create_tables(
     """)
 
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS signalp3_hmm
+    CREATE TEMP TABLE IF NOT EXISTS signalp3_hmm
     AS
     SELECT
         json_extract(data, '$.{SignalP3HMM.name_column}') as name,
@@ -523,7 +523,7 @@ def create_tables(
     """)
 
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS signalp4
+    CREATE TEMP TABLE IF NOT EXISTS signalp4
     AS
     SELECT
         json_extract(data, '$.{SignalP4.name_column}') as name,
@@ -536,7 +536,7 @@ def create_tables(
     """)
 
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS signalp5
+    CREATE TEMP TABLE IF NOT EXISTS signalp5
     AS
     SELECT
         json_extract(data, '$.{SignalP5.name_column}') as name,
@@ -548,7 +548,7 @@ def create_tables(
     """)
 
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS signalp6
+    CREATE TEMP TABLE IF NOT EXISTS signalp6
     AS
     SELECT
         json_extract(data, '$.{SignalP6.name_column}') as name,
@@ -560,7 +560,7 @@ def create_tables(
     """)
 
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS deepsig
+    CREATE TEMP TABLE IF NOT EXISTS deepsig
     AS
     SELECT
         json_extract(data, '$.{DeepSig.name_column}') as name,
@@ -600,7 +600,7 @@ def create_tables(
     """)
 
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS phobius
+    CREATE TEMP TABLE IF NOT EXISTS phobius
     AS
     SELECT
         json_extract(data, '$.{Phobius.name_column}') as name,
@@ -612,7 +612,7 @@ def create_tables(
     """)
 
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS tmhmm
+    CREATE TEMP TABLE IF NOT EXISTS tmhmm
     AS
     SELECT
         json_extract(data, '$.{TMHMM.name_column}') as name,
@@ -625,7 +625,7 @@ def create_tables(
     """)
 
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS targetp
+    CREATE TEMP TABLE IF NOT EXISTS targetp
     AS
     SELECT
         json_extract(data, '$.{TargetPNonPlant.name_column}') as name,
@@ -638,7 +638,7 @@ def create_tables(
     """)
 
     cur.execute(f"""  -- # noqa
-    CREATE TEMP VIEW IF NOT EXISTS deeploc
+    CREATE TEMP TABLE IF NOT EXISTS deeploc
     AS
     SELECT
         json_extract(data, '$.{DeepLoc.name_column}') as name,
@@ -659,7 +659,7 @@ def create_tables(
     """)
 
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS hmmer_significant
+    CREATE TEMP TABLE IF NOT EXISTS hmmer_significant
     AS
     SELECT
         checksum,
@@ -677,7 +677,7 @@ def create_tables(
     """)
 
     cur.execute("""
-    CREATE TEMP VIEW IF NOT EXISTS hmmer
+    CREATE TEMP TABLE IF NOT EXISTS hmmer
     AS
     SELECT DISTINCT
         name, checksum, analysis, hmm
@@ -694,7 +694,7 @@ def create_tables(
     """)
 
     cur.execute("""
-    CREATE TEMP VIEW IF NOT EXISTS effectordb
+    CREATE TEMP TABLE IF NOT EXISTS effectordb
     AS
     SELECT
         name as name,
@@ -717,7 +717,7 @@ def create_tables(
     )
 
     cur.execute("""
-    CREATE TEMP VIEW IF NOT EXISTS dbcan
+    CREATE TEMP TABLE IF NOT EXISTS dbcan
     AS
     SELECT
         name as name,
@@ -742,7 +742,7 @@ def create_tables(
     """)
 
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS mmseqs
+    CREATE TEMP TABLE IF NOT EXISTS mmseqs
     AS
     SELECT DISTINCT
         json_extract(data, '$.{MMSeqs.name_column}') as name,
@@ -758,7 +758,7 @@ def create_tables(
     """)
 
     cur.execute("""
-    CREATE TEMP VIEW IF NOT EXISTS phibase
+    CREATE TEMP TABLE IF NOT EXISTS phibase
     AS
     SELECT
         name,
@@ -836,7 +836,7 @@ def create_tables(
     )
 
     cur.execute(f"""
-    CREATE TEMP VIEW pfamscan
+    CREATE TEMP TABLE pfamscan
     AS
     SELECT
         name,
@@ -879,7 +879,7 @@ def create_tables(
     """)
 
     cur.execute(f"""  -- # noqa
-    CREATE TEMP VIEW IF NOT EXISTS pepstats
+    CREATE TEMP TABLE IF NOT EXISTS pepstats
     AS
     SELECT
         name,
@@ -931,7 +931,7 @@ def create_tables(
     """)
 
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS kex2_cutsite
+    CREATE TEMP TABLE IF NOT EXISTS kex2_cutsite
     AS
     SELECT
         name,
@@ -952,7 +952,7 @@ def create_tables(
     """)
 
     cur.execute(f"""
-    CREATE TEMP VIEW IF NOT EXISTS rxlr_like_motif
+    CREATE TEMP TABLE IF NOT EXISTS rxlr_like_motif
     AS
     SELECT
         name,
@@ -970,6 +970,8 @@ def create_tables(
     )
     GROUP BY name, checksum
     """)
+
+    print("created subtables")
 
     cur.execute("""
     CREATE TEMP VIEW all_records
@@ -1026,6 +1028,8 @@ def create_tables(
     )
     ORDER BY name, checksum
     """)
+
+    print("created views")
 
     table = pd.read_sql_query(""" --  # noqa
     SELECT
@@ -1147,6 +1151,8 @@ def create_tables(
     LEFT JOIN deeploc
         ON (all_records.checksum = deeploc.checksum) AND (all_records.name = deeploc.name)
     """, con)
+
+    print("loaded table")
 
     table["has_pfam_virulence_match"] = (
         table["has_pfam_virulence_match"].fillna(0)
@@ -1583,6 +1589,7 @@ def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
     tab.insert_results(
         ResultRow.from_file(args.infile, replace_name=False)
     )
+    print("loaded results")
 
     if args.dbcan is not None:
         dbcan: Set[str] = {d.strip() for d in args.dbcan.readlines()}
@@ -1646,6 +1653,8 @@ def runner(args: argparse.Namespace) -> None:
     con = sqlite3.connect(args.db)
     try:
         inner(con, args)
+    except Exception as e:
+        raise e
     finally:
         con.commit()
         con.close()

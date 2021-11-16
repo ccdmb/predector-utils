@@ -165,6 +165,7 @@ def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
                 replace_name=True
             )
         )
+    tab.create_deduplicated_tables()
 
     tab.insert_targets(TargetRow.from_file(args.analyses))
 
@@ -179,6 +180,8 @@ def runner(args: argparse.Namespace) -> None:
     con = sqlite3.connect(args.db)
     try:
         inner(con, args)
+    except Exception as e:
+        raise e
     finally:
         con.commit()
         con.close()

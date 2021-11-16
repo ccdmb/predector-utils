@@ -98,6 +98,8 @@ def runner(args: argparse.Namespace) -> None:
     con = sqlite3.connect(args.db)
     try:
         inner(con, args)
+    except Exception as e:
+        raise e
     finally:
         con.commit()
         con.close()
