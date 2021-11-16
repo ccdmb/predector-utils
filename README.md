@@ -1,8 +1,6 @@
 # predector-utils
 Utilities for running the predector pipeline.
 
-[![Build Status](https://travis-ci.org/ccdmb/predector-utils.svg?branch=master)](https://travis-ci.org/ccdmb/predector-utils)
-
 
 This is where the models and more extensive utility scripts are developed.
 
@@ -20,7 +18,8 @@ predutils r2js \
   -o outfile.ldjson \
   --pipeline-version 0.0.1 \
   signalp3_nn \
-  signalp3_nn_results.txt
+  signalp3_nn_results.txt \
+  in.fasta
 ```
 
 
