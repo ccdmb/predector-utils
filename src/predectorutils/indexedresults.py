@@ -256,6 +256,10 @@ class ResultsTable(object):
         CREATE INDEX IF NOT EXISTS analysis_version
         ON results (analysis, software_version, database_version, checksum);
         """)
+        self.con.commit()
+        return
+
+    def deduplicate_table(self):
 
         multiples_ok = ", ".join([
             "'" + str(a) + "'"
@@ -264,19 +268,41 @@ class ResultsTable(object):
             if a.multiple_ok()
         ])
 
+        requires_database = ", ".join({
+            "'" + str(a) + "'"
+            for a
+            in Analyses
+            if (a.get_analysis().database is not None)
+        })
 
         self.cur.execute(f"""
-        CREATE VIEW IF NOT EXISTS results_deduplicated
+        CREATE TEMP TABLE IF NOT EXISTS results_deduplicated
         AS
-        SELECT DISTINCT * FROM results WHERE analysis IN ({multiples_ok})
+        SELECT DISTINCT *
+        FROM results
+        WHERE (analysis IN ({multiples_ok}))
         UNION
         SELECT *
         FROM results
-        WHERE analysis NOT IN ({multiples_ok})
+        WHERE (analysis NOT IN ({multiples_ok}))
         GROUP BY analysis, software_version, database_version, checksum
         HAVING ROWID=MIN(ROWID)
         """)
 
+        self.cur.execute("DROP TABLE results")
+
+        self.cur.execute(f"""
+        CREATE TABLE results
+        AS
+        SELECT *
+        FROM results_deduplicated
+        WHERE NOT (
+            (analysis IN ({requires_database}))
+            AND (database_version IS NULL)
+        )
+        """)
+
+        self.cur.execute("DROP TABLE results_deduplicated")
         self.con.commit()
         return
 
@@ -327,20 +353,6 @@ class ResultsTable(object):
         AS
         SELECT DISTINCT r.*
         FROM results r
-        INNER JOIN targets t
-            ON r.analysis = t.analysis
-            AND r.software_version = t.software_version
-            AND (r.database_version = t.database_version
-                OR (r.database_version IS NULL AND t.database_version IS NULL))
-        """)
-        self.con.commit()
-
-        self.cur.execute("DROP TABLE IF EXISTS subset_deduplicated")
-        self.cur.execute("""
-        CREATE TEMP TABLE IF NOT EXISTS subset_deduplicated
-        AS
-        SELECT DISTINCT r.*
-        FROM results_deduplicated r
         INNER JOIN targets t
             ON r.analysis = t.analysis
             AND r.software_version = t.software_version

@@ -16,10 +16,13 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--table",
-        default="results_deduplicated",
-        choices=["results", "results_deduplicated"],
-        help="Which table to dump from."
+        "--deduplicate",
+        action="store_true",
+        default=False,
+        help=(
+            "Remove duplicates from the table. "
+            "Warning! this will mutate the database."
+        )
     )
 
     parser.add_argument(
@@ -42,7 +45,11 @@ def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
     cur = con.cursor()
 
     tab = ResultsTable(con, cur)
-    for row in tab.select_all(args.table):
+
+    if args.deduplicate:
+        tab.deduplicate_table()
+
+    for row in tab.select_all("results"):
         if args.replace_name:
             row = row.replace_name()
 

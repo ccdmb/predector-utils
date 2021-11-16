@@ -14,6 +14,7 @@ from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqUtils.CheckSum import seguid
 
+from predectorutils.analyses import Analyses
 from predectorutils.indexedresults import TargetRow, ResultsTable, ResultRow
 
 
@@ -109,7 +110,7 @@ def fetch_local_precomputed(
     outfile: TextIO
 ) -> None:
     buf: List[str] = []
-    for precomp in tab.select_checksums(checksums, "subset_deduplicated"):
+    for precomp in tab.select_checksums(checksums, "subset"):
         buf.append(precomp.as_str())
 
         if len(buf) > 10000:
@@ -128,7 +129,7 @@ def write_remaining_seqs(
     checksum_to_ids: Dict[str, Set[str]],
     template: str
 ) -> None:
-    for an, chks in tab.find_remaining(checksums, "subset_deduplicated"):
+    for an, chks in tab.find_remaining(checksums, "subset"):
         analysis, sversion, dversion = an
 
         fname = template.format(analysis=analysis)
@@ -146,6 +147,21 @@ def write_remaining_seqs(
     return
 
 
+def filter_results_by_database_version(
+    results: Iterator[ResultRow],
+    requires_database: Set[str],
+) -> Iterator[ResultRow]:
+    for result in results:
+        if (
+            (result.analysis in requires_database) and
+            (result.database_version is None)
+        ):
+            continue
+        else:
+            yield result
+    return
+
+
 def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
     seqs: Dict[str, SeqRecord] = SeqIO.to_dict(
         SeqIO.parse(args.infasta, "fasta")
@@ -158,14 +174,24 @@ def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
     tab = ResultsTable(con, cur)
     tab.create_tables()
 
+    requires_database = {
+        str(a)
+        for a
+        in Analyses
+        if (a.get_analysis().database is not None)
+    }
+
     if args.precomputed is not None:
-        tab.insert_results(
+        results = filter_results_by_database_version(
             ResultRow.from_file(
                 args.precomputed,
                 replace_name=True
-            )
+            ),
+            requires_database
         )
-    tab.create_deduplicated_tables()
+        tab.insert_results(results)
+
+    tab.deduplicate_table()
 
     tab.insert_targets(TargetRow.from_file(args.analyses))
 
