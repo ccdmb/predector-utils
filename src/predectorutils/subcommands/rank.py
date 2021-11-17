@@ -1639,12 +1639,11 @@ def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
 
     df["effector_score"] = run_ltr(df)
     df.sort_values("effector_score", ascending=False, inplace=True)
-    df[COLUMNS].to_csv(
+    df[COLUMNS].round(3).to_csv(
         args.outfile,
         sep="\t",
         index=False,
         na_rep=".",
-        float_format="{:.4f}".format
     )
     return
 
