@@ -192,6 +192,7 @@ def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
         tab.insert_results(results)
 
     tab.deduplicate_table()
+    tab.index_results()
 
     tab.insert_targets(TargetRow.from_file(args.analyses))
 

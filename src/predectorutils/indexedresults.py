@@ -252,10 +252,19 @@ class ResultsTable(object):
         )
         """)
 
+        self.con.commit()
+        return
+
+    def index_results(self):
         self.cur.execute("""
         CREATE INDEX IF NOT EXISTS analysis_version
         ON results (analysis, software_version, database_version, checksum);
         """)
+        self.con.commit()
+        return
+
+    def drop_index(self):
+        self.cur.execute("DROP INDEX IF EXISTS analysis_version")
         self.con.commit()
         return
 
@@ -289,6 +298,7 @@ class ResultsTable(object):
         HAVING ROWID=MIN(ROWID)
         """)
 
+        self.drop_index()
         self.cur.execute("DROP TABLE results")
 
         self.cur.execute(f"""

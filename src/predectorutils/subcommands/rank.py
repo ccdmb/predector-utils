@@ -938,16 +938,29 @@ def create_tables(
         checksum,
         GROUP_CONCAT(pos, ',') as kex2_cutsites
     FROM (
-        SELECT DISTINCT
-            json_extract(data, '$.{RegexAnalysis.name_column}') as name,
+        SELECT
+            name,
             checksum,
-            (json_extract(data, '$.pattern') || ':' ||
-            (json_extract(data, '$.start') + 1) || '-' ||
-            json_extract(data, '$.end')) as pos
-        FROM results
-        WHERE analysis = 'kex2_cutsite'
-        ORDER BY json_extract(data, '$.start')
-    )
+            (
+                match || ':' ||
+                GROUP_CONCAT(pattern, "&") || ':' ||
+                start || '-' ||
+                end
+            ) as pos
+        FROM (
+            SELECT DISTINCT
+                json_extract(data, '$.{RegexAnalysis.name_column}') as name,
+                checksum,
+                REPLACE(json_extract(data, '$.pattern'), '[A-Z]', 'X') as pattern,
+                json_extract(data, '$.match') as match,
+                (json_extract(data, '$.start') + 1) as start,
+                json_extract(data, '$.end') as end
+            FROM results
+            WHERE analysis = 'kex2_cutsite'
+            ORDER BY json_extract(data, '$.start')
+        )
+        GROUP BY name, checksum, match, start, end
+        ORDER BY start
     GROUP BY name, checksum
     """)
 

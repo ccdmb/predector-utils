@@ -9,11 +9,11 @@ from predectorutils.indexedresults import ResultsTable, ResultRow
 
 def cli(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--no-replace-name",
+        "--replace-name",
         dest="replace_name",
-        action="store_false",
-        default=True,
-        help="Don't replace the analysis names with 'dummy'"
+        action="store_true",
+        default=False,
+        help="Replace the analysis names with 'dummy'"
     )
 
     parser.add_argument(
