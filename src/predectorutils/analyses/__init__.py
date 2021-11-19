@@ -2,6 +2,8 @@
 
 from typing import Type
 import enum
+import sqlite3
+
 
 from predectorutils.analyses.base import Analysis, GFFAble
 from predectorutils.analyses.apoplastp import ApoplastP
@@ -52,7 +54,7 @@ __all__ = [
 ]
 
 
-class Analyses(enum.Enum):
+class Analyses(enum.IntEnum):
 
     signalp3_nn = 1
     signalp3_hmm = 2
@@ -98,6 +100,15 @@ class Analyses(enum.Enum):
 
     def multiple_ok(self) -> bool:
         return MULTIPLE_ACCEPTABLE[self]
+
+    def __conform__(self, protocol):
+        if protocol is sqlite3.PrepareProtocol:
+            return self.value
+
+    # int defines a from bytes method, hence underscore
+    @classmethod
+    def from_bytes_(cls, b: bytes) -> "Analyses":
+        return cls(int(b))
 
 
 NAME_TO_ANALYSIS = {

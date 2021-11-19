@@ -3,18 +3,42 @@
 from typing import NamedTuple, Tuple
 from typing import Dict, Set
 from typing import TextIO
-from typing import Optional
+from typing import Any, Optional
 from typing import Iterator
 
 import json
 import sqlite3
 
-from predectorutils.analyses import Analysis, Analyses
+from .analyses import Analysis, Analyses
+
+
+def text_split(text: str, sep: str) -> str:
+    return json.dumps(
+        text.split(sep),
+        separators=(',', ':')
+    )
+
+
+def load_db(path: str) -> Tuple[sqlite3.Connection, sqlite3.Cursor]:
+    sqlite3.register_converter("analyses", Analyses.from_bytes_)
+    con = sqlite3.connect(path, detect_types=sqlite3.PARSE_DECLTYPES)
+    con.row_factory = sqlite3.Row
+    con.create_function("text_split", 2, text_split, deterministic=True)
+
+    cur = con.cursor()
+    # Allow it to use 1GB RAM for cache
+    cur.execute("PRAGMA cache_size = -1000000")
+    cur.execute("PRAGMA journal_mode = WAL")
+    cur.execute("PRAGMA locking_mode = EXCLUSIVE")
+    cur.execute("PRAGMA synchronous = NORMAL")
+
+    con.commit()
+    return con, cur
 
 
 class ResultRow(NamedTuple):
 
-    analysis: str
+    analysis: Analyses
     software: str
     software_version: str
     database: Optional[str]
@@ -38,28 +62,38 @@ class ResultRow(NamedTuple):
         assert isinstance(pipeline_version, str) or pipeline_version is None, d
         assert isinstance(d["checksum"], str), d
 
+        an_enum = Analyses.from_string(d["analysis"])
+        # This ensures the types are all correcy
+        an_obj = (
+            an_enum
+            .get_analysis()
+            .from_dict(d["data"])
+        )
+
         if replace_name:
-            an_cls = Analyses.from_string(d["analysis"]).get_analysis()
-            an = an_cls.from_dict(d["data"])
-            setattr(an, an.name_column, "dummy")
-            d["data"] = an.as_dict()
+            an_obj.replace_name()
+
+        data = an_obj.as_json_str()
 
         return cls(
-            d["analysis"],
+            an_enum,
             d["software"],
             d["software_version"],
             database,
             database_version,
             pipeline_version,
             d["checksum"],
-            json.dumps(d["data"]),
+            data,
         )
 
     def replace_name(self):
-        d = json.loads(self.data)
-        an_cls = Analyses.from_string(self.analysis).get_analysis()
-        an = an_cls.from_dict(d)
-        setattr(an, an.name_column, "dummy")
+        an = (
+            self.analysis
+            .get_analysis()
+            .from_json_str(self.data)
+            .replace_name()
+        )
+
         return self.__class__(
             self.analysis,
             self.software,
@@ -68,7 +102,7 @@ class ResultRow(NamedTuple):
             self.database_version,
             self.pipeline_version,
             self.checksum,
-            json.dumps(an.as_dict())
+            an.as_json_str()
         )
 
     @classmethod
@@ -84,9 +118,9 @@ class ResultRow(NamedTuple):
             yield cls.from_string(sline, replace_name=replace_name)
         return
 
-    def as_str(self) -> str:
+    def as_dict(self) -> Dict[str, Any]:
         d = {
-            "analysis": self.analysis,
+            "analysis": str(self.analysis),
             "software": self.software,
             "software_version": self.software_version,
             "checksum": self.checksum,
@@ -101,18 +135,40 @@ class ResultRow(NamedTuple):
 
         if self.pipeline_version is not None:
             d["pipeline_version"] = self.pipeline_version
+        return d
 
-        return json.dumps(d)
+    def as_str(self) -> str:
+        return json.dumps(self.as_dict(), separators=(',', ':'))
 
     def as_analysis(self) -> "Analysis":
-        cls = Analyses.from_string(self.analysis).get_analysis()
-        d = json.loads(self.data)
-        return cls.from_dict(d)
+        an = (
+            self.analysis
+            .get_analysis()
+            .from_json_str(self.data)
+        )
+        return an
+
+    @classmethod
+    def from_rowfactory(cls, row: sqlite3.Row) -> "ResultRow":
+        return cls(
+            analysis=row["analysis"],
+            software=row["software"],
+            software_version=row["software_version"],
+            database=row["database"],
+            database_version=(
+                None
+                if (row["database_version"] == '.')
+                else row["database_version"]
+            ),
+            pipeline_version=row["pipeline_version"],
+            checksum=row["checksum"],
+            data=row["data"]
+        )
 
 
 class TargetRow(NamedTuple):
 
-    analysis: str
+    analysis: Analyses
     software_version: str
     database_version: Optional[str]
 
@@ -121,9 +177,9 @@ class TargetRow(NamedTuple):
         ss = s.strip().split("\t")
 
         if len(ss) == 2:
-            return cls(ss[0], ss[1], None)
+            return cls(Analyses.from_string(ss[0]), ss[1], None)
         elif len(ss) == 3:
-            return cls(ss[0], ss[1], ss[2])
+            return cls(Analyses.from_string(ss[0]), ss[1], ss[2])
         else:
             raise ValueError("Target table is in improper format")
 
@@ -142,10 +198,22 @@ class TargetRow(NamedTuple):
 
     def as_dict(self) -> Dict[str, Optional[str]]:
         return {
-            "analysis": self.analysis,
+            "analysis": str(self.analysis),
             "software_version": self.software_version,
             "database_version": self.database_version
         }
+
+    @classmethod
+    def from_rowfactory(cls, row: sqlite3.Row) -> "TargetRow":
+        return cls(
+            row["analysis"],
+            row["software_version"],
+            (
+                None
+                if (row["database_version"] == '.')
+                else row["database_version"]
+            )
+        )
 
 
 class DecoderRow(NamedTuple):
@@ -179,7 +247,7 @@ class DecodedRow(NamedTuple):
     encoded: str
     filename: str
     id: str
-    analysis: str
+    analysis: Analyses
     software: str
     software_version: str
     database: Optional[str]
@@ -188,11 +256,16 @@ class DecodedRow(NamedTuple):
     checksum: str
     data: str
 
+    def as_analysis(self) -> Analysis:
+        return (
+            self.analysis
+            .get_analysis()
+            .from_json_str(self.data)
+        )
+
     def as_result_row(self) -> ResultRow:
-        cls = Analyses.from_string(self.analysis).get_analysis()
-        d = json.loads(self.data)
-        an = cls.from_dict(d)
-        setattr(an, an.name_column, self.id)
+        an = self.as_analysis()
+        an.replace_name(self.id)
         return ResultRow(
             self.analysis,
             self.software,
@@ -201,18 +274,16 @@ class DecodedRow(NamedTuple):
             self.database_version,
             self.pipeline_version,
             self.checksum,
-            json.dumps(an.as_dict())
+            an.as_json_str()
         )
 
     def as_result_string(self) -> str:
         """ This is basically a copy to avoid having to serialise data again"""
-        cls = Analyses.from_string(self.analysis).get_analysis()
-        d = json.loads(self.data)
-        an = cls.from_dict(d)
-        setattr(an, an.name_column, self.id)
+        an = self.as_analysis()
+        an.replace_name(self.id)
 
         d = {
-            "analysis": self.analysis,
+            "analysis": str(self.analysis),
             "software": self.software,
             "software_version": self.software_version,
             "checksum": self.checksum,
@@ -228,7 +299,27 @@ class DecodedRow(NamedTuple):
         if self.pipeline_version is not None:
             d["pipeline_version"] = self.pipeline_version
 
-        return json.dumps(d)
+        return json.dumps(d, separators=(',', ':'))
+
+    @classmethod
+    def from_rowfactory(cls, row: sqlite3.Row) -> "DecodedRow":
+        return cls(
+            encoded=row["encoded"],
+            filename=row["filename"],
+            id=row["id"],
+            analysis=row["analysis"],
+            software=row["software"],
+            software_version=row["software_version"],
+            database=row["database"],
+            database_version=(
+                None
+                if (row["database_version"] == '.')
+                else row["database_version"]
+            ),
+            pipeline_version=row["pipeline_version"],
+            checksum=row["checksum"],
+            data=row["data"]
+        )
 
 
 class ResultsTable(object):
@@ -239,27 +330,43 @@ class ResultsTable(object):
         return
 
     def create_tables(self):
-        self.cur.execute("""
-        CREATE TABLE IF NOT EXISTS results (
-            analysis text NOT NULL,
-            software text NOT NULL,
-            software_version text NOT NULL,
-            database text,
-            database_version text,
-            pipeline_version text,
-            checksum text NOT NULL,
-            data json NOT NULL
+        self.cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS results (
+                analysis analyses NOT NULL,
+                software text NOT NULL,
+                software_version text NOT NULL,
+                database text,
+                database_version text NOT NULL,
+                pipeline_version text,
+                checksum text NOT NULL,
+                data json NOT NULL,
+                UNIQUE (
+                    analysis,
+                    software_version,
+                    database_version,
+                    checksum,
+                    data
+                )
+            )
+            """
         )
-        """)
 
         self.con.commit()
         return
 
     def index_results(self):
-        self.cur.execute("""
-        CREATE INDEX IF NOT EXISTS analysis_version
-        ON results (analysis, software_version, database_version, checksum);
-        """)
+        self.cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS analysis_version
+            ON results (
+                analysis,
+                software_version,
+                database_version,
+                checksum
+            )
+            """
+        )
         self.con.commit()
         return
 
@@ -268,142 +375,24 @@ class ResultsTable(object):
         self.con.commit()
         return
 
-    def deduplicate_table(self):
-
-        multiples_ok = ", ".join([
-            "'" + str(a) + "'"
-            for a
-            in Analyses
-            if a.multiple_ok()
-        ])
-
-        requires_database = ", ".join({
-            "'" + str(a) + "'"
-            for a
-            in Analyses
-            if (a.get_analysis().database is not None)
-        })
-
-        self.cur.execute(f"""
-        CREATE TEMP TABLE IF NOT EXISTS results_deduplicated
-        AS
-        SELECT DISTINCT *
-        FROM results
-        WHERE (analysis IN ({multiples_ok}))
-        UNION
-        SELECT *
-        FROM results
-        WHERE (analysis NOT IN ({multiples_ok}))
-        GROUP BY analysis, software_version, database_version, checksum
-        HAVING ROWID=MIN(ROWID)
-        """)
-
-        self.drop_index()
-        self.cur.execute("DROP TABLE results")
-
-        self.cur.execute(f"""
-        CREATE TABLE results
-        AS
-        SELECT *
-        FROM results_deduplicated
-        WHERE NOT (
-            (analysis IN ({requires_database}))
-            AND (database_version IS NULL)
-        )
-        """)
-
-        self.cur.execute("DROP TABLE results_deduplicated")
-        self.con.commit()
-        return
-
     def insert_results(self, rows: Iterator[ResultRow]) -> None:
-        buf = []
-
-        for row in rows:
-            buf.append(row)
-
-            if len(buf) > 50000:
-                self.cur.executemany(
-                    (
-                        "INSERT INTO results "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, json(?))"
-                    ),
-                    buf
-                )
-                self.con.commit()
-                buf = []
-
-        if len(buf) > 0:
-            self.cur.executemany(
-                (
-                    "INSERT INTO results "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, json(?))"
-                ),
-                buf
+        self.cur.executemany(
+            """
+            INSERT INTO results
+            VALUES (
+                :analysis,
+                :software,
+                :software_version,
+                :database,
+                IFNULL(:database_version, '.'),
+                :pipeline_version,
+                :checksum,
+                json(:data)
             )
-
-        self.con.commit()
-        return
-
-    def insert_targets(self, rows: Iterator[TargetRow]) -> None:
-        self.cur.execute("DROP TABLE IF EXISTS targets")
-        self.cur.execute("""
-        CREATE TEMP TABLE IF NOT EXISTS targets (
-            analysis text NOT NULL,
-            software_version text NOT NULL,
-            database_version text
+            ON CONFLICT DO NOTHING
+            """,
+            rows
         )
-        """)
-
-        self.cur.executemany("INSERT INTO targets VALUES (?, ?, ?)", rows)
-
-        self.cur.execute("DROP TABLE IF EXISTS subset")
-        self.cur.execute("""
-        CREATE TEMP TABLE IF NOT EXISTS subset
-        AS
-        SELECT DISTINCT r.*
-        FROM results r
-        INNER JOIN targets t
-            ON r.analysis = t.analysis
-            AND r.software_version = t.software_version
-            AND (r.database_version = t.database_version
-                OR (r.database_version IS NULL AND t.database_version IS NULL))
-        """)
-        self.con.commit()
-        return
-
-    def insert_decoder(self, rows: Iterator[DecoderRow]) -> None:
-        self.cur.execute("DROP TABLE IF EXISTS decoder")
-        self.cur.execute("""
-        CREATE TEMP TABLE IF NOT EXISTS decoder (
-            encoded text NOT NULL,
-            filename text NOT NULL,
-            id text NOT NULL,
-            checksum text NOT NULL
-        )
-        """)
-
-        self.cur.executemany("INSERT INTO decoder VALUES (?, ?, ?, ?)", rows)
-
-        self.cur.execute("""
-        CREATE TEMP VIEW IF NOT EXISTS decoded
-        AS
-        SELECT
-            d.encoded,
-            d.filename,
-            d.id,
-            r.analysis,
-            r.software,
-            r.software_version,
-            r.database,
-            r.database_version,
-            r.pipeline_version,
-            r.checksum,
-            r.data
-        FROM results r
-        INNER JOIN decoder d
-            ON r.checksum = d.checksum
-        """)
         self.con.commit()
         return
 
@@ -421,33 +410,32 @@ class ResultsTable(object):
         temp = self.cur.execute(query, (table,)).fetchone() is not None
         return main or temp
 
-    def select_checksums(
-        self,
-        chk: Set[str],
-        table: str
-    ) -> Iterator[ResultRow]:
-
-        assert self.exists_table(table), f"table {table} does not exist"
-
+    def insert_checksums(self, checksums: Set[str]) -> None:
         self.cur.execute("DROP TABLE IF EXISTS checksums")
-
-        self.cur.execute("""
-        CREATE TEMP TABLE checksums (checksum text NOT NULL)
-        """)
+        self.cur.execute(
+            """
+            CREATE TEMP TABLE checksums (checksum text NOT NULL UNIQUE)
+            """
+        )
         self.cur.executemany(
             "INSERT INTO checksums VALUES (?)",
-            [(c,) for c in chk]
+            ((c,) for c in checksums)
         )
 
-        result = self.cur.execute(f"""
-        SELECT DISTINCT r.*
-        FROM {table} r
-        INNER JOIN checksums c
-            ON r.checksum = c.checksum
-        """)
+    def select_checksums(self) -> Iterator[ResultRow]:
+        assert self.exists_table("checksums"), "no checksums table"
+
+        result = self.cur.execute(
+            """
+            SELECT DISTINCT r.*
+            FROM results r
+            INNER JOIN checksums c
+                ON r.checksum = c.checksum
+            """
+        )
 
         for r in result:
-            yield ResultRow(*r)
+            yield ResultRow.from_rowfactory(r)
 
         self.con.commit()
         return
@@ -455,94 +443,166 @@ class ResultsTable(object):
     def select_target(
         self,
         target: TargetRow,
-        table: str = "results"
+        checksums: bool = False,
     ) -> Iterator[ResultRow]:
-        assert self.exists_table(table), f"table {table} does not exist"
+
+        if checksums:
+            assert self.exists_table("checksums"), "no checksums table"
+
+            result = self.cur.execute(
+                """
+                SELECT
+                    analysis,
+                    software,
+                    software_version,
+                    database,
+                    (
+                        CASE
+                            WHEN database_version == '.'
+                            THEN NULL
+                            ELSE database_version
+                        END
+                    ) as database_version,
+                    pipeline_version,
+                    checksum,
+                    data
+                FROM results
+                WHERE analysis = CAST(:analysis AS analyses)
+                AND software_version = :software_version
+                AND database_version = IFNULL(:database_version, '.')
+                AND checksum IN checksums
+                """,
+                target
+            )
+
+        else:
+            result = self.cur.execute(
+                """
+                SELECT
+                    analysis,
+                    software,
+                    software_version,
+                    database,
+                    (
+                        CASE
+                            WHEN database_version == '.'
+                            THEN NULL
+                            ELSE database_version
+                        END
+                    ) as database_version,
+                    pipeline_version,
+                    checksum,
+                    data
+                FROM results
+                WHERE analysis = CAST(:analysis AS analyses)
+                AND software_version = :software_version
+                AND database_version = IFNULL(:database_version, '.')
+                """,
+                target
+            )
+
+        for r in result:
+            yield ResultRow.from_rowfactory(r)
+
+        return
+
+    def find_remaining(self, target: TargetRow) -> Iterator[str]:
+        assert self.exists_table("checksums"), "no checksums table"
 
         result = self.cur.execute(
-            "SELECT * "
-            f"FROM {table} "
-            "WHERE analysis = :analysis "
-            "AND software_version = :software_version "
-            "AND ("
-            "  (database_version = :database_version) "
-            "  OR (database_version IS NULL AND :database_version IS NULL)"
-            ")",
-            target.as_dict()
-        )
-        for r in result:
-            yield ResultRow(*r)
-        return
-
-    def select_all(self, table: str) -> Iterator[ResultRow]:
-        assert self.exists_table(table), f"table {table} does not exist"
-
-        result = self.cur.execute(f"SELECT * FROM {table}")
-        for r in result:
-            yield ResultRow(*r)
-        return
-
-    def find_remaining(
-        self,
-        checksums: Set[str],
-        table: str = "subset"
-    ) -> Iterator[Tuple[TargetRow, Set[str]]]:
-        assert self.exists_table(table), f"table {table} does not exist"
-
-        self.cur.execute("DROP TABLE IF EXISTS checksums")
-
-        self.cur.execute("""
-        CREATE TEMP TABLE checksums (checksum text NOT NULL)
-        """)
-        self.cur.executemany(
-            "INSERT INTO checksums VALUES (?)",
-            [(c,) for c in checksums]
-        )
-
-        self.cur.execute("DROP TABLE IF EXISTS all_tasks")
-        self.cur.execute("""
-        CREATE TEMP TABLE IF NOT EXISTS all_tasks
-        AS
-        SELECT t.analysis, t.software_version, t.database_version, c.checksum
-        FROM targets t
-        CROSS JOIN checksums c
-        """)
-
-        self.cur.execute("DROP TABLE IF EXISTS remaining")
-        self.cur.execute("""
-        CREATE TEMP TABLE IF NOT EXISTS remaining
-        AS
-        SELECT a.analysis, a.software_version, a.database_version, a.checksum
-        FROM all_tasks a
-        EXCEPT
-        SELECT t.analysis, t.software_version, t.database_version, t.checksum
-        from subset t
-        """)
-
-        self.con.commit()
-
-        targets = self.con.execute("SELECT * FROM targets").fetchall()
-
-        for target in targets:
-            chks = self.cur.execute(
-                """
-                SELECT DISTINCT checksum FROM remaining
-                WHERE analysis = :analysis
+            """
+            SELECT DISTINCT
+                c.checksum AS checksum
+            FROM checksums AS c
+            WHERE c.checksum NOT IN (
+                SELECT r.checksum
+                FROM results AS r
+                WHERE analysis = CAST(:analysis AS analyses)
                 AND software_version = :software_version
-                AND (
-                    (database_version = :database_version)
-                    OR (database_version IS NULL and :database_version IS NULL)
-                )
-                """,
-                dict(zip(
-                    ["analysis", "software_version", "database_version"],
-                    target
-                ))
-            ).fetchall()
-            yield TargetRow(*target), set(map(lambda t: t[0], chks))
+                AND database_version = IFNULL(:database_version, '.')
+            )
+            """,
+            target
+        )
+
+        for r in result:
+            yield r["checksum"]
         return
 
-    def decode(self) -> Iterator[Tuple[str, Iterator[str]]]:
+    def select_all(self) -> Iterator[ResultRow]:
+        result = self.cur.execute(
+            """
+            SELECT
+                analysis,
+                software,
+                software_version,
+                database,
+                (
+                    CASE
+                        WHEN database_version == '.'
+                        THEN NULL
+                        ELSE database_version
+                    END
+                ) as database_version,
+                pipeline_version,
+                checksum,
+                data
+            FROM results
+            """
+        )
+        for r in result:
+            yield ResultRow.from_rowfactory(r)
+        return
+
+    def insert_decoder(self, rows: Iterator[DecoderRow]) -> None:
+        self.cur.execute("DROP TABLE IF EXISTS decoder")
+        self.cur.execute(
+            """
+            CREATE TEMP TABLE IF NOT EXISTS decoder (
+                encoded text NOT NULL,
+                filename text NOT NULL,
+                id text NOT NULL,
+                checksum text NOT NULL
+            )
+            """
+        )
+
+        self.cur.executemany(
+            "INSERT INTO decoder VALUES (:encoded, :filename, :id, :checksum)",
+            rows
+        )
+
+        self.cur.execute(
+            """
+            CREATE TEMP VIEW IF NOT EXISTS decoded
+            AS
+            SELECT
+                d.encoded,
+                d.filename,
+                d.id,
+                r.analysis,
+                r.software,
+                r.software_version,
+                r.database,
+                (
+                    CASE
+                        WHEN r.database_version == '.'
+                        THEN NULL
+                        ELSE r.database_version
+                    END
+                ) as database_version,
+                r.pipeline_version,
+                r.checksum,
+                r.data
+            FROM results r
+            INNER JOIN decoder d
+                ON r.checksum = d.checksum
+            """
+        )
+        self.con.commit()
+        return
+
+    def decode(self) -> Iterator[Tuple[str, Iterator[ResultRow]]]:
         assert self.exists_table("decoded"), "table decoder doesn't exist"
 
         fnames = (
@@ -556,6 +616,12 @@ class ResultsTable(object):
                 {"filename": fname}
             )
 
-            gen = (DecodedRow(*r).as_result_string() for r in rows)
+            gen = (
+                (DecodedRow
+                    .from_rowfactory(r)
+                    .as_result_row())
+                for r
+                in rows
+            )
             yield fname, gen
         return

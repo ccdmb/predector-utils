@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import pandas as pd
 
+import json
+
 from typing import Callable
 from typing import List
 from typing import ClassVar
@@ -9,6 +11,7 @@ from typing import Union, Optional, Any
 from typing import TextIO
 from typing import Iterator
 
+from ..checksum import checksum
 from predectorutils.gff import GFFRecord
 
 
@@ -98,6 +101,30 @@ class Analysis(object):
             ))
         return pd.DataFrame(rows)
 
+    def copy(self) -> "Analysis":
+        from copy import copy
+        return copy(self)
+
+    def replace_name(self, new: str = "d") -> None:
+        setattr(self, self.name_column, new)
+        return
+
+    def checksum(self) -> str:
+        return self.checksum_dict(self.as_dict())
+
+    @classmethod
+    def checksum_dict(cls, d: Dict[str, Any]) -> str:
+        data = json.dumps(d, separators=(',', ':'))
+        chk = checksum(data.encode()).decode()
+        return chk
+
+    @classmethod
+    def from_json_str(cls, s: str) -> "Analysis":
+        return cls.from_dict(json.loads(s))
+
+    def as_json_str(self) -> str:
+        return json.dumps(self.as_dict(), separators=(',', ':'))
+
 
 class GFFAble(object):
 
@@ -114,7 +141,7 @@ class GFFAble(object):
         raise NotImplementedError()
 
     def gen_source(
-        self, 
+        self,
         software_version: Optional[str] = None,
         database_version: Optional[str] = None,
     ) -> str:

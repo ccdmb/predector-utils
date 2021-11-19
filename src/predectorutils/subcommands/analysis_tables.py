@@ -10,7 +10,12 @@ import sqlite3
 
 import pandas as pd
 
-from predectorutils.indexedresults import ResultsTable, TargetRow, ResultRow
+from predectorutils.database import (
+    load_db,
+    ResultsTable,
+    ResultRow,
+    TargetRow
+)
 
 
 def cli(parser: argparse.ArgumentParser) -> None:
@@ -52,15 +57,15 @@ def fetch_targets(
         f"FROM {table}"
     ))
     for r in result:
-        yield TargetRow(*r)
+        yield TargetRow.from_rowfactory(r)
     return
 
 
-def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
-    # This thing just keeps the contents on disk.
-    # Helps save memory.
-    cur = con.cursor()
-
+def inner(
+    con: sqlite3.Connection,
+    cur: sqlite3.Cursor,
+    args: argparse.Namespace
+) -> None:
     tab = ResultsTable(con, cur)
     tab.create_tables()
     tab.insert_results(ResultRow.from_file(args.infile))
@@ -76,7 +81,7 @@ def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
         else:
             seen.add(target.analysis)
 
-        records = tab.select_target(target, "results")
+        records = tab.select_target(target, checksums=False)
         df = pd.DataFrame(map(lambda x: x.as_analysis().as_series(), records))
 
         fname = args.template.format(analysis=target.analysis)
@@ -88,9 +93,9 @@ def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
 
 
 def runner(args: argparse.Namespace) -> None:
-    con = sqlite3.connect(args.db)
     try:
-        inner(con, args)
+        con, cur = load_db(args.db)
+        inner(con, cur, args)
     except Exception as e:
         raise e
     finally:

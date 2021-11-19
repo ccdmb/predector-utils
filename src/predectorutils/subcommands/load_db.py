@@ -4,16 +4,16 @@ import argparse
 import sqlite3
 import sys
 
-from predectorutils.indexedresults import ResultsTable, ResultRow
+from predectorutils.database import load_db, ResultsTable, ResultRow
 
 
 def cli(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--replace-name",
+        "-r", "--replace-name",
         dest="replace_name",
         action="store_true",
         default=False,
-        help="Replace the analysis names with 'dummy'"
+        help="Replace the analysis names with 'd'"
     )
 
     parser.add_argument(
@@ -32,9 +32,11 @@ def cli(parser: argparse.ArgumentParser) -> None:
     return
 
 
-def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
-    cur = con.cursor()
-
+def inner(
+    con: sqlite3.Connection,
+    cur: sqlite3.Cursor,
+    args: argparse.Namespace
+) -> None:
     tab = ResultsTable(con, cur)
     tab.create_tables()
 
@@ -44,13 +46,15 @@ def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
             replace_name=args.replace_name
         )
     )
+
+    tab.index_results()
     return
 
 
 def runner(args: argparse.Namespace) -> None:
-    con = sqlite3.connect(args.db)
     try:
-        inner(con, args)
+        con, cur = load_db(args.db)
+        inner(con, cur, args)
     except Exception as e:
         raise e
     finally:

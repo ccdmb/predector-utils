@@ -3,10 +3,9 @@
 import sys
 import argparse
 
-from collections import defaultdict
 from statistics import median
 
-from typing import (Tuple, Dict, Set, List, Sequence)
+from typing import (Optional, Tuple, Dict, Set, List)
 
 import sqlite3
 
@@ -14,138 +13,20 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 
+from predectorutils.analyses import Analyses
 from predectorutils.data import (
     get_interesting_dbcan_ids,
     get_interesting_pfam_ids,
     get_ltr_model,
 )
 
-from predectorutils.indexedresults import ResultsTable, ResultRow
-
-from predectorutils.gff import GFFRecord
-from predectorutils.analyses import (
-    GFFAble,
-    ApoplastP,
-    DeepSig,
-    EffectorP1,
-    EffectorP2,
-    EffectorP3,
-    Phobius,
-    SignalP3HMM,
-    SignalP3NN,
-    SignalP4,
-    SignalP5,
-    SignalP6,
-    TargetPNonPlant,
-    TMHMM,
-    LOCALIZER,
-    DeepLoc,
-    DomTbl,
-    PfamScan,
-    PepStats,
-    MMSeqs,
-    DeepredeffFungi,
-    DeepredeffOomycete,
-    RegexAnalysis,
-)
-
-
-COLUMNS = [
-    "name",
-    "effector_score",
-    "manual_effector_score",
-    "manual_secretion_score",
-    "effector_matches",
-    "phibase_genes",
-    "phibase_phenotypes",
-    "phibase_ids",
-    "has_phibase_effector_match",
-    "has_phibase_virulence_match",
-    "has_phibase_lethal_match",
-    "pfam_ids",
-    "pfam_names",
-    "has_pfam_virulence_match",
-    "dbcan_matches",
-    "has_dbcan_virulence_match",
-    "effectorp1",
-    "effectorp2",
-    "effectorp3_cytoplasmic",
-    "effectorp3_apoplastic",
-    "effectorp3_noneffector",
-    "deepredeff_fungi",
-    "deepredeff_oomycete",
-    "apoplastp",
-    "is_secreted",
-    "any_signal_peptide",
-    "single_transmembrane",
-    "multiple_transmembrane",
-    "molecular_weight",
-    "residue_number",
-    "charge",
-    "isoelectric_point",
-    "aa_c_number",
-    "aa_tiny_number",
-    "aa_small_number",
-    "aa_aliphatic_number",
-    "aa_aromatic_number",
-    "aa_nonpolar_number",
-    "aa_charged_number",
-    "aa_basic_number",
-    "aa_acidic_number",
-    "fykin_gap",
-    "kex2_cutsites",
-    "rxlr_like_motifs",
-    "localizer_nucleus",
-    "localizer_chloro",
-    "localizer_mito",
-    "signal_peptide_cutsites",
-    "signalp3_nn",
-    "signalp3_hmm",
-    "signalp4",
-    "signalp5",
-    "signalp6",
-    "deepsig",
-    "phobius_sp",
-    "phobius_tmcount",
-    "tmhmm_tmcount",
-    "tmhmm_first_60",
-    "tmhmm_exp_aa",
-    "tmhmm_first_tm_sp_coverage",
-    "targetp_secreted",
-    "targetp_secreted_prob",
-    "targetp_mitochondrial_prob",
-    "deeploc_membrane",
-    "deeploc_nucleus",
-    "deeploc_cytoplasm",
-    "deeploc_extracellular",
-    "deeploc_mitochondrion",
-    "deeploc_cell_membrane",
-    "deeploc_endoplasmic_reticulum",
-    "deeploc_plastid",
-    "deeploc_golgi",
-    "deeploc_lysosome",
-    "deeploc_peroxisome",
-    "signalp3_nn_d",
-    "signalp3_hmm_s",
-    "signalp4_d",
-    "signalp5_prob",
-    "signalp6_prob",
-]
-
 
 def cli(parser: argparse.ArgumentParser) -> None:
 
     parser.add_argument(
-        "infile",
-        type=argparse.FileType('r'),
-        help="The ldjson file to parse as input. Use '-' for stdin."
-    )
-
-    parser.add_argument(
-        "--db",
+        "db",
         type=str,
-        default=":memory:",
-        help="Where to store the sqlite database."
+        help="Where the sqlite database is."
     )
 
     parser.add_argument(
@@ -377,886 +258,924 @@ def cli(parser: argparse.ArgumentParser) -> None:
     return
 
 
+def create_pfam_targets(
+    con: sqlite3.Connection,
+    cur: sqlite3.Cursor,
+    targets: Set[str]
+) -> None:
+    cur.execute("DROP TABLE IF EXISTS pfam_targets")
+    cur.execute(
+        "CREATE TEMP TABLE pfam_targets (pfam_ids text NOT NULL UNIQUE)"
+    )
+    cur.executemany(
+        "INSERT INTO pfam_targets VALUES (?)",
+        ((c,) for c in targets)
+    )
+    cur.execute(
+        "CREATE UNIQUE INDEX pfam_targets_index ON pfam_targets (pfam_ids)"
+    )
+    con.commit()
+    return
+
+
+def create_dbcan_targets(
+    con: sqlite3.Connection,
+    cur: sqlite3.Cursor,
+    targets: Set[str]
+) -> None:
+    cur.execute("DROP TABLE IF EXISTS dbcan_targets")
+    cur.execute(
+        "CREATE TEMP TABLE dbcan_targets (dbcan_ids text NOT NULL UNIQUE)"
+    )
+    cur.executemany(
+        "INSERT INTO dbcan_targets VALUES (?)",
+        ((c,) for c in targets)
+    )
+    cur.execute(
+        "CREATE UNIQUE INDEX dbcan_targets_index ON dbcan_targets (dbcan_ids)"
+    )
+    con.commit()
+    return
+
+
+def agg_dbcan_vir() -> str:
+    s = (  # noqa
+        "IFNULL("
+            "MAX(json_extract(data, '$.hmm') IN pfam_targets"
+            f") FILTER (WHERE analysis == {int(Analyses.dbcan)}), "
+            "0"
+        ")"
+    )
+    return s
+
+
+def agg_pfam_vir() -> str:
+    s = (  # noqa
+        "IFNULL("
+            "MAX("
+                "SUBSTR("
+                    "json_extract(data, '$.hmm'), "
+                    "1, "
+                    "INSTR(json_extract(data, '$.hmm') || '.', '.') - 1"
+                ") IN pfam_targets"
+            f") FILTER (WHERE analysis == {int(Analyses.pfamscan)}), "
+            "0"
+        ")"
+    )
+    return s
+
+
+class AggPhobiusTMDomains(object):
+
+    nargs = 1
+    analysis = Analyses.phobius
+    sql_fname = "agg_phobius_domains"
+
+    def __init__(self):
+        self.matches: List[Tuple[int, int]] = []
+        return
+
+    def step(self, data: str) -> None:
+        an = (
+            Analyses(self.analysis)
+            .get_analysis()
+            .from_json_str(data)
+        )
+
+        for gffrow in an.as_gff():
+            if gffrow.type != "transmembrane_polypeptide_region":
+                continue
+
+            self.matches.append((gffrow.start + 1, gffrow.end))
+        return
+
+    def finalize(self) -> Optional[str]:
+        if len(self.matches) == 0:
+            return None
+
+        return ",".join(
+            f"{s}-{e}"
+            for s, e
+            in sorted(self.matches, key=lambda t: t[0])
+        )
+
+    @classmethod
+    def sql_query(cls) -> str:
+        return (
+            f"{cls.sql_fname}(data)"
+            f"FILTER (WHERE analysis = {int(cls.analysis)})"
+        )
+
+
+class AggTMHMMDomains(object):
+
+    nargs = 1
+    analysis = Analyses.tmhmm
+    sql_fname = "agg_tmhmm_domains"
+
+    def __init__(self):
+        self.matches: List[Tuple[int, int]] = []
+        return
+
+    def step(self, data: str) -> None:
+        an = (
+            Analyses(self.analysis)
+            .get_analysis()
+            .from_json_str(data)
+        )
+
+        for gffrow in an.as_gff():
+            if gffrow.type != "transmembrane_polypeptide_region":
+                continue
+
+            self.matches.append((gffrow.start + 1, gffrow.end))
+        return
+
+    def finalize(self) -> Optional[str]:
+        if len(self.matches) == 0:
+            return None
+
+        return ",".join(
+            f"{s}-{e}"
+            for s, e
+            in sorted(self.matches, key=lambda t: t[0])
+        )
+
+    @classmethod
+    def sql_query(cls) -> str:
+        return (
+            f"{cls.sql_fname}(data)"
+            f"FILTER (WHERE analysis = {int(cls.analysis)})"
+        )
+
+
+class AggTMSPCoverage(object):
+
+    nargs = 2
+    analyses = [
+        Analyses.signalp3_hmm,
+        Analyses.signalp3_nn,
+        Analyses.signalp4,
+        Analyses.signalp5,
+        Analyses.signalp6,
+        Analyses.deepsig,
+        Analyses.phobius,
+        Analyses.tmhmm
+    ]
+    sql_fname = "agg_tmsp_coverage"
+
+    def __init__(self):
+        self.signals: List[int] = []
+        self.membranes: List[Tuple[int, int]] = []
+        return
+
+    def step(self, analysis: int, data: str) -> None:
+        an = (
+            Analyses(analysis)
+            .get_analysis()
+            .from_json_str(data)
+        )
+
+        for gffrow in an.as_gff():
+            if gffrow.type == "signal_peptide":
+                self.signals.append(gffrow.end)
+            elif gffrow.type == "transmembrane_polypeptide_region":
+                self.membranes.append((gffrow.start, gffrow.end))
+        return
+
+    def finalize(self) -> float:
+        if len(self.signals) == 0:
+            return 0.0
+
+        if len(self.membranes) == 0:
+            return 0.0
+
+        tm = sorted(self.membranes, key=lambda t: t[0])[0]
+        covs = [self.gff_coverage(sp, tm) for sp in self.signals]
+        return median(covs)
+
+    @classmethod
+    def sql_query(cls) -> str:
+        sources = ",".join(str(int(a)) for a in cls.analyses)
+
+        return (
+            f"{cls.sql_fname}(analysis, data)"
+            f"FILTER (WHERE analysis IN ({sources}))"
+        )
+
+    def gff_intersection(self, sp: int, tm: Tuple[int, int]) -> int:
+        lstart = 0
+        lend = sp
+
+        rstart = min(tm)
+        rend = max(tm)
+
+        start = max([lstart, rstart])
+        end = min([lend, rend])
+
+        # This will be < 0 if they don't overlap
+        if start < end:
+            return end - start
+        else:
+            return 0
+
+    def gff_coverage(self, sp: int, tm: Tuple[int, int]) -> float:
+        noverlap = self.gff_intersection(sp, tm)
+        rstart, rend = tm
+        return noverlap / (rend - rstart)
+
+
+class AggSPCutsite(object):
+
+    nargs = 2
+    analyses = [
+        Analyses.signalp3_hmm,
+        Analyses.signalp3_nn,
+        Analyses.signalp4,
+        Analyses.signalp5,
+        Analyses.signalp6,
+        Analyses.deepsig,
+        Analyses.phobius
+    ]
+    sql_fname = "agg_sp_cutsite"
+
+    def __init__(self):
+        self.matches: List[Tuple[str, int]] = []
+        return
+
+    def step(self, analysis: int, data: str) -> None:
+        an = (
+            Analyses(analysis)
+            .get_analysis()
+            .from_json_str(data)
+        )
+
+        for gffrow in an.as_gff():
+            if gffrow.type != "signal_peptide":
+                continue
+
+            self.matches.append((an.__class__.__name__, gffrow.end))
+        return
+
+    def finalize(self) -> Optional[str]:
+        if len(self.matches) == 0:
+            return None
+
+        return ",".join(
+            f"{n}:{e}"
+            for n, e
+            in sorted(self.matches, key=lambda t: t[1])
+        )
+
+    @classmethod
+    def sql_query(cls) -> str:
+        sources = ",".join(str(int(a)) for a in cls.analyses)
+
+        return (
+            f"{cls.sql_fname}(analysis, data)"
+            f"FILTER (WHERE analysis IN ({sources}))"
+        )
+
+
+class AggKex2(object):
+    nargs = 4
+    analysis = Analyses.kex2_cutsite
+    sql_fname = "agg_kex2"
+
+    def __init__(self):
+        self.matches: Dict[Tuple[str, int, int], Set[str]] = dict()
+        return
+
+    def step(
+        self,
+        pattern: str,
+        match: str,
+        start: int,
+        end: int
+    ) -> None:
+        pattern = pattern.replace("[A-Z]", "X")
+        tup = (match, start + 1, end)
+        if tup in self.matches:
+            self.matches[tup].add(pattern)
+        else:
+            self.matches[tup] = {pattern}
+        return
+
+    def finalize(self) -> Optional[str]:
+        if len(self.matches) == 0:
+            return None
+        else:
+            return ",".join(
+                f"{m}:{'&'.join(ps)}:{s}-{e}"
+                for (m, s, e), ps
+                in sorted(self.matches.items(), key=lambda t: t[0][1])
+            )
+
+    @classmethod
+    def sql_query(cls) -> str:
+        return (
+            f"{cls.sql_fname}("
+            "json_extract(data, '$.pattern'), "
+            "json_extract(data, '$.match'), "
+            "json_extract(data, '$.start'), "
+            "json_extract(data, '$.end')"
+            ") "
+            f"FILTER (WHERE analysis = {int(cls.analysis)})"
+        )
+
+
+class AggRxLR(object):
+    nargs = 3
+    analysis = Analyses.rxlr_like_motif
+    sql_fname = "agg_rxlr"
+
+    def __init__(self):
+        self.matches: List[Tuple[str, int, int]] = []
+        return
+
+    def step(
+        self,
+        match: str,
+        start: int,
+        end: int
+    ) -> None:
+        self.matches.append((match, start + 1, end))
+        return
+
+    def finalize(self) -> Optional[str]:
+        if len(self.matches) == 0:
+            return None
+        else:
+            return ",".join(
+                f"{m}:{s}-{e}"
+                for (m, s, e)
+                in sorted(self.matches, key=lambda t: t[1])
+            )
+
+    @classmethod
+    def sql_query(cls) -> str:
+        return (
+            f"{cls.sql_fname}("
+            "json_extract(data, '$.match'), "
+            "json_extract(data, '$.start'), "
+            "json_extract(data, '$.end')"
+            ") "
+            f"FILTER (WHERE analysis = {int(cls.analysis)})"
+        )
+
+
+class AggPHIMatches(object):
+    nargs = 1
+
+    def __init__(self):
+        self.matches: Dict[str, float] = dict()
+        return
+
+    def step(self, data: str) -> None:
+        an = (
+            self.analysis
+            .get_analysis()
+            .from_json_str(data)
+        )
+
+        if an.decide_significant():
+            si = an.target.strip().split("#")
+            assert len(si) == 6
+            matches = set(si[self.index].split("__"))
+            for match in matches:
+                if match in self.matches:
+                    if an.evalue < self.matches[match]:
+                        self.matches[match] = an.evalue
+                else:
+                    self.matches[match] = an.evalue
+        return
+
+    def finalize(self) -> Optional[str]:
+        if len(self.matches) == 0:
+            return None
+        else:
+            return ",".join(
+                k
+                for k, _
+                in sorted(self.matches.items(), key=lambda t: t[1])
+            )
+
+    @classmethod
+    def sql_query(cls) -> str:
+        return (
+            f"{cls.sql_fname}(data) "
+            f"FILTER (WHERE analysis = {int(cls.analysis)})"
+        )
+
+
+class AggPHIPhenos(AggPHIMatches):
+    nargs = 1
+    sql_fname = "agg_phi_phenos"
+    analysis = Analyses.phibase
+    index = 5
+
+
+class AggPHIIDs(AggPHIMatches):
+    nargs = 1
+    sql_fname = "agg_phi_ids"
+    analysis = Analyses.phibase
+    index = 1
+
+
+class AggPHIGenes(AggPHIMatches):
+    nargs = 1
+    sql_fname = "agg_phi_genes"
+    analysis = Analyses.phibase
+    index = 2
+
+
+class AggPHIHasMatch(object):
+    nargs = 1
+    analysis = Analyses.phibase
+    index = 5
+
+    def __init__(self):
+        self.phenos: Set[str] = set()
+        return
+
+    def step(self, data: str) -> None:
+        an = (
+            self.analysis
+            .get_analysis()
+            .from_json_str(data)
+        )
+
+        if an.decide_significant():
+            si = an.target.strip().split("#")
+            assert len(si) == 6
+            phenos = set(si[self.index].lower().split("__"))
+            self.phenos.update(phenos)
+        return
+
+    def finalize(self) -> bool:
+        if len(self.phenos) == 0:
+            return False
+        return len(
+            self.phenos.intersection(self.targets)
+        ) > 0
+
+    @classmethod
+    def sql_query(cls) -> str:
+        return (
+            "IFNULL("
+            f"{cls.sql_fname}(data) "
+            f"FILTER (WHERE analysis = {int(cls.analysis)})"
+            ", 0)"
+        )
+
+
+class AggPHIEffectorMatch(AggPHIHasMatch):
+    sql_fname = "agg_phi_ematch"
+    targets = {
+        "loss_of_pathogenicity",
+        "increased_virulence_(hypervirulence)",
+        "effector_(plant_avirulence_determinant)"
+    }
+
+
+class AggPHIVirulenceMatch(AggPHIHasMatch):
+    sql_fname = "agg_phi_vmatch"
+    targets = {"reduced_virulence"}
+
+
+class AggPHILethalMatch(AggPHIHasMatch):
+    sql_fname = "agg_phi_lmatch"
+    targets = {"lethal"}
+
+
+class AggHMMER(object):
+    nargs = 1
+
+    def __init__(self):
+        self.matches: Dict[str, float] = {}
+        return
+
+    def step(self, data: str) -> None:
+        an = (
+            self.analysis
+            .get_analysis()
+            .from_json_str(data)
+        )
+
+        if an.decide_significant():
+            if an.hmm in self.matches:
+                if self.matches[an.hmm] > an.domain_i_evalue:
+                    self.matches[an.hmm] = an.domain_i_evalue
+            else:
+                self.matches[an.hmm] = an.domain_i_evalue
+
+        return
+
+    def finalize(self) -> Optional[str]:
+        if len(self.matches) == 0:
+            return None
+
+        return ",".join(
+            k
+            for k, _
+            in sorted(self.matches.items(), key=lambda t: t[1])
+        )
+
+    @classmethod
+    def sql_query(cls) -> str:
+        return (
+            f"{cls.sql_fname}(data) "
+            f"FILTER (WHERE analysis = {int(cls.analysis)})"
+        )
+
+
+class AggEffectorDB(AggHMMER):
+    analysis = Analyses.effectordb
+    sql_fname = "agg_effdb"
+
+
+class AggDBCAN(AggHMMER):
+    analysis = Analyses.dbcan
+    sql_fname = "agg_dbcan"
+
+
+class AggPfamscanIDS(object):
+    nargs = 1
+    analysis = Analyses.pfamscan
+    sql_fname = "agg_pfamscan_ids"
+
+    def __init__(self):
+        self.matches: Dict[str, float] = {}
+        return
+
+    def step(self, data: str) -> None:
+        an = (
+            self.analysis
+            .get_analysis()
+            .from_json_str(data)
+        )
+        hmm = self.split_hmm(an.hmm)
+
+        if hmm in self.matches:
+            if self.matches[hmm] > an.evalue:
+                self.matches[hmm] = an.evalue
+        else:
+            self.matches[hmm] = an.evalue
+        return
+
+    def finalize(self) -> Optional[str]:
+        if len(self.matches) == 0:
+            return None
+
+        return ",".join(
+            k
+            for k, _
+            in sorted(self.matches.items(), key=lambda t: t[1])
+        )
+
+    @classmethod
+    def sql_query(cls) -> str:
+        return (
+            f"{cls.sql_fname}(data) "
+            f"FILTER (WHERE analysis = {int(cls.analysis)})"
+        )
+
+    @staticmethod
+    def split_hmm(hmm: str) -> str:
+        return hmm.strip().split(".")[0]
+
+
+class AggPfamscanNames(object):
+    nargs = 1
+    analysis = Analyses.pfamscan
+    sql_fname = "agg_pfamscan_names"
+
+    def __init__(self):
+        self.matches: Dict[str, float] = {}
+        return
+
+    def step(self, data: str) -> None:
+        an = (
+            self.analysis
+            .get_analysis()
+            .from_json_str(data)
+        )
+
+        name = an.hmm_type + ":" + an.hmm_name
+
+        if name in self.matches:
+            if self.matches[name] > an.evalue:
+                self.matches[name] = an.evalue
+        else:
+            self.matches[name] = an.evalue
+        return
+
+    def finalize(self) -> Optional[str]:
+        if len(self.matches) == 0:
+            return None
+
+        return ",".join(
+            k
+            for k, _
+            in sorted(self.matches.items(), key=lambda t: t[1])
+        )
+
+    @classmethod
+    def sql_query(cls) -> str:
+        return (
+            f"{cls.sql_fname}(data) "
+            f"FILTER (WHERE analysis = {int(cls.analysis)})"
+        )
+
+
+class AggSperProb(object):
+    nargs = 2
+
+    def __init__(self):
+        self.prob: Optional[float] = None
+        return
+
+    def step(self, prob: float, pred: str) -> None:
+        if (self.prob is not None) and (self.prob != prob):
+            raise ValueError("This shouldn't happen!")
+
+        if pred in self.pos_values:
+            self.prob = prob
+        else:
+            self.prob = 1 - prob
+        return
+
+    def finalize(self) -> float:
+        return self.prob
+
+    @classmethod
+    def sql_query(cls) -> str:
+        return (  # noqa
+            f"{cls.sql_fname}("
+                f"json_extract(data, '$.{cls.prob_col}'), "
+                f"json_extract(data, '$.{cls.pred_col}')"
+            f') FILTER (WHERE analysis = {int(cls.analysis)})'
+        )
+
+
+class AggEP1(AggSperProb):
+
+    sql_fname = "agg_ep1"
+    prob_col = "prob"
+    pred_col = "prediction"
+    analysis = Analyses.effectorp1
+
+    pos_values = ["Effector"]
+
+
+class AggEP2(AggSperProb):
+
+    sql_fname = "agg_ep2"
+    prob_col = "prob"
+    pred_col = "prediction"
+    analysis = Analyses.effectorp2
+
+    pos_values = ["Effector", "Unlikely effector"]
+
+
+class AggApoplastP(AggSperProb):
+
+    sql_fname = "agg_apoplastp"
+    prob_col = "prob"
+    pred_col = "prediction"
+    analysis = Analyses.apoplastp
+
+    pos_values = ["Apoplastic"]
+
+
+def agg_json(field: str, analysis: str) -> str:
+    an = Analyses.from_string(analysis)
+    return (
+        f"MAX(json_extract(data, '$.{field}')) "
+        f"FILTER (WHERE analysis = {int(an)})"
+    )
+
+
+# This variant makes sure it's between 0 and 1
+def agg_json_prob(field: str, analysis: str) -> str:
+    an = Analyses.from_string(analysis)
+
+    filtered = (
+        f"(MAX(json_extract(data, '$.{field}')) "
+        f"FILTER (WHERE analysis = {int(an)}))"
+    )
+
+    return f"MAX(MIN(({filtered}), 1.0), 0.0)"
+
+
+# Checks if it is a value
+def agg_json_eq_str(field: str, value: str, analysis: str) -> str:
+    an = Analyses.from_string(analysis)
+
+    return (
+        f"MAX(json_extract(data, '$.{field}') == '{value}') "
+        f"FILTER (WHERE analysis = {int(an)})"
+    )
+
+
+def agg_deepsig(pred: str) -> str:
+    an = Analyses.deepsig
+
+    filtered = (  # noqa
+        "MAX(json_extract(data, '$.prob'))"
+        "FILTER ("
+            f"WHERE analysis = {int(an)} "
+            f"AND json_extract(data, '$.prediction') == '{pred}'"
+        ")"
+    )
+
+    return f"MAX(MIN(({filtered}), 1.0), 0.0)"
+
+
+def agg_fkyin_gap() -> str:
+    an = Analyses.pepstats
+
+    template = (
+        "(MAX(json_extract(data, '$.{field}')) "
+        f"FILTER (WHERE analysis = {int(an)}))"
+    )
+
+    col_template = "residue_{}_number"
+
+    numerator = "+".join([
+        template.format(field=col_template.format(b))
+        for b
+        in "fkyin"
+    ])
+
+    denominator = " + ".join([
+        template.format(field=col_template.format(b))
+        for b
+        in "gap"
+    ])
+
+    return f"((1.0 * {numerator} + 1) / (1.0 * {denominator} + 1))"
+
+
+def load_db(path: str) -> Tuple[sqlite3.Connection, sqlite3.Cursor]:
+    sqlite3.register_converter("analyses", Analyses.from_bytes_)
+    con = sqlite3.connect(path, detect_types=sqlite3.PARSE_DECLTYPES)
+    con.row_factory = sqlite3.Row
+
+    for c in [
+        AggEP1, AggEP2, AggApoplastP, AggEffectorDB, AggDBCAN,
+        AggPHIPhenos, AggPHIIDs, AggPHIGenes,
+        AggPHIEffectorMatch, AggPHIVirulenceMatch, AggPHILethalMatch,
+        AggPfamscanIDS, AggPfamscanNames, AggKex2, AggRxLR,
+        AggSPCutsite, AggTMSPCoverage, AggTMHMMDomains, AggPhobiusTMDomains
+    ]:
+        con.create_aggregate(c.sql_fname, c.nargs, c)
+
+    cur = con.cursor()
+    # Allow it to use 1GB RAM for cache
+    cur.execute("PRAGMA cache_size = -1000000")
+    cur.execute("PRAGMA journal_mode = WAL")
+    cur.execute("PRAGMA locking_mode = EXCLUSIVE")
+    cur.execute("PRAGMA synchronous = NORMAL")
+
+    con.commit()
+    return con, cur
+
+
 def create_tables(
-    tab: ResultsTable,
     con: sqlite3.Connection,
     cur: sqlite3.Cursor,
     pfam_targets: Set[str],
     dbcan_targets: Set[str],
     tmhmm_first_60_threshold: float = 10,
 ) -> pd.DataFrame:
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS apoplastp
-    AS
-    SELECT
-        json_extract(data, '$.{ApoplastP.name_column}') as name,
-        checksum,
-        json_extract(data, '$.prob') as apoplastp
-    FROM results
-    WHERE (analysis = 'apoplastp'
-        AND json_extract(data, '$.prediction') = 'Apoplastic')
-    UNION
-    SELECT
-        json_extract(data, '$.{ApoplastP.name_column}') as name,
-        checksum,
-        (1 - json_extract(data, '$.prob')) as apoplastp
-    FROM results
-    WHERE (analysis = 'apoplastp'
-        AND NOT json_extract(data, '$.prediction') = 'Apoplastic')
-    """)
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS effectorp1
-    AS
-    SELECT
-        json_extract(data, '$.{EffectorP1.name_column}') as name,
-        checksum,
-        json_extract(data, '$.prob') as effectorp1
-    FROM results
-    WHERE (analysis = 'effectorp1'
-        AND json_extract(data, '$.prediction') = 'Effector')
-    UNION
-    SELECT
-        json_extract(data, '$.{EffectorP1.name_column}') as name,
-        checksum,
-        (1 - json_extract(data, '$.prob')) as effectorp1
-    FROM results
-    WHERE (analysis = 'effectorp1'
-        AND NOT json_extract(data, '$.prediction') = 'Effector')
-    """)
+    name_cols = "\n".join([
+        (
+            f"WHEN analysis = {int(a)} THEN "
+            f"json_extract(data, '$.{a.get_analysis().name_column}')"
+        )
+        for a
+        in Analyses
+    ])
 
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS effectorp2
-    AS
-    SELECT
-        json_extract(data, '$.{EffectorP2.name_column}') as name,
-        checksum,
-        json_extract(data, '$.prob') as effectorp2
-    FROM results
-    WHERE (
-        analysis = 'effectorp2'
-        AND (json_extract(data, '$.prediction')
-                IN ('Effector', 'Unlikely effector'))
-    )
-    UNION
-    SELECT
-        json_extract(data, '$.{EffectorP2.name_column}') as name,
-        checksum,
-        (1 - json_extract(data, '$.prob')) as effectorp2
-    FROM results
-    WHERE (
-        analysis = 'effectorp2'
-        AND (json_extract(data, '$.prediction')
-                NOT IN ('Effector', 'Unlikely effector'))
-    )
-    """)
-
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS effectorp3
-    AS
-    SELECT
-        json_extract(data, '$.{EffectorP3.name_column}') as name,
-        checksum,
-        json_extract(data, '$.cytoplasmic_prob') as effectorp3_cytoplasmic,
-        json_extract(data, '$.apoplastic_prob') as effectorp3_apoplastic,
-        json_extract(data, '$.noneffector_prob') as effectorp3_noneffector
-    FROM results
-    WHERE analysis = 'effectorp3'
-    """)
-
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS localizer
-    AS
-    SELECT
-        json_extract(data, '$.{LOCALIZER.name_column}') as name,
-        checksum,
-        json_extract(data, '$.nucleus_decision') as localizer_nucleus,
-        json_extract(data, '$.chloroplast_decision') as localizer_chloro,
-        json_extract(data, '$.mitochondria_decision') as localizer_mito
-    FROM results
-    WHERE analysis = 'localizer'
-    """)
-
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS deepredeff_fungi
-    AS
-    SELECT
-        json_extract(data, '$.{DeepredeffFungi.name_column}') as name,
-        checksum,
-        json_extract(data, '$.s_score') as deepredeff_fungi
-    FROM results
-    WHERE analysis = 'deepredeff_fungi'
-    """)
-
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS deepredeff_oomycete
-    AS
-    SELECT
-        json_extract(data, '$.{DeepredeffOomycete.name_column}') as name,
-        checksum,
-        json_extract(data, '$.s_score') as deepredeff_oomycete
-    FROM results
-    WHERE analysis = 'deepredeff_oomycete'
-    """)
-
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS signalp3_nn
-    AS
-    SELECT
-        json_extract(data, '$.{SignalP3NN.name_column}') as name,
-        checksum,
-        json_extract(data, '$.d_decision') as signalp3_nn,
-        json_extract(data, '$.d') as signalp3_nn_d
-    FROM results
-    WHERE analysis = 'signalp3_nn'
-    """)
-
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS signalp3_hmm
-    AS
-    SELECT
-        json_extract(data, '$.{SignalP3HMM.name_column}') as name,
-        checksum,
-        json_extract(data, '$.is_secreted') as signalp3_hmm,
-        json_extract(data, '$.sprob') as signalp3_hmm_s
-    FROM results
-    WHERE analysis = 'signalp3_hmm'
-    """)
-
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS signalp4
-    AS
-    SELECT
-        json_extract(data, '$.{SignalP4.name_column}') as name,
-        checksum,
-        json_extract(data, '$.decision') as signalp4,
-        json_extract(data, '$.d') as signalp4_d,
-        json_extract(data, '$.dmax_cut') as signalp4_dmax_cut
-    FROM results
-    WHERE analysis = 'signalp4'
-    """)
-
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS signalp5
-    AS
-    SELECT
-        json_extract(data, '$.{SignalP5.name_column}') as name,
-        checksum,
-        json_extract(data, '$.prediction') == 'SP(Sec/SPI)' as signalp5,
-        MIN(json_extract(data, '$.prob_signal'), 1.0) as signalp5_prob
-    FROM results
-    WHERE analysis = 'signalp5'
-    """)
-
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS signalp6
-    AS
-    SELECT
-        json_extract(data, '$.{SignalP6.name_column}') as name,
-        checksum,
-        json_extract(data, '$.prediction') == 'SP' as signalp6,
-        MIN(json_extract(data, '$.prob_signal'), 1.0) as signalp6_prob
-    FROM results
-    WHERE analysis = 'signalp6'
-    """)
-
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS deepsig
-    AS
-    SELECT
-        json_extract(data, '$.{DeepSig.name_column}') as name,
-        checksum,
-        json_extract(data, '$.prediction') == 'SignalPeptide' as deepsig,
-        json_extract(data, '$.prob') as deepsig_signal_prob,
-        NULL as deepsig_transmembrane_prob,
-        NULL as deepsig_other_prob
-    FROM results
-    WHERE
-        analysis = 'deepsig'
-        AND json_extract(data, '$.prediction') == 'SignalPeptide'
-    UNION
-    SELECT
-        json_extract(data, '$.{DeepSig.name_column}') as name,
-        checksum,
-        json_extract(data, '$.prediction') == 'SignalPeptide' as deepsig,
-        NULL as deepsig_signal_prob,
-        json_extract(data, '$.prob') as deepsig_transmembrane_prob,
-        NULL as deepsig_other_prob
-    FROM results
-    WHERE
-        analysis = 'deepsig'
-        AND json_extract(data, '$.prediction') == 'Transmembrane'
-    UNION
-    SELECT
-        json_extract(data, '$.{DeepSig.name_column}') as name,
-        checksum,
-        json_extract(data, '$.prediction') == 'SignalPeptide' as deepsig,
-        NULL as deepsig_signal_prob,
-        NULL as deepsig_transmembrane_prob,
-        json_extract(data, '$.prob') as deepsig_other_prob
-    FROM results
-    WHERE
-        analysis = 'deepsig'
-        AND json_extract(data, '$.prediction') == 'Other'
-    """)
-
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS phobius
-    AS
-    SELECT
-        json_extract(data, '$.{Phobius.name_column}') as name,
-        checksum,
-        json_extract(data, '$.sp') as phobius_sp,
-        json_extract(data, '$.tm') as phobius_tmcount
-    FROM results
-    WHERE analysis = 'phobius'
-    """)
-
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS tmhmm
-    AS
-    SELECT
-        json_extract(data, '$.{TMHMM.name_column}') as name,
-        checksum,
-        json_extract(data, '$.pred_hel') as tmhmm_tmcount,
-        json_extract(data, '$.first_60') as tmhmm_first_60,
-        json_extract(data, '$.exp_aa') as tmhmm_exp_aa
-    FROM results
-    WHERE analysis = 'tmhmm'
-    """)
-
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS targetp
-    AS
-    SELECT
-        json_extract(data, '$.{TargetPNonPlant.name_column}') as name,
-        checksum,
-        json_extract(data, '$.prediction') == 'SP' as targetp_secreted,
-        json_extract(data, '$.sp') as targetp_secreted_prob,
-        MIN(json_extract(data, '$.mtp'), 1.0) as targetp_mitochondrial_prob
-    FROM results
-    WHERE analysis = 'targetp_non_plant'
-    """)
-
-    cur.execute(f"""  -- # noqa
-    CREATE TEMP TABLE IF NOT EXISTS deeploc
-    AS
-    SELECT
-        json_extract(data, '$.{DeepLoc.name_column}') as name,
-        checksum,
-        json_extract(data, '$.membrane') as deeploc_membrane,
-        json_extract(data, '$.nucleus') as deeploc_nucleus,
-        json_extract(data, '$.cytoplasm') as deeploc_cytoplasm,
-        json_extract(data, '$.extracellular') as deeploc_extracellular,
-        json_extract(data, '$.mitochondrion') as deeploc_mitochondrion,
-        json_extract(data, '$.cell_membrane') as deeploc_cell_membrane,
-        json_extract(data, '$.endoplasmic_reticulum') as deeploc_endoplasmic_reticulum,
-        json_extract(data, '$.plastid') as deeploc_plastid,
-        json_extract(data, '$.golgi_apparatus') as deeploc_golgi,
-        json_extract(data, '$.lysosome_vacuole') as deeploc_lysosome,
-        json_extract(data, '$.peroxisome') as deeploc_peroxisome
-    FROM results
-    WHERE analysis = 'deeploc'
-    """)
-
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS hmmer_significant
-    AS
-    SELECT
-        checksum,
-        analysis,
-        json_extract(data, '$.{DomTbl.name_column}') as name,
-        ((json_extract(data, '$.hmm_to') - json_extract(data, '$.hmm_from')) /
-                (1.0 * json_extract(data, '$.hmm_len'))) as coverage,
-        (json_extract(data, '$.query_to') -
-                json_extract(data, '$.query_from')) as length,
-        json_extract(data, '$.domain_i_evalue') as evalue,
-        json_extract(data, '$.hmm') as hmm
-    FROM
-        results
-    WHERE analysis IN ("dbcan", "effectordb")
-    """)
-
-    cur.execute("""
-    CREATE TEMP TABLE IF NOT EXISTS hmmer
-    AS
-    SELECT DISTINCT
-        name, checksum, analysis, hmm
-    FROM (
-        SELECT *
-        FROM hmmer_significant
-        WHERE (coverage > 0.3) AND (length > 80) AND (evalue < 1e-5)
-        UNION
-        SELECT *
-        FROM hmmer_significant
-        WHERE (coverage > 0.3) AND (length <= 80) AND (evalue < 1e-3)
-    )
-    ORDER BY evalue ASC
-    """)
-
-    cur.execute("""
-    CREATE TEMP TABLE IF NOT EXISTS effectordb
-    AS
-    SELECT
-        name as name,
-        checksum as checksum,
-        analysis as analysis,
-        GROUP_CONCAT(hmm, ',') as effector_matches
-    FROM
-        hmmer
-    WHERE
-        analysis = "effectordb"
-    GROUP BY
-        name, checksum, analysis
-    """)
-
-    cur.execute("DROP TABLE IF EXISTS dbcan_targets")
-    cur.execute("CREATE TEMP TABLE dbcan_targets (dbcan_ids text NOT NULL)")
-    cur.executemany(
-        "INSERT INTO dbcan_targets VALUES (?)",
-        [(c,) for c in dbcan_targets]
-    )
-
-    cur.execute("""
-    CREATE TEMP TABLE IF NOT EXISTS dbcan
-    AS
-    SELECT
-        name as name,
-        checksum as checksum,
-        analysis as analysis,
-        MAX(dbcan_virulence_related) as has_dbcan_virulence_match,
-        GROUP_CONCAT(hmm, ',') as dbcan_matches
-    FROM (
+    table = pd.read_sql_query(
+        f""" --  # noqa
         SELECT
             name,
             checksum,
-            analysis,
-            (hmm IN dbcan_targets) as dbcan_virulence_related,
-            hmm
+            NULL as effector_score,
+            NULL as manual_effector_score,
+            NULL as manual_secretion_score,
+            {AggEffectorDB.sql_query()} as effector_matches,
+            {AggPHIGenes.sql_query()} as phibase_genes,
+            {AggPHIPhenos.sql_query()} as phibase_phenotypes,
+            {AggPHIIDs.sql_query()} as phibase_ids,
+            {AggPHIEffectorMatch.sql_query()} as has_phibase_effector_match,
+            {AggPHIVirulenceMatch.sql_query()} as has_phibase_virulence_match,
+            {AggPHILethalMatch.sql_query()} as has_phibase_lethal_match,
+            {AggPfamscanIDS.sql_query()} as pfam_ids,
+            {AggPfamscanNames.sql_query()} as pfam_names,
+            {agg_pfam_vir()} as has_pfam_virulence_match,
+            {AggDBCAN.sql_query()} as dbcan_matches,
+            {agg_dbcan_vir()} as has_dbcan_virulence_match,
+            {AggEP1.sql_query()} as effectorp1,
+            {AggEP2.sql_query()} as effectorp2,
+            {agg_json('cytoplasmic_prob', 'effectorp3')} as effectorp3_cytoplasmic,
+            {agg_json('apoplastic_prob', 'effectorp3')} as effectorp3_apoplastic,
+            {agg_json('noneffector_prob', 'effectorp3')} as effectorp3_noneffector,
+            {agg_json('s_score', 'deepredeff_fungi')} as deepredeff_fungi,
+            {agg_json('s_score', 'deepredeff_oomycete')} as deepredeff_oomycete,
+            {AggApoplastP.sql_query()} as apoplastp,
+            NULL as is_secreted,
+            NULL as any_signal_peptide,
+            NULL as single_transmembrane,
+            NULL as multiple_transmembrane,
+            {agg_json('molecular_weight', 'pepstats')} as molecular_weight,
+            {agg_json('residues', 'pepstats')} as residue_number,
+            {agg_json('charge', 'pepstats')} as charge,
+            {agg_json('isoelectric_point', 'pepstats')} as isoelectric_point,
+            {agg_json('residue_c_number', 'pepstats')} as aa_c_number,
+            {agg_json('property_tiny_number', 'pepstats')} as aa_tiny_number,
+            {agg_json('property_small_number', 'pepstats')} as aa_small_number,
+            {agg_json('property_aliphatic_number', 'pepstats')} as aa_aliphatic_number,
+            {agg_json('property_aromatic_number', 'pepstats')} as aa_aromatic_number,
+            {agg_json('property_nonpolar_number', 'pepstats')} as aa_nonpolar_number,
+            {agg_json('property_charged_number', 'pepstats')} as aa_charged_number,
+            {agg_json('property_basic_number', 'pepstats')} as aa_basic_number,
+            {agg_json('property_acidic_number', 'pepstats')} as aa_acidic_number,
+            {agg_fkyin_gap()} as fykin_gap,
+            {AggKex2.sql_query()} as kex2_cutsites,
+            {AggRxLR.sql_query()} as rxlr_like_motifs,
+            {agg_json('nucleus_decision', 'localizer')} as localizer_nucleus,
+            {agg_json('chloroplast_decision', 'localizer')} as localizer_chloro,
+            {agg_json('mitochondria_decision', 'localizer')} as localizer_mito,
+            {AggSPCutsite.sql_query()} as signal_peptide_cutsites,
+            {agg_json('d_decision', 'signalp3_nn')} as signalp3_nn,
+            {agg_json('is_secreted', 'signalp3_hmm')} as signalp3_hmm,
+            {agg_json('decision', 'signalp4')} as signalp4,
+            {agg_json_eq_str("prediction", "SP(Sec/SPI)", "signalp5")} as signalp5,
+            {agg_json_eq_str("prediction", "SP", "signalp6")} as signalp6,
+            {agg_json_eq_str("prediction", "SignalPeptide", "deepsig")} as deepsig,
+            {agg_json('sp', 'phobius')} as phobius_sp,
+            {agg_json('tm', 'phobius')} as phobius_tmcount,
+            {AggPhobiusTMDomains.sql_query()} as phobius_tm_domains,
+            {agg_json('pred_hel', 'tmhmm')} as tmhmm_tmcount,
+            {agg_json('first_60', 'tmhmm')} as tmhmm_first_60,
+            {agg_json('exp_aa', 'tmhmm')} as tmhmm_exp_aa,
+            {AggTMSPCoverage.sql_query()} as tmhmm_first_tm_sp_coverage,
+            {AggTMHMMDomains.sql_query()} as tmhmm_domains,
+            {agg_json_eq_str('prediction', 'SP', 'targetp_non_plant')} as targetp_secreted,
+            {agg_json_prob('sp', 'targetp_non_plant')} as targetp_secreted_prob,
+            {agg_json_prob('mtp', 'targetp_non_plant')} as targetp_mitochondrial_prob,
+            {agg_json_prob('membrane', 'deeploc')} as deeploc_membrane,
+            {agg_json_prob('nucleus', 'deeploc')} as deeploc_nucleus,
+            {agg_json_prob('cytoplasm', 'deeploc')} as deeploc_cytoplasm,
+            {agg_json_prob('extracellular', 'deeploc')} as deeploc_extracellular,
+            {agg_json_prob('mitochondrion', 'deeploc')} as deeploc_mitochondrion,
+            {agg_json_prob('cell_membrane', 'deeploc')} as deeploc_cell_membrane,
+            {agg_json_prob('endoplasmic_reticulum', 'deeploc')} as deeploc_endoplasmic_reticulum,
+            {agg_json_prob('plastid', 'deeploc')} as deeploc_plastid,
+            {agg_json_prob('golgi_apparatus', 'deeploc')} as deeploc_golgi,
+            {agg_json_prob('lysosome_vacuole', 'deeploc')} as deeploc_lysosome,
+            {agg_json_prob('peroxisome', 'deeploc')} as deeploc_peroxisome,
+            {agg_json('d', 'signalp3_nn')} as signalp3_nn_d,
+            {agg_json('sprob', 'signalp3_hmm')} as signalp3_hmm_s,
+            {agg_json('d', 'signalp4')} as signalp4_d,
+            {agg_json_prob('prob_signal', 'signalp5')} as signalp5_prob,
+            {agg_json_prob('prob_signal', 'signalp6')} as signalp6_prob,
+            {agg_deepsig("SignalPeptide")} as deepsig_signal_prob,
+            {agg_deepsig("Transmembrane")} as deepsig_transmembrane_prob,
+            {agg_deepsig("Other")} as deepsig_other_prob
         FROM
-            hmmer
-        WHERE
-            analysis = "dbcan"
-    )
-    GROUP BY
-        name, checksum, analysis
-    """)
-
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS mmseqs
-    AS
-    SELECT DISTINCT
-        json_extract(data, '$.{MMSeqs.name_column}') as name,
-        checksum,
-        analysis,
-        json_extract(data, '$.target') as target
-    FROM results
-    WHERE
-        analysis = 'phibase' AND
-        json_extract(data, '$.evalue') <= 1e-5 AND
-        json_extract(data, '$.tcov') >= 0.5
-    ORDER BY json_extract(data, '$.evalue') ASC
-    """)
-
-    cur.execute("""
-    CREATE TEMP TABLE IF NOT EXISTS phibase
-    AS
-    SELECT
-        name,
-        checksum,
-        GROUP_CONCAT(phibase_ids, ',') as phibase_ids,
-        GROUP_CONCAT(phibase_gene, ',') as phibase_genes,
-        GROUP_CONCAT(phibase_phenotypes, ',') as phibase_phenotypes
-    FROM (
-        SELECT DISTINCT
-            name,
-            checksum,
-            REPLACE(phibase_ids, '__', ',') as phibase_ids,
-            REPLACE(phibase_gene, '__', ',') as phibase_gene,
-            REPLACE(
-                SUBSTR(remaining, INSTR(remaining, '#') + 1),
-                '__',
-                ','
-            ) as phibase_phenotypes
-        FROM (
+        (
             SELECT
-                name,
-                checksum,
-                phibase_ids,
-                phibase_gene,
-                SUBSTR(remaining, INSTR(remaining, '#') + 1) as remaining
-            FROM (
-                SELECT
-                    name,
-                    checksum,
-                    phibase_ids,
-                    SUBSTR(
-                        remaining,
-                        1,
-                        INSTR(remaining, '#') - 1
-                    ) as phibase_gene,
-                    SUBSTR(remaining, INSTR(remaining, '#') + 1) as remaining
-                FROM (
-                    SELECT
-                        name,
-                        checksum,
-                        uniprot_id,
-                        SUBSTR(
-                            remaining,
-                            1,
-                            INSTR(remaining, '#') - 1
-                        ) as phibase_ids,
-                        SUBSTR(
-                            remaining,
-                            INSTR(remaining, '#') + 1
-                        ) as remaining
-                    FROM (
-                        SELECT
-                            name,
-                            checksum,
-                            SUBSTR(
-                                target,
-                                1,
-                                INSTR(target, '#') - 1
-                            ) as uniprot_id,
-                            SUBSTR(target, INSTR(target, '#') + 1) as remaining
-                        FROM mmseqs
-                        where analysis = 'phibase'
-                    )
-                )
-            )
+                CASE
+                {name_cols}
+                END as name,
+                r.*
+            FROM
+                results as r
         )
-    ) GROUP BY name, checksum
-    """)
-
-    cur.execute("DROP TABLE IF EXISTS pfam_targets")
-    cur.execute("CREATE TEMP TABLE pfam_targets (pfam_ids text NOT NULL)")
-    cur.executemany(
-        "INSERT INTO pfam_targets VALUES (?)",
-        [(c,) for c in pfam_targets]
+        GROUP BY name, checksum
+        """,
+        con
     )
 
-    cur.execute(f"""
-    CREATE TEMP TABLE pfamscan
-    AS
-    SELECT
-        name,
-        checksum,
-        MAX(virulence_related) as has_pfam_virulence_match,
-        GROUP_CONCAT(hmm, ',') as pfam_ids,
-        GROUP_CONCAT(hmm_name, ',') as pfam_names
-    FROM (
-        SELECT DISTINCT
-            json_extract(data, '$.{PfamScan.name_column}') as name,
-            checksum,
-            (
-                SUBSTR(
-                    json_extract(data, '$.hmm'),
-                    1,
-                    INSTR(json_extract(data, '$.hmm') || '.', '.') - 1
-                )
-                IN pfam_targets
-            ) as virulence_related,
-            SUBSTR(
-                json_extract(data, '$.hmm'),
-                1,
-                INSTR(json_extract(data, '$.hmm') || '.', '.') - 1
-            ) as hmm,
-            (json_extract(data, '$.hmm_type') ||
-                ':' ||
-                json_extract(data, '$.hmm_name')) as hmm_name
-        FROM
-            results
-        WHERE
-            analysis = 'pfamscan'
-        ORDER BY
-            json_extract(data, '$.{PfamScan.name_column}'),
-            checksum,
-            json_extract(data, '$.evalue') ASC
-    )
-    GROUP BY
-        name,
-        checksum
-    """)
-
-    cur.execute(f"""  -- # noqa
-    CREATE TEMP TABLE IF NOT EXISTS pepstats
-    AS
-    SELECT
-        name,
-        checksum,
-        molecular_weight,
-        residue_number,
-        charge,
-        isoelectric_point,
-        aa_c_number,
-        aa_tiny_number,
-        aa_small_number,
-        aa_aliphatic_number,
-        aa_aromatic_number,
-        aa_nonpolar_number,
-        aa_charged_number,
-        aa_basic_number,
-        aa_acidic_number,
-        ((f_number + k_number + y_number + i_number + n_number + 1.0) /
-        (1.0 * (g_number + a_number + p_number + 1.0))) as fykin_gap
-    FROM (
-        SELECT
-            json_extract(data, '$.{PepStats.name_column}') as name,
-            checksum,
-            json_extract(data, '$.molecular_weight') as molecular_weight,
-            json_extract(data, '$.residues') as residue_number,
-            json_extract(data, '$.charge') as charge,
-            json_extract(data, '$.isoelectric_point') as isoelectric_point,
-            json_extract(data, '$.residue_c_number') as aa_c_number,
-            json_extract(data, '$.property_tiny_number') as aa_tiny_number,
-            json_extract(data, '$.property_small_number') as aa_small_number,
-            json_extract(data, '$.property_aliphatic_number') as aa_aliphatic_number,
-            json_extract(data, '$.property_aromatic_number') as aa_aromatic_number,
-            json_extract(data, '$.property_nonpolar_number') as aa_nonpolar_number,
-            json_extract(data, '$.property_charged_number') as aa_charged_number,
-            json_extract(data, '$.property_basic_number') as aa_basic_number,
-            json_extract(data, '$.property_acidic_number') as aa_acidic_number,
-            json_extract(data, '$.residue_f_number') as f_number,
-            json_extract(data, '$.residue_k_number') as k_number,
-            json_extract(data, '$.residue_y_number') as y_number,
-            json_extract(data, '$.residue_i_number') as i_number,
-            json_extract(data, '$.residue_n_number') as n_number,
-            json_extract(data, '$.residue_g_number') as g_number,
-            json_extract(data, '$.residue_a_number') as a_number,
-            json_extract(data, '$.residue_p_number') as p_number
-        FROM results
-        WHERE
-            analysis = 'pepstats'
-    )
-    """)
-
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS kex2_cutsite
-    AS
-    SELECT
-        name,
-        checksum,
-        GROUP_CONCAT(pos, ',') as kex2_cutsites
-    FROM (
-        SELECT
-            name,
-            checksum,
-            (
-                match || ':' ||
-                GROUP_CONCAT(pattern, "&") || ':' ||
-                start || '-' ||
-                end
-            ) as pos
-        FROM (
-            SELECT DISTINCT
-                json_extract(data, '$.{RegexAnalysis.name_column}') as name,
-                checksum,
-                REPLACE(json_extract(data, '$.pattern'), '[A-Z]', 'X') as pattern,
-                json_extract(data, '$.match') as match,
-                (json_extract(data, '$.start') + 1) as start,
-                json_extract(data, '$.end') as end
-            FROM results
-            WHERE analysis = 'kex2_cutsite'
-            ORDER BY json_extract(data, '$.start')
-        )
-        GROUP BY name, checksum, match, start, end
-        ORDER BY start
-    GROUP BY name, checksum
-    """)
-
-    cur.execute(f"""
-    CREATE TEMP TABLE IF NOT EXISTS rxlr_like_motif
-    AS
-    SELECT
-        name,
-        checksum,
-        GROUP_CONCAT(pos, ',') as rxlr_like_motifs
-    FROM (
-        SELECT DISTINCT
-            json_extract(data, '$.{RegexAnalysis.name_column}') as name,
-            checksum,
-            ((json_extract(data, '$.start') + 1) || '-' ||
-            json_extract(data, '$.end')) as pos
-        FROM results
-        WHERE analysis = 'rxlr_like_motif'
-        ORDER BY json_extract(data, '$.start')
-    )
-    GROUP BY name, checksum
-    """)
-
-    print("created subtables")
-
-    cur.execute("""
-    CREATE TEMP VIEW all_records
-    AS
-    SELECT DISTINCT name, checksum
-    FROM (
-        SELECT name, checksum FROM deeploc
-        UNION
-        SELECT name, checksum FROM apoplastp
-        UNION
-        SELECT name, checksum FROM effectorp1
-        UNION
-        SELECT name, checksum FROM effectorp2
-        UNION
-        SELECT name, checksum FROM effectorp3
-        UNION
-        SELECT name, checksum FROM localizer
-        UNION
-        SELECT name, checksum FROM signalp3_nn
-        UNION
-        SELECT name, checksum FROM signalp3_hmm
-        UNION
-        SELECT name, checksum FROM signalp4
-        UNION
-        SELECT name, checksum FROM signalp5
-        UNION
-        SELECT name, checksum FROM signalp6
-        UNION
-        SELECT name, checksum FROM targetp
-        UNION
-        SELECT name, checksum FROM deepsig
-        UNION
-        SELECT name, checksum FROM tmhmm
-        UNION
-        SELECT name, checksum FROM deepredeff_fungi
-        UNION
-        SELECT name, checksum FROM deepredeff_oomycete
-        UNION
-        SELECT name, checksum FROM phobius
-        UNION
-        SELECT name, checksum FROM effectordb
-        UNION
-        SELECT name, checksum FROM dbcan
-        UNION
-        SELECT name, checksum FROM phibase
-        UNION
-        SELECT name, checksum FROM pfamscan
-        UNION
-        SELECT name, checksum FROM pepstats
-        UNION
-        SELECT name, checksum FROM kex2_cutsite
-        UNION
-        SELECT name, checksum FROM rxlr_like_motif
-    )
-    ORDER BY name, checksum
-    """)
-
-    print("created views")
-
-    table = pd.read_sql_query(""" --  # noqa
-    SELECT
-        all_records.name,
-        all_records.checksum,
-        phibase.phibase_ids,
-        phibase.phibase_genes,
-        phibase.phibase_phenotypes,
-        effectordb.effector_matches,
-        pfamscan.pfam_ids,
-        pfamscan.pfam_names,
-        pfamscan.has_pfam_virulence_match,
-        dbcan.dbcan_matches,
-        dbcan.has_dbcan_virulence_match,
-        effectorp1.effectorp1,
-        effectorp2.effectorp2,
-        effectorp3.effectorp3_cytoplasmic,
-        effectorp3.effectorp3_apoplastic,
-        effectorp3.effectorp3_noneffector,
-        deepredeff_fungi.deepredeff_fungi,
-        deepredeff_oomycete.deepredeff_oomycete,
-        apoplastp.apoplastp,
-        pepstats.molecular_weight,
-        pepstats.residue_number,
-        pepstats.charge,
-        pepstats.isoelectric_point,
-        pepstats.aa_c_number,
-        pepstats.aa_tiny_number,
-        pepstats.aa_small_number,
-        pepstats.aa_aliphatic_number,
-        pepstats.aa_aromatic_number,
-        pepstats.aa_nonpolar_number,
-        pepstats.aa_charged_number,
-        pepstats.aa_basic_number,
-        pepstats.aa_acidic_number,
-        pepstats.fykin_gap,
-        kex2_cutsite.kex2_cutsites,
-        rxlr_like_motif.rxlr_like_motifs,
-        localizer.localizer_nucleus,
-        localizer.localizer_chloro,
-        localizer.localizer_mito,
-        signalp3_nn.signalp3_nn,
-        signalp3_hmm.signalp3_hmm,
-        signalp4.signalp4,
-        signalp5.signalp5,
-        signalp6.signalp6,
-        deepsig.deepsig,
-        phobius.phobius_sp,
-        phobius.phobius_tmcount,
-        tmhmm.tmhmm_tmcount,
-        tmhmm.tmhmm_first_60,
-        tmhmm.tmhmm_exp_aa,
-        targetp.targetp_secreted,
-        targetp.targetp_secreted_prob,
-        targetp.targetp_mitochondrial_prob,
-        deeploc.deeploc_membrane,
-        deeploc.deeploc_nucleus,
-        deeploc.deeploc_cytoplasm,
-        deeploc.deeploc_extracellular,
-        deeploc.deeploc_mitochondrion,
-        deeploc.deeploc_cell_membrane,
-        deeploc.deeploc_endoplasmic_reticulum,
-        deeploc.deeploc_plastid,
-        deeploc.deeploc_golgi,
-        deeploc.deeploc_lysosome,
-        deeploc.deeploc_peroxisome,
-        signalp3_nn.signalp3_nn_d,
-        signalp3_hmm.signalp3_hmm_s,
-        signalp4.signalp4_d,
-        signalp5.signalp5_prob,
-        signalp6.signalp6_prob
-    FROM all_records
-    LEFT JOIN phibase
-        ON (all_records.checksum = phibase.checksum) AND (all_records.name = phibase.name)
-    LEFT JOIN effectordb
-        ON (all_records.checksum = effectordb.checksum) AND (all_records.name = effectordb.name)
-    LEFT JOIN pfamscan
-        ON (all_records.checksum = pfamscan.checksum) AND (all_records.name = pfamscan.name)
-    LEFT JOIN dbcan
-        ON (all_records.checksum = dbcan.checksum) AND (all_records.name = dbcan.name)
-    LEFT JOIN effectorp1
-        ON (all_records.checksum = effectorp1.checksum) AND (all_records.name = effectorp1.name)
-    LEFT JOIN effectorp2
-        ON (all_records.checksum = effectorp2.checksum) AND (all_records.name = effectorp2.name)
-    LEFT JOIN effectorp3
-        ON (all_records.checksum = effectorp3.checksum) AND (all_records.name = effectorp3.name)
-    LEFT JOIN deepredeff_fungi
-        ON (all_records.checksum = deepredeff_fungi.checksum) AND (all_records.name = deepredeff_fungi.name)
-    LEFT JOIN deepredeff_oomycete
-        ON (all_records.checksum = deepredeff_oomycete.checksum) AND (all_records.name = deepredeff_oomycete.name)
-    LEFT JOIN apoplastp
-        ON (all_records.checksum = apoplastp.checksum) AND (all_records.name = apoplastp.name)
-    LEFT JOIN pepstats
-        ON (all_records.checksum = pepstats.checksum) AND (all_records.name = pepstats.name)
-    LEFT JOIN kex2_cutsite
-        ON (all_records.checksum = kex2_cutsite.checksum) AND (all_records.name = kex2_cutsite.name)
-    LEFT JOIN rxlr_like_motif
-        ON (all_records.checksum = rxlr_like_motif.checksum) AND (all_records.name = rxlr_like_motif.name)
-    LEFT JOIN localizer
-        ON (all_records.checksum = localizer.checksum) AND (all_records.name = localizer.name)
-    LEFT JOIN signalp3_nn
-        ON (all_records.checksum = signalp3_nn.checksum) AND (all_records.name = signalp3_nn.name)
-    LEFT JOIN signalp3_hmm
-        ON (all_records.checksum = signalp3_hmm.checksum) AND (all_records.name = signalp3_hmm.name)
-    LEFT JOIN signalp4
-        ON (all_records.checksum = signalp4.checksum) AND (all_records.name = signalp4.name)
-    LEFT JOIN signalp5
-        ON (all_records.checksum = signalp5.checksum) AND (all_records.name = signalp5.name)
-    LEFT JOIN signalp6
-        ON (all_records.checksum = signalp6.checksum) AND (all_records.name = signalp6.name)
-    LEFT JOIN deepsig
-        ON (all_records.checksum = deepsig.checksum) AND (all_records.name = deepsig.name)
-    LEFT JOIN phobius
-        ON (all_records.checksum = phobius.checksum) AND (all_records.name = phobius.name)
-    LEFT JOIN tmhmm
-        ON (all_records.checksum = tmhmm.checksum) AND (all_records.name = tmhmm.name)
-    LEFT JOIN targetp
-        ON (all_records.checksum = targetp.checksum) AND (all_records.name = targetp.name)
-    LEFT JOIN deeploc
-        ON (all_records.checksum = deeploc.checksum) AND (all_records.name = deeploc.name)
-    """, con)
-
-    print("loaded table")
-
-    table["has_pfam_virulence_match"] = (
-        table["has_pfam_virulence_match"].fillna(0)
-    )
-
-    table["has_dbcan_virulence_match"] = (
-        table["has_dbcan_virulence_match"].fillna(0)
-    )
-
-    sp_gffs = get_gff_records("""
-    SELECT * FROM results
-    WHERE analysis IN ('signalp3_nn', 'signalp3_hmm', 'signalp4',
-                       'signalp5', 'signalp6', 'phobius', 'deepsig')
-    """, cur)
-
-    tm_gffs = get_gff_records(
-        "SELECT * FROM results WHERE analysis = 'tmhmm'",
-        cur
-    )
-
-    tm_sp_coverage = get_tm_sp_coverage(sp_gffs, tm_gffs)
-    table["tmhmm_first_tm_sp_coverage"] = table[["name", "checksum"]].apply(
-        lambda r: tm_sp_coverage.get((r["name"], r["checksum"]), 0.0),
-        axis=1
-    )
-
-    sp_sites = fetch_sp_sites(sp_gffs)
-    table["signal_peptide_cutsites"] = table[["name", "checksum"]].apply(
-        lambda r: sp_sites.get((r["name"], r["checksum"]), None),
-        axis=1
-    )
-
-    # mutates
-    decide_any_signal(table)
-
-    # mutates
-    decide_is_transmembrane(
+    table["any_signal_peptide"] = decide_any_signal(table)
+    table["multiple_transmembrane"] = decide_is_multi_tm(table)
+    table["single_transmembrane"] = decide_is_single_tm(
         table,
         tmhmm_first_60_threshold=tmhmm_first_60_threshold
     )
 
-    # mutates
-    decide_is_secreted(table)
-
-    # mutates
-    get_phibase_cols(table)
-
+    table["is_secreted"] = decide_is_secreted(table)
     return table
-
-
-def get_gff_records(
-    query: str,
-    cur: sqlite3.Cursor,
-) -> List[Tuple[str, str, GFFRecord]]:
-    out = []
-    for r in cur.execute(query):
-        row = ResultRow(*r)
-        an = row.as_analysis()
-        assert isinstance(an, GFFAble), f"{an.__class__.__name__} not gffable"
-        for gffrow in an.as_gff():
-            gffrow.source = an.__class__.__name__
-            out.append((getattr(an, an.name_column), row.checksum, gffrow))
-    return out
-
-
-def fetch_sp_sites(
-    gff: Sequence[Tuple[str, str, GFFRecord]]
-) -> Dict[Tuple[str, str], str]:
-    d = defaultdict(list)
-
-    for name, chk, gffrow in gff:
-        if gffrow.type != "signal_peptide":
-            continue
-        d[(name, chk)].append(gffrow)
-
-    out = dict()
-    for (name, chk), gffrows in d.items():
-        str_gffrows = ",".join([
-            f"{r.source}:{r.end}"
-            for r
-            in sorted(gffrows, key=lambda k: k.end)
-        ])
-        out[(name, chk)] = str_gffrows
-
-    return out
 
 
 def decide_any_signal(
     table: pd.DataFrame
-) -> None:
-    table["any_signal_peptide"] = (
+) -> pd.Series:
+    return (
         table.loc[:, [
             'signalp3_nn', 'signalp3_hmm', 'signalp4', 'signalp5',
             'signalp6', 'deepsig', 'phobius_sp'
@@ -1267,80 +1186,20 @@ def decide_any_signal(
         .any(axis=1)
         .astype(int)
     )
-    return
 
 
-def gff_intersection(left: GFFRecord, right: GFFRecord) -> int:
-    lstart = min([left.start, left.end])
-    lend = max([left.start, left.end])
-
-    rstart = min([right.start, right.end])
-    rend = max([right.start, right.end])
-
-    start = max([lstart, rstart])
-    end = min([lend, rend])
-
-    # This will be < 0 if they don't overlap
-    if start < end:
-        return end - start
-    else:
-        return 0
-
-
-def gff_coverage(left: GFFRecord, right: GFFRecord) -> float:
-    noverlap = gff_intersection(left, right)
-    return noverlap / (right.end - right.start)
-
-
-def get_tm_sp_coverage(
-    sp_gff: Sequence[Tuple[str, str, GFFRecord]],
-    tm_gff: Sequence[Tuple[str, str, GFFRecord]],
-) -> Dict[Tuple[str, str], float]:
-    sp_d = defaultdict(list)
-    tm_d = defaultdict(list)
-
-    for name, chk, gffrow in sp_gff:
-        if gffrow.type != "signal_peptide":
-            continue
-        sp_d[(name, chk)].append(gffrow)
-
-    for name, chk, gffrow in tm_gff:
-        tm_d[(name, chk)].append(gffrow)
-
-    all_keys = set(sp_d.keys())
-    all_keys.update(tm_d.keys())
-
-    out = dict()
-    for name, chk in all_keys:
-        sp_gffrows = sp_d.get((name, chk), [])
-        tm_gffrows = tm_d.get((name, chk), [])
-
-        if len(sp_gffrows) == 0:
-            out[(name, chk)] = 0.0
-            continue
-
-        elif len(tm_gffrows) == 0:
-            out[(name, chk)] = 0.0
-            continue
-
-        tm = sorted(tm_gffrows, key=lambda x: x.start)[0]
-        covs = [gff_coverage(sp, tm) for sp in sp_gffrows]
-        out[(name, chk)] = median(covs)
-
-    return out
-
-
-def decide_is_transmembrane(
-    table: pd.DataFrame,
-    tmhmm_first_60_threshold: float = 10,
-) -> None:
-
-    table["multiple_transmembrane"] = (
+def decide_is_multi_tm(table: pd.DataFrame) -> pd.Series:
+    return (
         (table["tmhmm_tmcount"] > 1) |
         (table["phobius_tmcount"] > 1)
     ).astype(int)
 
-    table["single_transmembrane"] = (
+
+def decide_is_single_tm(
+    table: pd.DataFrame,
+    tmhmm_first_60_threshold: float = 10,
+) -> pd.Series:
+    return (
         ~table["multiple_transmembrane"].astype(bool)
         & (
             table["phobius_tmcount"] == 1
@@ -1356,50 +1215,14 @@ def decide_is_transmembrane(
         )
     ).astype(int)
 
-    return
-
 
 def decide_is_secreted(
     table: pd.DataFrame
-) -> None:
-    table["is_secreted"] = (
+) -> pd.Series:
+    return (
         table["any_signal_peptide"].astype(bool) & ~
         table["multiple_transmembrane"].astype(bool)
     ).astype(int)
-    return
-
-
-def get_phibase_cols(table: pd.DataFrame) -> None:
-    effector_phenotypes = {
-            "loss_of_pathogenicity",
-            "increased_virulence_(hypervirulence)",
-            "effector_(plant_avirulence_determinant)"
-    }
-
-    phenotypes = (
-        table["phibase_phenotypes"].fillna('').str.split(',')
-        .apply(set)
-    )
-
-    table["has_phibase_effector_match"] = (
-        phenotypes
-        .apply(lambda s: len(s.intersection(effector_phenotypes)) > 0)
-        .astype(int)
-    )
-
-    table["has_phibase_virulence_match"] = (
-        phenotypes
-        .apply(lambda s: "reduced_virulence" in s)
-        .astype(int)
-    )
-
-    table["has_phibase_lethal_match"] = (
-        phenotypes
-        .apply(lambda s: "lethal" in s)
-        .astype(int)
-    )
-
-    return
 
 
 def effector_score_it(
@@ -1498,30 +1321,30 @@ def secretion_score_it(
     deeploc_membrane: float = -2,
     targetp_mitochondrial: float = -2,
 ) -> pd.Series:
-    score = 1.0 * table["is_secreted"].astype(int).fillna(0) * secreted
+    score = 1.0 * table["is_secreted"].fillna(0).astype(int) * secreted
 
     for k in ["signalp3_hmm", "signalp3_nn", "phobius_sp", "deepsig"]:
-        col = table[k].astype(int).fillna(0)
+        col = table[k].fillna(0).astype(int)
         score += 1.0 * col * less_trustworthy_signal_prediction
 
     for k in ["signalp4", "signalp5", "signalp6", "targetp_secreted"]:
-        col = table[k].astype(int).fillna(0)
+        col = table[k].fillna(0).astype(int)
         score += 1.0 * col * trustworthy_signal_prediction
 
     score += (
         1.0 *
-        table["multiple_transmembrane"].astype(int).fillna(0) *
+        table["multiple_transmembrane"].fillna(0).astype(int) *
         multiple_transmembrane
     )
 
     score += (
         1.0 *
-        table["single_transmembrane"].astype(int).fillna(0) *
+        table["single_transmembrane"].fillna(0).astype(int) *
         single_transmembrane
     )
 
     score += (
-        table["deeploc_extracellular"].astype(float).fillna(0.0) *
+        table["deeploc_extracellular"].fillna(0.0).astype(float) *
         deeploc_extracellular
     )
 
@@ -1593,17 +1416,11 @@ def run_ltr(df: pd.DataFrame) -> np.ndarray:
     return model.predict(dmat)
 
 
-def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
-    cur = con.cursor()
-
-    tab = ResultsTable(con, cur)
-    tab.create_tables()
-
-    tab.insert_results(
-        ResultRow.from_file(args.infile, replace_name=False)
-    )
-    print("loaded results")
-
+def inner(
+    con: sqlite3.Connection,
+    cur: sqlite3.Cursor,
+    args: argparse.Namespace
+) -> None:
     if args.dbcan is not None:
         dbcan: Set[str] = {d.strip() for d in args.dbcan.readlines()}
     else:
@@ -1614,8 +1431,10 @@ def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
     else:
         pfam = set(get_interesting_pfam_ids())
 
+    create_pfam_targets(con, cur, pfam)
+    create_dbcan_targets(con, cur, dbcan)
+
     df = create_tables(
-        tab,
         con,
         cur,
         pfam,
@@ -1652,7 +1471,7 @@ def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
 
     df["effector_score"] = run_ltr(df)
     df.sort_values("effector_score", ascending=False, inplace=True)
-    df[COLUMNS].round(3).to_csv(
+    df.round(3).to_csv(
         args.outfile,
         sep="\t",
         index=False,
@@ -1662,9 +1481,9 @@ def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
 
 
 def runner(args: argparse.Namespace) -> None:
-    con = sqlite3.connect(args.db)
     try:
-        inner(con, args)
+        con, cur = load_db(args.db)
+        inner(con, cur, args)
     except Exception as e:
         raise e
     finally:

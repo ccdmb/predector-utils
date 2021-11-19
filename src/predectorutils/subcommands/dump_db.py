@@ -4,27 +4,10 @@ import argparse
 import sqlite3
 import sys
 
-from predectorutils.indexedresults import ResultsTable, ResultRow
+from predectorutils.database import load_db, ResultsTable
 
 
 def cli(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--replace-name",
-        action="store_true",
-        default=False,
-        help="Replace the names of analyses with 'dummy'",
-    )
-
-    parser.add_argument(
-        "--deduplicate",
-        action="store_true",
-        default=False,
-        help=(
-            "Remove duplicates from the table. "
-            "Warning! this will mutate the database."
-        )
-    )
-
     parser.add_argument(
         "-o", "--outfile",
         type=argparse.FileType('w'),
@@ -41,26 +24,22 @@ def cli(parser: argparse.ArgumentParser) -> None:
     return
 
 
-def inner(con: sqlite3.Connection, args: argparse.Namespace) -> None:
-    cur = con.cursor()
-
+def inner(
+    con: sqlite3.Connection,
+    cur: sqlite3.Cursor,
+    args: argparse.Namespace
+) -> None:
     tab = ResultsTable(con, cur)
 
-    if args.deduplicate:
-        tab.deduplicate_table()
-
-    for row in tab.select_all("results"):
-        if args.replace_name:
-            row = row.replace_name()
-
+    for row in tab.select_all():
         print(row.as_str(), file=args.outfile)
     return
 
 
 def runner(args: argparse.Namespace) -> None:
-    con = sqlite3.connect(args.db)
     try:
-        inner(con, args)
+        con, cur = load_db(args.db)
+        inner(con, cur, args)
     except Exception as e:
         raise e
     finally:
