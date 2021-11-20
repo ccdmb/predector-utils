@@ -5,6 +5,7 @@ from typing import Dict, Set
 from typing import TextIO
 from typing import Any, Optional
 from typing import Iterator
+from math import floor
 
 import json
 import sqlite3
@@ -19,7 +20,10 @@ def text_split(text: str, sep: str) -> str:
     )
 
 
-def load_db(path: str) -> Tuple[sqlite3.Connection, sqlite3.Cursor]:
+def load_db(
+    path: str,
+    mem: int = 1
+) -> Tuple[sqlite3.Connection, sqlite3.Cursor]:
     sqlite3.register_converter("analyses", Analyses.from_bytes_)
     con = sqlite3.connect(path, detect_types=sqlite3.PARSE_DECLTYPES)
     con.row_factory = sqlite3.Row
@@ -27,7 +31,8 @@ def load_db(path: str) -> Tuple[sqlite3.Connection, sqlite3.Cursor]:
 
     cur = con.cursor()
     # Allow it to use 1GB RAM for cache
-    cur.execute("PRAGMA cache_size = -1000000")
+    mem_gb: int = floor(1000000 * mem)
+    cur.execute(f"PRAGMA cache_size = -{mem_gb}")
     cur.execute("PRAGMA journal_mode = WAL")
     cur.execute("PRAGMA locking_mode = EXCLUSIVE")
     cur.execute("PRAGMA synchronous = NORMAL")
@@ -109,13 +114,37 @@ class ResultRow(NamedTuple):
     def from_file(
         cls,
         handle: TextIO,
-        replace_name: bool = False
+        replace_name: bool = False,
+        drop_null_dbversion: bool = False,
+        target_analyses: Optional[Set[Analyses]] = None
     ) -> Iterator["ResultRow"]:
+
+        if drop_null_dbversion:
+            requires_database = {
+                a
+                for a
+                in Analyses
+                if (a.get_analysis().database is not None)
+            }
+
         for line in handle:
             sline = line.strip()
             if sline == "":
                 continue
-            yield cls.from_string(sline, replace_name=replace_name)
+            record = cls.from_string(sline, replace_name=replace_name)
+
+            if target_analyses is not None:
+                if record.analysis not in target_analyses:
+                    continue
+
+            if drop_null_dbversion:
+                if (
+                    (record.database_version is None)
+                    and (record.analysis in requires_database)
+                ):
+                    continue
+
+            yield record
         return
 
     def as_dict(self) -> Dict[str, Any]:

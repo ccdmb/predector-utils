@@ -4,7 +4,8 @@ import argparse
 import sqlite3
 import sys
 
-from predectorutils.database import load_db, ResultsTable, ResultRow
+from ..analyses import Analyses
+from ..database import load_db, ResultsTable, ResultRow
 
 
 def cli(parser: argparse.ArgumentParser) -> None:
@@ -14,6 +15,49 @@ def cli(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         default=False,
         help="Replace the analysis names with 'd'"
+    )
+
+    parser.add_argument(
+        "-d", "--drop-null-dbversion",
+        dest="drop_null_dbversion",
+        action="store_true",
+        default=False,
+        help="Filter out rows that require databases, but no db version set."
+    )
+
+    parser.add_argument(
+        "--include",
+        dest="include",
+        metavar="ANALYSIS",
+        nargs="+",
+        type=Analyses.from_string,
+        choices=list(Analyses),
+        default=list(Analyses),
+        help="Only include these analyses, specify multiple with spaces."
+    )
+
+    parser.add_argument(
+        "--exclude",
+        dest="exclude",
+        metavar="ANALYSIS",
+        nargs="+",
+        type=Analyses.from_string,
+        choices=list(Analyses),
+        default=[],
+        help=(
+            "Exclude these analyses, specify multiple with spaces. "
+            "Overrides analyses specified in --include."
+        )
+    )
+
+    parser.add_argument(
+        "--mem",
+        type=float,
+        default=1.0,
+        help=(
+            "The amount of RAM in gibibytes to let "
+            "SQLite use for cache."
+        )
     )
 
     parser.add_argument(
@@ -40,10 +84,14 @@ def inner(
     tab = ResultsTable(con, cur)
     tab.create_tables()
 
+    target_analyses = set(args.include).difference(args.exclude)
+
     tab.insert_results(
         ResultRow.from_file(
             args.results,
-            replace_name=args.replace_name
+            replace_name=args.replace_name,
+            drop_null_dbversion=args.drop_null_dbversion,
+            target_analyses=target_analyses
         )
     )
 
@@ -53,7 +101,7 @@ def inner(
 
 def runner(args: argparse.Namespace) -> None:
     try:
-        con, cur = load_db(args.db)
+        con, cur = load_db(args.db, args.mem)
         inner(con, cur, args)
     except Exception as e:
         raise e

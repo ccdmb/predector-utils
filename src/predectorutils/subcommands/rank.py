@@ -3,6 +3,7 @@
 import sys
 import argparse
 
+from math import floor
 from statistics import median
 
 from typing import (Optional, Tuple, Dict, Set, List)
@@ -325,7 +326,17 @@ def agg_pfam_vir() -> str:
     return s
 
 
-class AggPhobiusTMDomains(object):
+class AggBase(object):
+
+    nargs: int
+    analysis: Analyses
+    sql_fname: str
+
+    def __init__(self) -> None:
+        raise NotImplementedError("this is a baseclass")
+
+
+class AggPhobiusTMDomains(AggBase):
 
     nargs = 1
     analysis = Analyses.phobius
@@ -336,11 +347,14 @@ class AggPhobiusTMDomains(object):
         return
 
     def step(self, data: str) -> None:
+        from ..analyses import GFFAble
         an = (
             Analyses(self.analysis)
             .get_analysis()
             .from_json_str(data)
         )
+
+        assert isinstance(an, GFFAble)
 
         for gffrow in an.as_gff():
             if gffrow.type != "transmembrane_polypeptide_region":
@@ -367,7 +381,7 @@ class AggPhobiusTMDomains(object):
         )
 
 
-class AggTMHMMDomains(object):
+class AggTMHMMDomains(AggBase):
 
     nargs = 1
     analysis = Analyses.tmhmm
@@ -378,11 +392,14 @@ class AggTMHMMDomains(object):
         return
 
     def step(self, data: str) -> None:
+        from ..analyses import GFFAble
         an = (
             Analyses(self.analysis)
             .get_analysis()
             .from_json_str(data)
         )
+
+        assert isinstance(an, GFFAble)
 
         for gffrow in an.as_gff():
             if gffrow.type != "transmembrane_polypeptide_region":
@@ -409,7 +426,7 @@ class AggTMHMMDomains(object):
         )
 
 
-class AggTMSPCoverage(object):
+class AggTMSPCoverage(AggBase):
 
     nargs = 2
     analyses = [
@@ -430,11 +447,14 @@ class AggTMSPCoverage(object):
         return
 
     def step(self, analysis: int, data: str) -> None:
+        from ..analyses import GFFAble
         an = (
             Analyses(analysis)
             .get_analysis()
             .from_json_str(data)
         )
+
+        assert isinstance(an, GFFAble)
 
         for gffrow in an.as_gff():
             if gffrow.type == "signal_peptide":
@@ -485,7 +505,7 @@ class AggTMSPCoverage(object):
         return noverlap / (rend - rstart)
 
 
-class AggSPCutsite(object):
+class AggSPCutsite(AggBase):
 
     nargs = 2
     analyses = [
@@ -504,11 +524,14 @@ class AggSPCutsite(object):
         return
 
     def step(self, analysis: int, data: str) -> None:
+        from ..analyses import GFFAble
         an = (
             Analyses(analysis)
             .get_analysis()
             .from_json_str(data)
         )
+
+        assert isinstance(an, GFFAble)
 
         for gffrow in an.as_gff():
             if gffrow.type != "signal_peptide":
@@ -537,7 +560,7 @@ class AggSPCutsite(object):
         )
 
 
-class AggKex2(object):
+class AggKex2(AggBase):
     nargs = 4
     analysis = Analyses.kex2_cutsite
     sql_fname = "agg_kex2"
@@ -584,7 +607,7 @@ class AggKex2(object):
         )
 
 
-class AggRxLR(object):
+class AggRxLR(AggBase):
     nargs = 3
     analysis = Analyses.rxlr_like_motif
     sql_fname = "agg_rxlr"
@@ -624,19 +647,23 @@ class AggRxLR(object):
         )
 
 
-class AggPHIMatches(object):
+class AggPHIMatches(AggBase):
     nargs = 1
+    index: int
 
     def __init__(self):
         self.matches: Dict[str, float] = dict()
         return
 
     def step(self, data: str) -> None:
+        from ..analyses import MMSeqs
         an = (
             self.analysis
             .get_analysis()
             .from_json_str(data)
         )
+
+        assert isinstance(an, MMSeqs)
 
         if an.decide_significant():
             si = an.target.strip().split("#")
@@ -689,22 +716,25 @@ class AggPHIGenes(AggPHIMatches):
     index = 2
 
 
-class AggPHIHasMatch(object):
+class AggPHIHasMatch(AggBase):
     nargs = 1
     analysis = Analyses.phibase
     index = 5
+    targets: Set[str]
 
     def __init__(self):
         self.phenos: Set[str] = set()
         return
 
     def step(self, data: str) -> None:
+        from ..analyses import MMSeqs
         an = (
             self.analysis
             .get_analysis()
             .from_json_str(data)
         )
 
+        assert isinstance(an, MMSeqs)
         if an.decide_significant():
             si = an.target.strip().split("#")
             assert len(si) == 6
@@ -748,7 +778,7 @@ class AggPHILethalMatch(AggPHIHasMatch):
     targets = {"lethal"}
 
 
-class AggHMMER(object):
+class AggHMMER(AggBase):
     nargs = 1
 
     def __init__(self):
@@ -756,11 +786,14 @@ class AggHMMER(object):
         return
 
     def step(self, data: str) -> None:
+        from ..analyses import DomTbl 
         an = (
             self.analysis
             .get_analysis()
             .from_json_str(data)
         )
+
+        assert isinstance(an, DomTbl)
 
         if an.decide_significant():
             if an.hmm in self.matches:
@@ -799,7 +832,7 @@ class AggDBCAN(AggHMMER):
     sql_fname = "agg_dbcan"
 
 
-class AggPfamscanIDS(object):
+class AggPfamscanIDS(AggBase):
     nargs = 1
     analysis = Analyses.pfamscan
     sql_fname = "agg_pfamscan_ids"
@@ -809,11 +842,14 @@ class AggPfamscanIDS(object):
         return
 
     def step(self, data: str) -> None:
+        from ..analyses import PfamScan
         an = (
             self.analysis
             .get_analysis()
             .from_json_str(data)
         )
+
+        assert isinstance(an, PfamScan)
         hmm = self.split_hmm(an.hmm)
 
         if hmm in self.matches:
@@ -845,7 +881,7 @@ class AggPfamscanIDS(object):
         return hmm.strip().split(".")[0]
 
 
-class AggPfamscanNames(object):
+class AggPfamscanNames(AggBase):
     nargs = 1
     analysis = Analyses.pfamscan
     sql_fname = "agg_pfamscan_names"
@@ -855,12 +891,14 @@ class AggPfamscanNames(object):
         return
 
     def step(self, data: str) -> None:
+        from ..analyses import PfamScan
         an = (
             self.analysis
             .get_analysis()
             .from_json_str(data)
         )
 
+        assert isinstance(an, PfamScan)
         name = an.hmm_type + ":" + an.hmm_name
 
         if name in self.matches:
@@ -888,8 +926,11 @@ class AggPfamscanNames(object):
         )
 
 
-class AggSperProb(object):
+class AggSperProb(AggBase):
     nargs = 2
+    pred_col: str
+    prob_col: str
+    pos_values: List[str]
 
     def __init__(self):
         self.prob: Optional[float] = None
@@ -905,7 +946,7 @@ class AggSperProb(object):
             self.prob = 1 - prob
         return
 
-    def finalize(self) -> float:
+    def finalize(self) -> Optional[float]:
         return self.prob
 
     @classmethod
@@ -1017,7 +1058,7 @@ def agg_fkyin_gap() -> str:
     return f"((1.0 * {numerator} + 1) / (1.0 * {denominator} + 1))"
 
 
-def load_db(path: str) -> Tuple[sqlite3.Connection, sqlite3.Cursor]:
+def load_db(path: str, mem: float) -> Tuple[sqlite3.Connection, sqlite3.Cursor]:
     sqlite3.register_converter("analyses", Analyses.from_bytes_)
     con = sqlite3.connect(path, detect_types=sqlite3.PARSE_DECLTYPES)
     con.row_factory = sqlite3.Row
@@ -1029,11 +1070,12 @@ def load_db(path: str) -> Tuple[sqlite3.Connection, sqlite3.Cursor]:
         AggPfamscanIDS, AggPfamscanNames, AggKex2, AggRxLR,
         AggSPCutsite, AggTMSPCoverage, AggTMHMMDomains, AggPhobiusTMDomains
     ]:
-        con.create_aggregate(c.sql_fname, c.nargs, c)
+        con.create_aggregate(c.sql_fname, c.nargs, c)  # type: ignore
 
     cur = con.cursor()
     # Allow it to use 1GB RAM for cache
-    cur.execute("PRAGMA cache_size = -1000000")
+    mem_gb: int = floor(1000000 * mem)
+    cur.execute(f"PRAGMA cache_size = -{mem_gb}")
     cur.execute("PRAGMA journal_mode = WAL")
     cur.execute("PRAGMA locking_mode = EXCLUSIVE")
     cur.execute("PRAGMA synchronous = NORMAL")
@@ -1482,7 +1524,7 @@ def inner(
 
 def runner(args: argparse.Namespace) -> None:
     try:
-        con, cur = load_db(args.db)
+        con, cur = load_db(args.db, args.mem)
         inner(con, cur, args)
     except Exception as e:
         raise e

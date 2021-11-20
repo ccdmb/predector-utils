@@ -21,6 +21,16 @@ def cli(parser: argparse.ArgumentParser) -> None:
         help="The database to dump results from."
     )
 
+    parser.add_argument(
+        "--mem",
+        type=float,
+        default=1.0,
+        help=(
+            "The amount of RAM in gibibytes to let "
+            "SQLite use for cache."
+        )
+    )
+
     return
 
 
@@ -38,7 +48,7 @@ def inner(
 
 def runner(args: argparse.Namespace) -> None:
     try:
-        con, cur = load_db(args.db)
+        con, cur = load_db(args.db, args.mem)
         inner(con, cur, args)
     except Exception as e:
         raise e

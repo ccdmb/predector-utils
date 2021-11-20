@@ -43,6 +43,16 @@ def cli(parser: argparse.ArgumentParser) -> None:
         help="Where to store the database"
     )
 
+    parser.add_argument(
+        "--mem",
+        type=float,
+        default=1.0,
+        help=(
+            "The amount of RAM in gibibytes to let "
+            "SQLite use for cache."
+        )
+    )
+
     return
 
 
@@ -66,13 +76,15 @@ def inner(
     cur: sqlite3.Cursor,
     args: argparse.Namespace
 ) -> None:
+    from ..analyses import Analyses
+
     tab = ResultsTable(con, cur)
     tab.create_tables()
     tab.insert_results(ResultRow.from_file(args.infile))
 
     targets = list(fetch_targets(tab, "results"))
 
-    seen: Set[str] = set()
+    seen: Set[Analyses] = set()
     for target in targets:
         if target.analysis in seen:
             raise ValueError(
@@ -94,7 +106,7 @@ def inner(
 
 def runner(args: argparse.Namespace) -> None:
     try:
-        con, cur = load_db(args.db)
+        con, cur = load_db(args.db, args.mem)
         inner(con, cur, args)
     except Exception as e:
         raise e
