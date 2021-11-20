@@ -21,9 +21,9 @@ from predectorutils.database import (
 def cli(parser: argparse.ArgumentParser) -> None:
 
     parser.add_argument(
-        "infile",
-        type=argparse.FileType('r'),
-        help="The ldjson file to parse as input. Use '-' for stdin."
+        "db",
+        type=str,
+        help="Where to store the database"
     )
 
     parser.add_argument(
@@ -34,13 +34,6 @@ def cli(parser: argparse.ArgumentParser) -> None:
             "A template for the output filenames. Can use python `.format` "
             "style variable analysis. Directories will be created."
         )
-    )
-
-    parser.add_argument(
-        "--db",
-        type=str,
-        default=":memory:",
-        help="Where to store the database"
     )
 
     parser.add_argument(
@@ -79,9 +72,6 @@ def inner(
     from ..analyses import Analyses
 
     tab = ResultsTable(con, cur)
-    tab.create_tables()
-    tab.insert_results(ResultRow.from_file(args.infile))
-
     targets = list(fetch_targets(tab, "results"))
 
     seen: Set[Analyses] = set()

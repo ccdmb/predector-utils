@@ -38,6 +38,16 @@ def cli(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument(
+        "--mem",
+        type=float,
+        default=1.0,
+        help=(
+            "The amount of RAM in gibibytes to let "
+            "SQLite use for cache."
+        )
+    )
+
+    parser.add_argument(
         "--dbcan",
         type=argparse.FileType('r'),
         default=None,
