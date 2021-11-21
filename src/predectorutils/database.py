@@ -27,7 +27,6 @@ def load_db(
     sqlite3.register_converter("analyses", Analyses.from_bytes_)
     con = sqlite3.connect(path, detect_types=sqlite3.PARSE_DECLTYPES)
     con.row_factory = sqlite3.Row
-    con.create_function("text_split", 2, text_split, deterministic=True)
 
     cur = con.cursor()
     # Allow it to use 1GB RAM for cache

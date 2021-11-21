@@ -23,7 +23,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
         "-o", "--outfile",
         type=argparse.FileType('w'),
         help="Where to write the precomputed ldjson results to.",
-        default="-",
+        default=None,
     )
 
     parser.add_argument(
@@ -167,8 +167,9 @@ def inner(
         ):
             continue
 
-        local_results = tab.select_target(target, checksums=True)
-        write_results(local_results, args.outfile)
+        if args.outfile is not None:
+            local_results = tab.select_target(target, checksums=True)
+            write_results(local_results, args.outfile)
 
         remaining_checksums = list(tab.find_remaining(target))
 

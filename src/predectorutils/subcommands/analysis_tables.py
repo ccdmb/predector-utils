@@ -86,7 +86,7 @@ def inner(
         records = tab.select_target(target, checksums=False)
         df = pd.DataFrame(map(lambda x: x.as_analysis().as_series(), records))
 
-        fname = args.template.format(analysis=target.analysis)
+        fname = args.template.format(analysis=str(target.analysis))
         dname = os.path.dirname(fname)
         if dname != '':
             os.makedirs(dname, exist_ok=True)

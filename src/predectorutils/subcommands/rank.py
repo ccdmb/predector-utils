@@ -1114,7 +1114,6 @@ def create_tables(
         f""" --  # noqa
         SELECT
             name,
-            checksum,
             NULL as effector_score,
             NULL as manual_effector_score,
             NULL as manual_secretion_score,
