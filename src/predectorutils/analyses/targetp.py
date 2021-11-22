@@ -26,7 +26,7 @@ from predectorutils.parsers import (
 
 tp_name = raise_it(parse_field(parse_str, "name"))
 tp_prediction = raise_it(parse_field(
-    is_one_of(["noTP", "SP", "mTP"]),
+    is_one_of(["OTHER", "noTP", "SP", "mTP", "cTP", "luTP"]),
     "prediction"
 ))
 tp_other = raise_it(parse_field(parse_float, "OTHER"))
@@ -138,6 +138,8 @@ class TargetPNonPlant(Analysis, GFFAble):
         if self.cs_pos is None:
             return
         elif "Probable protein fragment" in self.cs_pos:
+            return
+        elif self.prediction not in ("SP", "mTP"):
             return
 
         # dict(cs, cs_prob)

@@ -377,7 +377,7 @@ class AggPhobiusTMDomains(AggBase):
         if len(self.matches) == 0:
             return None
 
-        return ",".join(
+        return "tm:" + ",".join(
             f"{s}-{e}"
             for s, e
             in sorted(self.matches, key=lambda t: t[0])
@@ -422,7 +422,7 @@ class AggTMHMMDomains(AggBase):
         if len(self.matches) == 0:
             return None
 
-        return ",".join(
+        return "tm:" + ",".join(
             f"{s}-{e}"
             for s, e
             in sorted(self.matches, key=lambda t: t[0])
@@ -796,7 +796,7 @@ class AggHMMER(AggBase):
         return
 
     def step(self, data: str) -> None:
-        from ..analyses import DomTbl 
+        from ..analyses import DomTbl
         an = (
             self.analysis
             .get_analysis()
@@ -1068,7 +1068,10 @@ def agg_fkyin_gap() -> str:
     return f"((1.0 * {numerator} + 1) / (1.0 * {denominator} + 1))"
 
 
-def load_db(path: str, mem: float) -> Tuple[sqlite3.Connection, sqlite3.Cursor]:
+def load_db(
+    path: str,
+    mem: float
+) -> Tuple[sqlite3.Connection, sqlite3.Cursor]:
     sqlite3.register_converter("analyses", Analyses.from_bytes_)
     con = sqlite3.connect(path, detect_types=sqlite3.PARSE_DECLTYPES)
     con.row_factory = sqlite3.Row
