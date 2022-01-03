@@ -505,12 +505,10 @@ class PepStats(Analysis):
 
     @classmethod
     def from_block(cls, lines: Sequence[str]) -> "PepStats":
-        from copy import copy
-
         record: Dict[str, str] = dict()
 
         if not isinstance(lines, Iterable):
-            ilines = enumerate(iter(lines))
+            ilines: Iterator[Tuple[int, str]] = enumerate(iter(lines))
         else:
             ilines = enumerate(lines)
 

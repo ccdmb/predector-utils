@@ -10,11 +10,11 @@ from ..database import load_db, ResultsTable, ResultRow
 
 def cli(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "-r", "--replace-name",
-        dest="replace_name",
+        "-r", "--drop-name",
+        dest="drop_name",
         action="store_true",
         default=False,
-        help="Replace the analysis names with 'd'"
+        help="Don't insert the names"
     )
 
     parser.add_argument(
@@ -82,20 +82,26 @@ def inner(
     args: argparse.Namespace
 ) -> None:
     tab = ResultsTable(con, cur)
-    tab.create_tables()
+    tab.create_result_tables()
+    if not args.drop_name:
+        tab.create_decoder_table()
 
     target_analyses = set(args.include).difference(args.exclude)
 
     tab.insert_results(
         ResultRow.from_file(
             args.results,
-            replace_name=args.replace_name,
+            drop_name=args.drop_name,
             drop_null_dbversion=args.drop_null_dbversion,
             target_analyses=target_analyses
-        )
+        ),
+        insert_names=not args.drop_name
     )
 
-    tab.index_results()
+    tab.create_result_index()
+
+    if not args.drop_name:
+        tab.create_decoder_index()
     return
 
 

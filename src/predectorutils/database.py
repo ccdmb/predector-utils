@@ -4,7 +4,7 @@ from typing import NamedTuple, Tuple
 from typing import Dict, Set
 from typing import TextIO
 from typing import Any, Optional
-from typing import Iterator
+from typing import Iterator, Iterable
 from math import floor
 
 import json
@@ -42,17 +42,19 @@ def load_db(
 
 class ResultRow(NamedTuple):
 
+    checksum: str
+    name: Optional[str]
+    filename: Optional[str]
     analysis: Analyses
     software: str
     software_version: str
     database: Optional[str]
     database_version: Optional[str]
     pipeline_version: Optional[str]
-    checksum: str
     data: str
 
     @classmethod
-    def from_string(cls, s: str, replace_name: bool = False) -> "ResultRow":
+    def from_string(cls, s: str, drop_name: bool = False) -> "ResultRow":
         d = json.loads(s.strip())
         assert isinstance(d["analysis"], str), d
         assert isinstance(d["software"], str), d
@@ -67,70 +69,71 @@ class ResultRow(NamedTuple):
         assert isinstance(d["checksum"], str), d
 
         an_enum = Analyses.from_string(d["analysis"])
-        # This ensures the types are all correcy
+        # This ensures the types are all correct
         an_obj = (
             an_enum
             .get_analysis()
             .from_dict(d["data"])
         )
+        data = an_obj.as_dict()
 
-        if replace_name:
-            an_obj.replace_name()
+        if drop_name:
+            if an_obj.name_column in data:
+                del data[an_obj.name_column]
+            name = None
+        else:
+            name = data.get(an_obj.name_column, None)
 
-        data = an_obj.as_json_str()
+        if name is not None:
+            assert isinstance(name, str)
+
+        if "filename" in data:
+            assert isinstance(data["filename"], str), data
+            filename: Optional[str] = data["filename"]
+        else:
+            filename = None
 
         return cls(
+            d["checksum"],
+            name,
+            filename,
             an_enum,
             d["software"],
             d["software_version"],
             database,
             database_version,
             pipeline_version,
-            d["checksum"],
-            data,
+            json.dumps(data, separators=(',', ':'))
         )
 
-    def replace_name(self):
-        an = (
-            self.analysis
-            .get_analysis()
-            .from_json_str(self.data)
-            .replace_name()
-        )
-
+    def drop_name(self):
         return self.__class__(
+            self.checksum,
+            None,
+            None,
             self.analysis,
             self.software,
             self.software_version,
             self.database,
             self.database_version,
             self.pipeline_version,
-            self.checksum,
-            an.as_json_str()
+            self.data
         )
 
     @classmethod
     def from_file(
         cls,
         handle: TextIO,
-        replace_name: bool = False,
+        drop_name: bool = False,
         drop_null_dbversion: bool = False,
         target_analyses: Optional[Set[Analyses]] = None
     ) -> Iterator["ResultRow"]:
-
-        if drop_null_dbversion:
-            requires_database = {
-                a
-                for a
-                in Analyses
-                if (a.get_analysis().database is not None)
-            }
 
         for line in handle:
             sline = line.strip()
             if sline == "":
                 continue
-            record = cls.from_string(sline, replace_name=replace_name)
+            record = cls.from_string(sline, drop_name=drop_name)
 
             if target_analyses is not None:
                 if record.analysis not in target_analyses:
@@ -139,7 +142,7 @@ class ResultRow(NamedTuple):
             if drop_null_dbversion:
                 if (
                     (record.database_version is None)
-                    and (record.analysis in requires_database)
+                    and record.analysis.needs_database()
                 ):
                     continue
 
@@ -147,16 +150,22 @@ class ResultRow(NamedTuple):
         return
 
     def as_dict(self) -> Dict[str, Any]:
+        from .higher import or_else
         d = {
             "analysis": str(self.analysis),
             "software": self.software,
             "software_version": self.software_version,
             "checksum": self.checksum,
-            "data": json.loads(self.data)
+            "data": json.loads(self.data),
         }
+
+        d["data"][self.analysis.name_column()] = or_else(".", self.name)
 
         if self.database is not None:
             d["database"] = self.database
+
+        if self.filename is not None:
+            d["filename"] = self.filename,
 
         if self.database_version is not None:
             d["database_version"] = self.database_version
@@ -172,25 +181,36 @@ class ResultRow(NamedTuple):
         an = (
             self.analysis
             .get_analysis()
-            .from_json_str(self.data)
+            .from_dict(self.as_dict()["data"])
         )
         return an
 
     @classmethod
     def from_rowfactory(cls, row: sqlite3.Row) -> "ResultRow":
+        drow = dict(row)
         return cls(
-            analysis=row["analysis"],
-            software=row["software"],
-            software_version=row["software_version"],
-            database=row["database"],
+            checksum=drow["checksum"],
+            name=drow.get("name", None),
+            filename=(
+                None
+                if (drow.get("filename", "") == '')
+                else drow.get("filename", None)
+            ),
+            analysis=Analyses(int(drow["analysis"])),
+            software=drow["software"],
+            software_version=drow["software_version"],
+            database=(
+                None
+                if (drow.get("database", "") == '')
+                else drow.get("database", None)
+            ),
             database_version=(
                 None
-                if (row["database_version"] == '.')
-                else row["database_version"]
+                if (drow.get("database_version", "") == '')
+                else drow.get("database_version", None)
             ),
-            pipeline_version=row["pipeline_version"],
-            checksum=row["checksum"],
-            data=row["data"]
+            pipeline_version=drow["pipeline_version"],
+            data=drow["data"]
         )
 
 
@@ -234,11 +254,11 @@ class TargetRow(NamedTuple):
     @classmethod
     def from_rowfactory(cls, row: sqlite3.Row) -> "TargetRow":
         return cls(
-            row["analysis"],
+            Analyses(int(row["analysis"])),
             row["software_version"],
             (
                 None
-                if (row["database_version"] == '.')
+                if (row["database_version"] == '')
                 else row["database_version"]
             )
         )
@@ -246,108 +266,31 @@ class TargetRow(NamedTuple):
 
 class DecoderRow(NamedTuple):
 
-    encoded: str
-    filename: str
-    id: str
     checksum: str
+    filename: Optional[str]
+    name: str
 
     @classmethod
     def from_string(cls, s: str) -> "DecoderRow":
         e = s.strip().split("\t")
-        return DecoderRow(e[0], e[1], e[2], e[3])
+        if e[1] in (".", "", None):
+            fname = None
+        else:
+            fname = e[1]
+        return DecoderRow(e[3], fname, e[2])
 
     @classmethod
     def from_file(cls, handle: TextIO) -> Iterator["DecoderRow"]:
-        header = ["encoded", "filename", "id", "checksum"]
+        header = "\t".join(["encoded", "filename", "id", "checksum"])
         for line in handle:
             sline = line.strip()
-            if sline == "\t".join(header):
+            if sline == header:
                 continue
             elif sline == "":
                 continue
 
             yield cls.from_string(sline)
         return
-
-
-class DecodedRow(NamedTuple):
-
-    encoded: str
-    filename: str
-    id: str
-    analysis: Analyses
-    software: str
-    software_version: str
-    database: Optional[str]
-    database_version: Optional[str]
-    pipeline_version: Optional[str]
-    checksum: str
-    data: str
-
-    def as_analysis(self) -> Analysis:
-        return (
-            self.analysis
-            .get_analysis()
-            .from_json_str(self.data)
-        )
-
-    def as_result_row(self) -> ResultRow:
-        an = self.as_analysis()
-        an.replace_name(self.id)
-        return ResultRow(
-            self.analysis,
-            self.software,
-            self.software_version,
-            self.database,
-            self.database_version,
-            self.pipeline_version,
-            self.checksum,
-            an.as_json_str()
-        )
-
-    def as_result_string(self) -> str:
-        """ This is basically a copy to avoid having to serialise data again"""
-        an = self.as_analysis()
-        an.replace_name(self.id)
-
-        d = {
-            "analysis": str(self.analysis),
-            "software": self.software,
-            "software_version": self.software_version,
-            "checksum": self.checksum,
-            "data": an.as_dict()
-        }
-
-        if self.database is not None:
-            d["database"] = self.database
-
-        if self.database_version is not None:
-            d["database_version"] = self.database_version
-
-        if self.pipeline_version is not None:
-            d["pipeline_version"] = self.pipeline_version
-
-        return json.dumps(d, separators=(',', ':'))
-
-    @classmethod
-    def from_rowfactory(cls, row: sqlite3.Row) -> "DecodedRow":
-        return cls(
-            encoded=row["encoded"],
-            filename=row["filename"],
-            id=row["id"],
-            analysis=row["analysis"],
-            software=row["software"],
-            software_version=row["software_version"],
-            database=row["database"],
-            database_version=(
-                None
-                if (row["database_version"] == '.')
-                else row["database_version"]
-            ),
-            pipeline_version=row["pipeline_version"],
-            checksum=row["checksum"],
-            data=row["data"]
-        )
 
 
 class ResultsTable(object):
@@ -357,68 +300,209 @@ class ResultsTable(object):
         self.cur = cur
         return
 
-    def create_tables(self):
+    def create_result_tables(self):
+        from predectorutils import analyses
+        for an in analyses.Analyses:
+            ans = str(an)
+
+            if an.needs_database():
+                db_cols = (
+                    """
+                    database text NOT NULL,
+                    database_version text NOT NULL,
+                    """
+                )
+                db_index = "database_version,"
+            else:
+                db_cols = ""
+                db_index = ""
+
+            if an.multiple_ok():
+                unique_constraint = "checksum,data"
+            else:
+                unique_constraint = "checksum"
+
+            self.cur.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS results_{ans} (
+                    software text NOT NULL,
+                    software_version text NOT NULL,
+                    {db_cols}
+                    pipeline_version text,
+                    checksum text NOT NULL,
+                    data json NOT NULL,
+                    UNIQUE (
+                        software_version,
+                        {db_index}
+                        {unique_constraint}
+                    )
+                )
+                """
+            )
+
+        self.con.commit()
+        return
+
+    def create_result_index(self):
+        from predectorutils import analyses
+        for an in analyses.Analyses:
+            ans = str(an)
+
+            if an.needs_database():
+                db_index = "database_version,"
+            else:
+                db_index = ""
+
+            self.cur.execute(
+                f"""
+                CREATE INDEX IF NOT EXISTS results_index_{ans}
+                ON results_{ans} (
+                    software_version,
+                    {db_index}
+                    checksum
+                )
+                """
+            )
+
+        self.con.commit()
+        return
+
+    def drop_result_index(self):
+        from predectorutils import analyses
+        for an in analyses.Analyses:
+            ans = str(an)
+            self.cur.execute(f"DROP INDEX IF EXISTS results_index_{ans}")
+
+        self.con.commit()
+        return
+
+    def create_decoder_table(self) -> None:
+        self.cur.execute("DROP TABLE IF EXISTS decoder")
         self.cur.execute(
             """
-            CREATE TABLE IF NOT EXISTS results (
-                analysis analyses NOT NULL,
-                software text NOT NULL,
-                software_version text NOT NULL,
-                database text,
-                database_version text NOT NULL,
-                pipeline_version text,
+            CREATE TABLE IF NOT EXISTS decoder (
                 checksum text NOT NULL,
-                data json NOT NULL,
+                filename text NOT NULL,
+                name text NOT NULL,
                 UNIQUE (
-                    analysis,
-                    software_version,
-                    database_version,
                     checksum,
-                    data
+                    filename,
+                    name
                 )
             )
             """
         )
-
         self.con.commit()
         return
 
-    def index_results(self):
+    def drop_decoder_table(self):
+        self.cur.execute("DROP TABLE IF EXISTS decoder")
+        self.con.commit()
+        return
+
+    def create_decoder_index(self):
         self.cur.execute(
             """
-            CREATE INDEX IF NOT EXISTS analysis_version
-            ON results (
-                analysis,
-                software_version,
-                database_version,
-                checksum
-            )
+            CREATE INDEX IF NOT EXISTS decoder_index
+            ON decoder (checksum)
             """
         )
         self.con.commit()
         return
 
-    def drop_index(self):
-        self.cur.execute("DROP INDEX IF EXISTS analysis_version")
+    def drop_decoder_index(self):
+        self.cur.execute("DROP INDEX IF EXISTS decoder_index")
         self.con.commit()
         return
 
-    def insert_results(self, rows: Iterator[ResultRow]) -> None:
+    def _insert_results(self, an: Analyses, rows: Iterable[ResultRow]) -> None:
+        ans = str(an)
+        keys = ["software", "software_version",
+                "pipeline_version", "checksum", "data"]
+
+        if an.needs_database():
+            dcols = (
+                """
+                :database,
+                :database_version,
+                """
+            )
+            keys.extend(["database", "database_version"])
+        else:
+            dcols = ""
+
         self.cur.executemany(
-            """
-            INSERT INTO results
+            f"""
+            INSERT INTO results_{ans}
             VALUES (
-                :analysis,
                 :software,
                 :software_version,
-                :database,
-                IFNULL(:database_version, '.'),
+                {dcols}
                 :pipeline_version,
                 :checksum,
                 json(:data)
             )
             ON CONFLICT DO NOTHING
             """,
+            map(lambda r: {k: getattr(r, k) for k in keys}, rows)
+        )
+        self.con.commit()
+        return
+
+    def insert_results(
+        self,
+        rows: Iterable[ResultRow],
+        insert_names: bool = False
+    ) -> None:
+        from collections import defaultdict
+        cache = defaultdict(list)
+
+        decoder_rows = []
+
+        if insert_names:
+            assert self.exists_table("decoder"), "no decoder table"
+
+        i = 0
+        for row in rows:
+            an = row.analysis
+            cache[an].append(row)
+
+            if insert_names:
+
+                if row.name is not None:
+                    decoder_rows.append(DecoderRow(
+                        row.checksum,
+                        row.filename,
+                        row.name
+                    ))
+
+            if i > 100000:
+                for an, an_rows in cache.items():
+                    if len(an_rows) == 0:
+                        continue
+                    self._insert_results(an, an_rows)
+                    cache[an] = []
+
+                if len(decoder_rows) > 0:
+                    self.insert_decoder(decoder_rows)
+                    decoder_rows = []
+                i = 0
+
+        for an, an_rows in cache.items():
+            if len(an_rows) == 0:
+                continue
+
+            self._insert_results(an, an_rows)
+
+        if len(decoder_rows) > 0:
+            self.insert_decoder(decoder_rows)
+        return
+
+    def insert_decoder(self, rows: Iterable[DecoderRow]) -> None:
+        self.cur.executemany(
+            "INSERT INTO decoder VALUES "
+            "(:checksum, IFNULL(:filename, ''), :name) "
+            "ON CONFLICT DO NOTHING",
             rows
         )
         self.con.commit()
@@ -451,21 +535,53 @@ class ResultsTable(object):
         )
 
     def select_checksums(self) -> Iterator[ResultRow]:
+        from . import analyses
         assert self.exists_table("checksums"), "no checksums table"
 
-        result = self.cur.execute(
-            """
-            SELECT DISTINCT r.*
-            FROM results r
+        query = []
+        for an in analyses.Analyses:
+            ans = str(an)
+            anv = an.value
+
+            if not self.exists_table(f"results_{ans}"):
+                continue
+
+            if an.needs_database():
+                db_cols = (
+                    """
+                    database,
+                    database_version,
+                    """
+                )
+            else:
+                db_cols = (
+                    """
+                    '' as database,
+                    '' as database_version,
+                    """
+                )
+
+            q = f"""
+            SELECT DISTINCT
+                CAST({anv} AS analyses) as analysis,
+                software,
+                software_version,
+                {db_cols}
+                pipeline_version,
+                r.checksum as checksum,
+                data
+            FROM result_{ans} r
             INNER JOIN checksums c
                 ON r.checksum = c.checksum
             """
-        )
+            query.append(q)
+
+        qstring = "\nUNION\n".join(query)
+        result = self.cur.execute(qstring)
 
         for r in result:
             yield ResultRow.from_rowfactory(r)
 
-        self.con.commit()
         return
 
     def select_target(
@@ -473,61 +589,53 @@ class ResultsTable(object):
         target: TargetRow,
         checksums: bool = False,
     ) -> Iterator[ResultRow]:
+        an = target.analysis
+        anstr = str(an)
+        table_name = f"results_{anstr}"
+
+        if not self.exists_table(f"results_{anstr}"):
+            return
 
         if checksums:
             assert self.exists_table("checksums"), "no checksums table"
-
-            result = self.cur.execute(
-                """
-                SELECT
-                    analysis,
-                    software,
-                    software_version,
-                    database,
-                    (
-                        CASE
-                            WHEN database_version == '.'
-                            THEN NULL
-                            ELSE database_version
-                        END
-                    ) as database_version,
-                    pipeline_version,
-                    checksum,
-                    data
-                FROM results
-                WHERE analysis = CAST(:analysis AS analyses)
-                AND software_version = :software_version
-                AND database_version = IFNULL(:database_version, '.')
-                AND checksum IN checksums
-                """,
-                target
-            )
-
+            chk_where = "AND checksum IN checksums"
         else:
-            result = self.cur.execute(
+            chk_where = ""
+
+        target_dict = {
+            "analysis": target.analysis,
+            "software_version": target.software_version
+        }
+        if an.needs_database():
+            db_cols = (
                 """
-                SELECT
-                    analysis,
-                    software,
-                    software_version,
-                    database,
-                    (
-                        CASE
-                            WHEN database_version == '.'
-                            THEN NULL
-                            ELSE database_version
-                        END
-                    ) as database_version,
-                    pipeline_version,
-                    checksum,
-                    data
-                FROM results
-                WHERE analysis = CAST(:analysis AS analyses)
-                AND software_version = :software_version
-                AND database_version = IFNULL(:database_version, '.')
-                """,
-                target
+                database,
+                database_version,
+                """
             )
+            db_where = "AND database_version = IFNULL(:database_version, '')"
+            target_dict["database_version"] = target.database_version
+        else:
+            db_cols = ""
+            db_where = ""
+
+        result = self.cur.execute(
+            f"""
+            SELECT
+                CAST(:analysis AS analyses) as analysis,
+                software,
+                software_version,
+                {db_cols}
+                pipeline_version,
+                checksum,
+                data
+            FROM {table_name}
+            WHERE software_version = :software_version
+            {db_where}
+            {chk_where}
+            """,
+            target_dict
+        )
 
         for r in result:
             yield ResultRow.from_rowfactory(r)
@@ -536,18 +644,28 @@ class ResultsTable(object):
 
     def find_remaining(self, target: TargetRow) -> Iterator[str]:
         assert self.exists_table("checksums"), "no checksums table"
+        an = target.analysis
+        anstr = str(an)
+        table_name = f"results_{anstr}"
+
+        if not self.exists_table(table_name):
+            return
+
+        if an.needs_database():
+            db_where = "AND database_version = IFNULL(:database_version, '')"
+        else:
+            db_where = ""
 
         result = self.cur.execute(
-            """
+            f"""
             SELECT DISTINCT
                 c.checksum AS checksum
             FROM checksums AS c
             WHERE c.checksum NOT IN (
                 SELECT r.checksum
-                FROM results AS r
-                WHERE analysis = CAST(:analysis AS analyses)
-                AND software_version = :software_version
-                AND database_version = IFNULL(:database_version, '.')
+                FROM {table_name} AS r
+                WHERE software_version = :software_version
+                {db_where}
             )
             """,
             target
@@ -557,99 +675,168 @@ class ResultsTable(object):
             yield r["checksum"]
         return
 
-    def select_all(self) -> Iterator[ResultRow]:
-        result = self.cur.execute(
-            """
+    def select_all(self, checksums: bool = False) -> Iterator[ResultRow]:
+        from . import analyses
+
+        if checksums:
+            assert self.exists_table("checksums"), "no checksums table"
+            chk_join = "INNER JOIN checksums c ON r.checksum = c.checksum"
+        else:
+            chk_join = ""
+
+        query = []
+        for an in analyses.Analyses:
+            ans = str(an)
+            anv = an.value
+
+            if not self.exists_table(f"results_{ans}"):
+                continue
+
+            if an.needs_database():
+                db_cols = (
+                    """
+                    database,
+                    database_version,
+                    """
+                )
+            else:
+                db_cols = (
+                    """
+                    '' as database,
+                    '' as database_version,
+                    """
+                )
+
+            q = f"""
             SELECT
-                analysis,
+                CAST({anv} AS analyses) as analysis,
                 software,
                 software_version,
-                database,
-                (
-                    CASE
-                        WHEN database_version == '.'
-                        THEN NULL
-                        ELSE database_version
-                    END
-                ) as database_version,
+                {db_cols}
                 pipeline_version,
-                checksum,
+                r.checksum as checksum,
                 data
-            FROM results
+            FROM results_{ans} r
+            {chk_join}
             """
-        )
+            query.append(q)
+
+        qstring = "\nUNION\n".join(query)
+        result = self.cur.execute(qstring)
+
         for r in result:
             yield ResultRow.from_rowfactory(r)
-        return
 
-    def insert_decoder(self, rows: Iterator[DecoderRow]) -> None:
-        self.cur.execute("DROP TABLE IF EXISTS decoder")
-        self.cur.execute(
-            """
-            CREATE TEMP TABLE IF NOT EXISTS decoder (
-                encoded text NOT NULL,
-                filename text NOT NULL,
-                id text NOT NULL,
-                checksum text NOT NULL
-            )
-            """
-        )
-
-        self.cur.executemany(
-            "INSERT INTO decoder VALUES (:encoded, :filename, :id, :checksum)",
-            rows
-        )
-
-        self.cur.execute(
-            """
-            CREATE TEMP VIEW IF NOT EXISTS decoded
-            AS
-            SELECT
-                d.encoded,
-                d.filename,
-                d.id,
-                r.analysis,
-                r.software,
-                r.software_version,
-                r.database,
-                (
-                    CASE
-                        WHEN r.database_version == '.'
-                        THEN NULL
-                        ELSE r.database_version
-                    END
-                ) as database_version,
-                r.pipeline_version,
-                r.checksum,
-                r.data
-            FROM results r
-            INNER JOIN decoder d
-                ON r.checksum = d.checksum
-            """
-        )
-        self.con.commit()
         return
 
     def decode(self) -> Iterator[Tuple[str, Iterator[ResultRow]]]:
-        assert self.exists_table("decoded"), "table decoder doesn't exist"
+        from . import analyses
+        assert self.exists_table("decoder"), "table decoder doesn't exist"
 
         fnames = (
-            self.cur.execute("SELECT DISTINCT filename FROM decoded")
+            self.cur.execute("SELECT DISTINCT filename FROM decoder")
             .fetchall()
         )
 
+        query_template = """
+        SELECT DISTINCT
+            CAST({anv} AS analyses) as analysis,
+            r.checksum as checksum,
+            d.name as name,
+            d.filename as filename,
+            software,
+            software_version,
+            {db_cols}
+            pipeline_version,
+            data
+        FROM results_{ans} r
+        INNER JOIN fname_decoder d
+            ON r.checksum = d.checksum
+        """
+
         for fname, in fnames:
-            rows = self.cur.execute(
-                "SELECT DISTINCT * FROM decoded WHERE filename = :filename",
+            self.cur.execute(
+                """
+                CREATE TEMP TABLE fname_decoder
+                AS
+                SELECT DISTINCT * FROM decoder WHERE filename = :filename
+                """,
                 {"filename": fname}
             )
 
+            query = []
+            for an in analyses.Analyses:
+                ans = str(an)
+                anv = an.value
+
+                if not self.exists_table(f"results_{ans}"):
+                    continue
+
+                if an.needs_database():
+                    db_cols = (
+                        """
+                        database,
+                        database_version,
+                        """
+                    )
+                else:
+                    db_cols = (
+                        """
+                        '' as database,
+                        '' as database_version,
+                        """
+                    )
+
+                q = query_template.format(
+                    ans=ans,
+                    anv=anv,
+                    db_cols=db_cols
+                )
+
+                query.append(q)
+
+            qstring = "\nUNION\n".join(query)
+            result = self.cur.execute(qstring)
+
             gen = (
-                (DecodedRow
-                    .from_rowfactory(r)
-                    .as_result_row())
+                ResultRow.from_rowfactory(r)
                 for r
-                in rows
+                in result
             )
             yield fname, gen
+            self.cur.execute("DROP TABLE IF EXISTS fname_decoder")
+        return
+
+    def fetch_targets(
+        self,
+    ) -> Iterator[TargetRow]:
+        from . import analyses
+
+        query = []
+        for an in analyses.Analyses:
+            ans = str(an)
+            anv = an.value
+
+            if not self.exists_table(f"results_{ans}"):
+                continue
+
+            if an.needs_database():
+                db_cols = "database_version"
+            else:
+                db_cols = "'' as database_version"
+
+            q = (
+                f"""
+                SELECT DISTINCT
+                    CAST({anv} AS analyses) as analysis,
+                    software_version,
+                    {db_cols}
+                FROM results_{ans}
+                """
+            )
+            query.append(q)
+
+        result = self.cur.execute("\nUNION\n".join(query))
+        for r in result:
+            yield TargetRow.from_rowfactory(r)
         return

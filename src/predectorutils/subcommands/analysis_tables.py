@@ -49,21 +49,6 @@ def cli(parser: argparse.ArgumentParser) -> None:
     return
 
 
-def fetch_targets(
-    tab: ResultsTable,
-    table: str = "results"
-) -> Iterator[TargetRow]:
-    assert tab.exists_table(table), f"table {table} does not exist"
-
-    result = tab.cur.execute((
-        "SELECT DISTINCT analysis, software_version, database_version "
-        f"FROM {table}"
-    ))
-    for r in result:
-        yield TargetRow.from_rowfactory(r)
-    return
-
-
 def inner(
     con: sqlite3.Connection,
     cur: sqlite3.Cursor,
@@ -72,7 +57,7 @@ def inner(
     from ..analyses import Analyses
 
     tab = ResultsTable(con, cur)
-    targets = list(fetch_targets(tab, "results"))
+    targets = list(tab.fetch_targets())
 
     seen: Set[Analyses] = set()
     for target in targets:

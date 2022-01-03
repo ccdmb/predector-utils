@@ -13,7 +13,6 @@ from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqUtils.CheckSum import seguid
 
-from predectorutils.analyses import Analyses
 from predectorutils.database import load_db, TargetRow, ResultsTable, ResultRow
 
 
@@ -129,7 +128,7 @@ def write_results(
     for result in results:
         buf.append(result.as_str())
 
-        if len(buf) > 10000:
+        if len(buf) > 50000:
             print("\n".join(buf), file=outfile)
             buf = []
 
@@ -150,19 +149,11 @@ def inner(
     checksums = set(checksum_to_ids.keys())
 
     tab = ResultsTable(con, cur)
-
-    requires_database = {
-        str(a)
-        for a
-        in Analyses
-        if (a.get_analysis().database is not None)
-    }
-
     tab.insert_checksums(checksums)
 
     for target in TargetRow.from_file(args.analyses):
         if (
-            (target.analysis in requires_database) and
+            target.analysis.needs_database() and
             (target.database_version is None)
         ):
             continue

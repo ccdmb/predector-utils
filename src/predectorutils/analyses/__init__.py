@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Type
+from typing import Dict, Type
 import enum
 import sqlite3
 
@@ -101,6 +101,12 @@ class Analyses(enum.IntEnum):
     def multiple_ok(self) -> bool:
         return MULTIPLE_ACCEPTABLE[self]
 
+    def needs_database(self) -> bool:
+        return NAME_TO_ANALYSIS[self].database is not None
+
+    def name_column(self) -> str:
+        return NAME_TO_ANALYSIS[self].name_column
+
     def __conform__(self, protocol):
         if protocol is sqlite3.PrepareProtocol:
             return self.value
@@ -111,7 +117,7 @@ class Analyses(enum.IntEnum):
         return cls(int(b))
 
 
-NAME_TO_ANALYSIS = {
+NAME_TO_ANALYSIS: Dict[Analyses, Type[Analysis]] = {
     Analyses.signalp3_nn: SignalP3NN,
     Analyses.signalp3_hmm: SignalP3HMM,
     Analyses.signalp4: SignalP4,

@@ -15,6 +15,7 @@ import pandas as pd
 import xgboost as xgb
 
 from predectorutils.analyses import Analyses
+from predectorutils.database import ResultsTable
 from predectorutils.data import (
     get_interesting_dbcan_ids,
     get_interesting_pfam_ids,
@@ -1097,6 +1098,55 @@ def load_db(
     return con, cur
 
 
+def create_select_all_table(tab: ResultsTable) -> None:
+    assert tab.exists_table("decoder"), "no decoder table"
+
+    query = []
+    for an in Analyses:
+        ans = str(an)
+        anv = an.value
+
+        if not tab.exists_table(f"results_{ans}"):
+            continue
+
+        if an.needs_database():
+            db_cols = (
+                """
+                database,
+                database_version,
+                """
+            )
+        else:
+            db_cols = (
+                """
+                '' as database,
+                '' as database_version,
+                """
+            )
+
+        q = f"""
+        SELECT
+            CAST({anv} AS analyses) as analysis,
+            software,
+            software_version,
+            {db_cols}
+            pipeline_version,
+            r.checksum as checksum,
+            d.name as name,
+            data
+        FROM results_{ans} r
+        INNER JOIN decoder d ON r.checksum = d.checksum
+        """
+        query.append(q)
+
+    qstring = (
+        "CREATE TEMP VIEW rank_table AS \n" +
+        "\nUNION\n".join(query)
+    )
+    tab.cur.execute(qstring)
+    return
+
+
 def create_tables(
     con: sqlite3.Connection,
     cur: sqlite3.Cursor,
@@ -1104,14 +1154,8 @@ def create_tables(
     dbcan_targets: Set[str],
     tmhmm_first_60_threshold: float = 10,
 ) -> pd.DataFrame:
-    name_cols = "\n".join([
-        (
-            f"WHEN analysis = {int(a)} THEN "
-            f"json_extract(data, '$.{a.get_analysis().name_column}')"
-        )
-        for a
-        in Analyses
-    ])
+    tab = ResultsTable(con, cur)
+    create_select_all_table(tab)
 
     table = pd.read_sql_query(
         f""" --  # noqa
@@ -1200,16 +1244,7 @@ def create_tables(
             {agg_deepsig("SignalPeptide")} as deepsig_signal_prob,
             {agg_deepsig("Transmembrane")} as deepsig_transmembrane_prob,
             {agg_deepsig("Other")} as deepsig_other_prob
-        FROM
-        (
-            SELECT
-                CASE
-                {name_cols}
-                END as name,
-                r.*
-            FROM
-                results as r
-        )
+        FROM rank_table
         GROUP BY name, checksum
         """,
         con
