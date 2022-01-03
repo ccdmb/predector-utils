@@ -165,7 +165,7 @@ class ResultRow(NamedTuple):
             d["database"] = self.database
 
         if self.filename is not None:
-            d["filename"] = self.filename,
+            d["filename"] = self.filename
 
         if self.database_version is not None:
             d["database_version"] = self.database_version
@@ -424,7 +424,7 @@ class ResultsTable(object):
             dcols = (
                 """
                 :database,
-                :database_version,
+                IFNULL(:database_version, ''),
                 """
             )
             keys.extend(["database", "database_version"])
@@ -499,6 +499,9 @@ class ResultsTable(object):
         return
 
     def insert_decoder(self, rows: Iterable[DecoderRow]) -> None:
+        self.create_decoder_table()
+        self.create_decoder_index()
+
         self.cur.executemany(
             "INSERT INTO decoder VALUES "
             "(:checksum, IFNULL(:filename, ''), :name) "
@@ -651,8 +654,13 @@ class ResultsTable(object):
         if not self.exists_table(table_name):
             return
 
+        target_dict = {
+            "software_version": target.software_version
+        }
+
         if an.needs_database():
             db_where = "AND database_version = IFNULL(:database_version, '')"
+            target_dict["database_version"] = target.database_version
         else:
             db_where = ""
 
@@ -668,7 +676,7 @@ class ResultsTable(object):
                 {db_where}
             )
             """,
-            target
+            target_dict
         )
 
         for r in result:
@@ -755,6 +763,9 @@ class ResultsTable(object):
         """
 
         for fname, in fnames:
+            if fname == "":
+                continue
+
             self.cur.execute(
                 """
                 CREATE TEMP TABLE fname_decoder
