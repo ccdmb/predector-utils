@@ -749,7 +749,7 @@ class SignalP5(Analysis, GFFAble):
 
 s6_name = raise_it(parse_field(parse_str, "name"))
 s6_prediction = raise_it(parse_field(
-    is_one_of(["SP", "NO_SP"]),
+    is_one_of(["OTHER", "SP", "LIPO", "TAT", "TATLIPO", "PILIN", "NO_SP"]),
     "prediction"
 ))
 s6_prob_signal = raise_it(parse_field(parse_float, "prob_signal"))
