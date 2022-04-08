@@ -49,6 +49,69 @@ def cli(parser: argparse.ArgumentParser) -> None:
     return
 
 
+def select_target(
+    tab: ResultsTable,
+    target: TargetRow,
+    checksums: bool = False,
+) -> Iterator[ResultRow]:
+    an = target.analysis
+    assert tab.exists_table("decoder"), "no decoder table"
+
+    anstr = str(an)
+    table_name = f"results_{anstr}"
+
+    if not tab.exists_table(f"results_{anstr}"):
+        return
+
+    if checksums:
+        assert tab.exists_table("checksums"), "no checksums table"
+        chk_where = "AND a.checksum IN checksums"
+    else:
+        chk_where = ""
+
+    target_dict = {
+        "analysis": target.analysis,
+        "software_version": target.software_version
+    }
+    if an.needs_database():
+        db_cols = (
+            """
+            database,
+            database_version,
+            """
+        )
+        db_where = "AND a.database_version = IFNULL(:database_version, '')"
+        target_dict["database_version"] = target.database_version
+    else:
+        db_cols = ""
+        db_where = ""
+
+    result = tab.cur.execute(
+        f"""
+        SELECT
+            d.name as name,
+            CAST(:analysis AS analyses) as analysis,
+            a.software,
+            a.software_version,
+            {db_cols}
+            a.pipeline_version,
+            a.checksum,
+            a.data
+        FROM {table_name} a
+        INNER JOIN decoder d ON a.checksum = d.checksum
+        WHERE software_version = :software_version
+        {db_where}
+        {chk_where}
+        """,
+        target_dict
+    )
+
+    for r in result:
+        yield ResultRow.from_rowfactory(r)
+
+    return
+
+
 def inner(
     con: sqlite3.Connection,
     cur: sqlite3.Cursor,
@@ -68,7 +131,7 @@ def inner(
         else:
             seen.add(target.analysis)
 
-        records = tab.select_target(target, checksums=False)
+        records = select_target(tab, target, checksums=False)
         df = pd.DataFrame(map(lambda x: x.as_analysis().as_series(), records))
 
         fname = args.template.format(analysis=str(target.analysis))
