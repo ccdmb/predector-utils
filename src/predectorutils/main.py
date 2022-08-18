@@ -40,6 +40,10 @@ from predectorutils.subcommands.load_db import runner as load_db_runner
 from predectorutils.subcommands.dump_db import cli as dump_db_cli
 from predectorutils.subcommands.dump_db import runner as dump_db_runner
 
+from predectorutils.subcommands.map_to_genome import cli as mtg_cli
+from predectorutils.subcommands.map_to_genome import runner as mtg_runner
+
+
 from predectorutils.parsers import ParseError
 from predectorutils.exceptions import (
     EXIT_VALID, EXIT_KEYBOARD, EXIT_UNKNOWN, EXIT_CLI, EXIT_INPUT_FORMAT,
@@ -197,6 +201,15 @@ def cli(prog: str, args: List[str]) -> argparse.Namespace:
 
     dump_db_cli(dump_db_subparser)
 
+    mtg_subparser = subparsers.add_parser(
+        "map_to_genome",
+        help=(
+            "Map predector GFF3 results to genome coordinates."
+        )
+    )
+
+    mtg_cli(mtg_subparser)
+
     parsed = parser.parse_args(args)
 
     if parsed.subparser_name is None:
@@ -236,6 +249,8 @@ def main():  # noqa
             load_db_runner(args)
         elif args.subparser_name == "dump_db":
             dump_db_runner(args)
+        elif args.subparser_name == "map_to_genome":
+            mtg_runner(args)
 
     except ParseError as e:
         if e.line is not None:

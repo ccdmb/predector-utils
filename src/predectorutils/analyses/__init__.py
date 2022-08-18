@@ -21,6 +21,7 @@ from predectorutils.analyses.signalp import (
 )
 from predectorutils.analyses.targetp import TargetPNonPlant, TargetPPlant
 from predectorutils.analyses.tmhmm import TMHMM
+from predectorutils.analyses.deeptmhmm import DeepTMHMM
 from predectorutils.analyses.localizer import LOCALIZER
 from predectorutils.analyses.deeploc import DeepLoc
 from predectorutils.analyses.hmmer import DomTbl, DBCAN, EffectorDB
@@ -46,7 +47,8 @@ __all__ = [
     "EffectorP1", "EffectorP2", "EffectorP3", "EffectorP3Fungal"
     "Phobius",
     "SignalP3NN", "SignalP3HMM", "SignalP4", "SignalP5", "SignalP6",
-    "TargetPNonPlant", "TargetPPlant", "TMHMM", "LOCALIZER", "DeepLoc",
+    "TargetPNonPlant", "TargetPPlant", "TMHMM", "DeepTMHMM", "LOCALIZER",
+    "DeepLoc",
     "DomTbl", "DBCAN", "GFFAble", "PfamScan", "PepStats", "MMSeqs",
     "PHIBase", "HHRAligmment", "EffectorDB", "RegexAnalysis",
     "DeepredeffFungi", "DeepredeffOomycete", "DeepredeffBacteria",
@@ -84,6 +86,7 @@ class Analyses(enum.IntEnum):
     deepredeff_bacteria = 26
     kex2_cutsite = 27
     rxlr_like_motif = 28
+    deeptmhmm = 29
 
     def __str__(self) -> str:
         return self.name
@@ -146,6 +149,7 @@ NAME_TO_ANALYSIS: Dict[Analyses, Type[Analysis]] = {
     Analyses.deepredeff_bacteria: DeepredeffBacteria,
     Analyses.kex2_cutsite: Kex2SiteAnalysis,
     Analyses.rxlr_like_motif: RXLRLikeAnalysis,
+    Analyses.deeptmhmm: DeepTMHMM,
 }
 
 
@@ -178,4 +182,5 @@ MULTIPLE_ACCEPTABLE = {
     Analyses.deepredeff_bacteria: False,
     Analyses.kex2_cutsite: True,
     Analyses.rxlr_like_motif: True,
+    Analyses.deeptmhmm: False,
 }
