@@ -13,6 +13,7 @@ from typing import (
     Tuple,
     DefaultDict,
     Set,
+    Literal,
 )
 
 from predectorutils.gff import (
@@ -38,9 +39,20 @@ def cli(parser: argparse.ArgumentParser) -> None:
 
     parser.add_argument(
         "-o", "--outfile",
-        type=argparse.FileType('w'),
-        default=sys.stdout,
-        help="Where to write the output to. Default: stdout"
+        type=str,
+        default="stdout",
+        help=(
+            "Where to write the output to. If using the --split parameter "
+            "this becomes the prefix. Default: stdout"
+        )
+    )
+
+    parser.add_argument(
+        "--split",
+        type=str,
+        choices=["source", "type"],
+        default=None,
+        help="Output distinct GFFs for each analysis or type of feature."
     )
 
     # parser.add_argument(
@@ -59,20 +71,20 @@ def cli(parser: argparse.ArgumentParser) -> None:
         action="store_false",
         default=True,
         help=(
-            "Only output a kex2 cutsite if there is a signal peptide"
+            "Output kex2 cutsites even if there is no signal peptide"
         )
     )
 
     parser.add_argument(
         "--id",
         dest="id_field",
-        default="ID",
+        default="Parent",
         help=(
             "What GFF attribute field corresponds to your protein feature "
-            "seqids? Default uses the ID, field and will skip any CDS "
-            "features without an ID. Because some fields can have multiple "
-            "values, we'll raise an error if there is more than 1 unique "
-            "value."
+            "seqids? Default uses the Parent field. Because some fields "
+            "(like Parent) can have multiple values, we'll raise an error "
+            "if there is more than 1 unique value. Any CDSs missing the "
+            "specified field (e.g. ID) will be skipped."
         )
     )
 
@@ -466,12 +478,97 @@ def get_id(
     return id_
 
 
+def write_gff(
+    gff: Iterable[GFFRecord],
+    handle: TextIO
+):
+    seen: Set[GFFRecord] = set()
+    for feature in sorted(
+        gff,
+        key=lambda g: (g.seqid, g.start, g.end, g.type)
+    ):
+        if len(feature.parents) > 0:
+            continue
+
+        for child in feature.traverse_children(sort=True):
+            if child in seen:
+                continue
+            elif child.type in (
+                'n_terminal_region',
+                'central_hydrophobic_region_of_signal_peptide',
+                'c_terminal_region'
+            ):
+                seen.add(child)
+                continue
+
+            seen.add(child)
+            child.update_parents()
+            print(child, file=handle)
+        print("###", file=handle)
+
+
+def split_on_type(
+    records: Iterable[GFFRecord]
+) -> DefaultDict[str, List[GFFRecord]]:
+    seen: Set[GFFRecord] = set()
+    out: DefaultDict[str, List[GFFRecord]] = defaultdict(list)
+
+    type_map = {
+        "signal_peptide": "signal_peptide",
+        "n_terminal_region": "signal_peptide",
+        "c_terminal_region": "signal_peptide",
+        "central_hydrophobic_region_of_signal_peptide": "signal_peptide",
+        "mitochondrial_targeting_signal": "peptide_localization_signal",
+        "peptide_localization_signal": "peptide_localization_signal",
+        "transmembrane_polypeptide_region": "transmembrane_polypeptide_region",
+        "propeptide_cleavage_site": "propeptide_cleavage_site",
+        "polypeptide_motif": "polypeptide_motif",
+        "protein_match": "protein_match",
+        "protein_hmm_match": "protein_match",
+        "match_part": "protein_match",
+    }
+
+    for record in records:
+        if record in seen:
+            continue
+
+        if record.type in type_map:
+            type_ = type_map[record.type]
+            out[type_].append(record)
+            seen.add(record)
+
+            for parent in record.traverse_parents():
+                if parent in seen:
+                    continue
+                out[type_].append(parent)
+                seen.add(parent)
+
+            for child in record.traverse_children():
+                if child in seen:
+                    continue
+                out[type_].append(child)
+                seen.add(child)
+
+    return out
+
+
+def split_on_source(
+    records: Iterable[GFFRecord]
+) -> DefaultDict[str, List[GFFRecord]]:
+    out: DefaultDict[str, List[GFFRecord]] = defaultdict(list)
+    for record in records:
+        out[record.source].append(record)
+
+    return out
+
+
 def inner(  # noqa: C901
     genes: TextIO,
     annotations: TextIO,
-    outfile: TextIO,
+    outfile: str,
     id_field: str,
-    filter_kex2: bool
+    filter_kex2: bool,
+    split: Literal['source', 'type', None],
 ):
     genes_gff = list(GFFRecord.from_file(genes))
 
@@ -525,30 +622,21 @@ def inner(  # noqa: C901
         )
         mapped.extend(feats)
 
-    seen: Set[GFFRecord] = set()
-
-    for feature in sorted(
-        mapped,
-        key=lambda g: (g.seqid, g.start, g.end, g.type)
-    ):
-        if len(feature.parents) > 0:
-            continue
-
-        for child in feature.traverse_children(sort=True):
-            if child in seen:
-                continue
-            elif child.type in (
-                'n_terminal_region',
-                'central_hydrophobic_region_of_signal_peptide',
-                'c_terminal_region'
-            ):
-                seen.add(child)
-                continue
-
-            seen.add(child)
-            child.update_parents()
-            print(child, file=outfile)
-        print("###", file=outfile)
+    if (split is None) and (outfile in ("stdout", "-")):
+        write_gff(mapped, sys.stdout)
+    elif (split is None):
+        with open(outfile, "w") as handle:
+            write_gff(mapped, handle)
+    elif split == "type":
+        for type_, split_mapped in split_on_type(mapped).items():
+            with open(f"{outfile}{type_}.gff3", "w") as handle:
+                write_gff(split_mapped, handle)
+    elif split == "source":
+        for source, split_mapped in split_on_source(mapped).items():
+            with open(f"{outfile}{source}.gff3", "w") as handle:
+                write_gff(split_mapped, handle)
+    else:
+        print(split, outfile)
     return
 
 
@@ -560,6 +648,7 @@ def runner(args: argparse.Namespace) -> None:
             outfile=args.outfile,
             id_field=args.id_field,
             filter_kex2=args.filter_kex2,
+            split=args.split,
         )
     except Exception as e:
         raise e

@@ -102,7 +102,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--id",
         dest="id_field",
-        default="ID",
+        default="Parent",
         help=(
             "What GFF attribute field corresponds to your protein feature "
             "seqids? Default uses the ID, field and will skip any CDS "
