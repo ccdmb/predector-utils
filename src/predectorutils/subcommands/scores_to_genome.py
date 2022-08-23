@@ -105,10 +105,10 @@ def cli(parser: argparse.ArgumentParser) -> None:
         default="Parent",
         help=(
             "What GFF attribute field corresponds to your protein feature "
-            "seqids? Default uses the ID, field and will skip any CDS "
-            "features without an ID. Because some fields can have multiple "
-            "values, we'll raise an error if there is more than 1 unique "
-            "value."
+            "seqids? Default uses the Parent field. Because some fields "
+            "(like Parent) can have multiple values, we'll raise an error "
+            "if there is more than 1 unique value. Any CDSs missing the "
+            "specified field (e.g. ID) will be skipped."
         )
     )
 
