@@ -262,3 +262,115 @@ optional arguments:
                         Where to write the output to. Default: stdout
   --mem MEM             The amount of RAM in gibibytes to let SQLite use for cache.
 ```
+
+
+## `predutils map_to_genome`
+
+This script projects the protein GFF file from the results into genome coordinates based on the GFF used to extract the proteins.
+This is intended to support visualisation and selection of candidates in genome browsers like JBrowse or Apollo.
+
+```
+usage: predutils map_to_genome [-h] [-o OUTFILE] [--split {source,type}] [--no-filter-kex2] [--id ID_FIELD] genes annotations
+
+positional arguments:
+  genes                 Gene GFF to use.
+  annotations           Annotation GFF to use (i.e. the GFF3 output of predector)
+
+options:
+  -h, --help            show this help message and exit
+  -o OUTFILE, --outfile OUTFILE
+                        Where to write the output to. If using the --split parameter this
+                        becomes the prefix. Default: stdout
+  --split {source,type}
+                        Output distinct GFFs for each analysis or type of feature.
+  --no-filter-kex2      Output kex2 cutsites even if there is no signal peptide
+  --id ID_FIELD         What GFF attribute field corresponds to your protein feature seqids?
+                        Default uses the Parent field. Because some fields (like Parent)
+                        can have multiple values, we'll raise an error if there is more
+                        than 1 unique value. Any CDSs missing the specified
+                        field (e.g. ID) will be skipped.
+```
+
+Pay attention to the `--id` parameter. This determines how the protein ID from the predector output will be matched to the genome GFF3.
+By default it looks at the `Parent` attribute, as this is the default name from many GFF protein extraction tools.
+But any attribute in the 9th column of the GFF can be used, e.g. to use the CDS feature `ID`, use `--id ID`. 
+This script will only consider records with type `CDS`, and matches names exactly (no partial matches).
+
+`--split` provides a convenience function to split the GFFs into multiple GFFs based on type or analysis.
+This is to facilitate loading the different features/analyses as separate tracks in the genome browser.
+
+
+## `predutils score_to_genome`
+
+This script plots numeric scores from the predector ranked table at the CDS coordinates from the GFF used to extract the proteins.
+This is intended to support visualisation and selection of candidates from genome browsers like JBrowse or Apollo.
+
+```
+usage: predutils scores_to_genome [-h] [-o OUTFILE] [--target TARGET [TARGET ...]] \
+  [--id ID_FIELD] [--reducer {min,max,mean,median}] genes annotations
+
+positional arguments:
+  genes                 Gene GFF to use.
+  annotations           ranking table to use (i.e. the -ranked.tsv output of predector)
+
+options:
+  -h, --help            show this help message and exit
+  -o OUTFILE, --outfile OUTFILE
+                        Where to write the output to. Default: stdout
+  --target TARGET [TARGET ...]
+                        Only output these columns into the bedgraph file.
+                        By default writes a multi bedgraph with all columns.
+  --id ID_FIELD         What GFF attribute field corresponds to your protein feature seqids?
+                        Default uses the Parent field. Because some fields (like Parent)
+                        can have multiple values, we'll raise an error if there is more
+                        than 1 unique value. Any CDSs missing the specified
+  --reducer {min,max,mean,median}
+                        How should we combine scores if two features overlap?
+```
+
+
+As with the `map_to_genome` command, you should ensure that the protein names (in the first column of the `-ranked.tsv` table), match with the attribute in the 9th column of the GFF3 file.
+
+Because multiple CDS features can overlap (e.g. if there are alternative splicing patterns), we must combine those scores somehow so that a single value is associated with the genomic region.
+This can be specified with the `--reducer` parameter which takes the maximum value by default (e.g. the highest effectorP score). But if instead you wanted the average use `--reducer mean`.
+
+By default this script outputs a multi-bedgraph file with all numeric columns.
+But if you only wish to output a subset of those columns, you can provide them as a space separated list to the `--target` parameter.
+Note that an error will be raised if you try to access a non-numeric column.
+If the `--target` parameter comes directly before the two positional arguments, you need to indicate where the space separated list stops with a `--`.
+
+e.g.
+
+
+```
+predutils scores_go_genome --id ID --target effector_score apoplastp effectorp2 -- mygenes.gff3 mygenes-ranked.tsv
+```
+
+
+To split the output into single column bedgraphs you can use the following to extract one bedgraph per value column.
+
+
+```
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# OPTIONAL
+# BGTOBW_EXE="bedGraphToBigWig" # This comes from the UCSC toolkit, or here: http://hgdownload.soe.ucsc.edu/admin/exe/
+INFILE=$1
+FAI=$2
+PREFIX=$3
+
+COLUMNS=( $(head -n 1 "${INFILE}" | cut -f4-) )
+
+for i in "${!COLUMNS[@]}"
+do
+    idx=$(( ${i} + 4 ))
+    col="${COLUMNS[${i}]}"
+    cut -f1,2,3,${idx} "${INFILE}" | tail -n+2 | awk '$4 != "NA"' > "${PREFIX}${col}.bedgraph"
+    # OPTIONAL
+    # ${BGTOBW_EXE} "${PREFIX}${col}.bedgraph" "${FAI}" "${PREFIX}${col}.bw"
+done
+```
+
+This is useful for converting the tracks into bigwig files (which only support a single value), suitable for use with Jbrowse or Apollo.
