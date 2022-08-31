@@ -46,6 +46,9 @@ from predectorutils.subcommands.map_to_genome import runner as mtg_runner
 from predectorutils.subcommands.scores_to_genome import cli as stg_cli
 from predectorutils.subcommands.scores_to_genome import runner as stg_runner
 
+from predectorutils.subcommands.getorf_to_gff import cli as getorf_cli
+from predectorutils.subcommands.getorf_to_gff import runner as getorf_runner
+
 
 from predectorutils.parsers import ParseError
 from predectorutils.exceptions import (
@@ -222,6 +225,15 @@ def cli(prog: str, args: List[str]) -> argparse.Namespace:
 
     stg_cli(stg_subparser)
 
+    getorf_subparser = subparsers.add_parser(
+        "getorf_to_gff",
+        help=(
+            "Map predector scores results to a genome bedgraph."
+        )
+    )
+
+    getorf_cli(getorf_subparser)
+
     parsed = parser.parse_args(args)
 
     if parsed.subparser_name is None:
@@ -265,6 +277,8 @@ def main():  # noqa
             mtg_runner(args)
         elif args.subparser_name == "scores_to_genome":
             stg_runner(args)
+        elif args.subparser_name == "getorf_to_gff":
+            getorf_runner(args)
 
     except ParseError as e:
         if e.line is not None:
