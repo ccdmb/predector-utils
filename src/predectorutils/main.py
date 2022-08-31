@@ -52,6 +52,9 @@ from predectorutils.subcommands.ipr_to_gff import runner as ipr_runner
 from predectorutils.subcommands.prot_to_genome import cli as ptg_cli
 from predectorutils.subcommands.prot_to_genome import runner as ptg_runner
 
+from predectorutils.subcommands.getorf_to_gff import cli as getorf_cli
+from predectorutils.subcommands.getorf_to_gff import runner as getorf_runner
+
 from predectorutils.parsers import ParseError
 from predectorutils.exceptions import (
     EXIT_VALID, EXIT_KEYBOARD, EXIT_UNKNOWN, EXIT_CLI, EXIT_INPUT_FORMAT,
@@ -245,6 +248,15 @@ def cli(prog: str, args: List[str]) -> argparse.Namespace:
 
     ptg_cli(ptg_subparser)
 
+    getorf_subparser = subparsers.add_parser(
+        "getorf_to_gff",
+        help=(
+            "Map predector scores results to a genome bedgraph."
+        )
+    )
+
+    getorf_cli(getorf_subparser)
+
     parsed = parser.parse_args(args)
 
     if parsed.subparser_name is None:
@@ -292,6 +304,8 @@ def main():  # noqa
             ipr_runner(args)
         elif args.subparser_name == "prot_to_genome":
             ptg_runner(args)
+        elif args.subparser_name == "getorf_to_gff":
+            getorf_runner(args)
 
     except ParseError as e:
         if e.line is not None:
