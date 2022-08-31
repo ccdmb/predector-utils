@@ -6,14 +6,13 @@ import argparse
 from collections import defaultdict
 
 from typing import TextIO
-from typing import Any, Optional, Union
+from typing import Optional, Union
 from typing import (
     List, Sequence,
     Iterator, Iterable,
     Tuple,
     DefaultDict,
     Set,
-    Literal,
 )
 
 from predectorutils.gff import (
@@ -49,30 +48,9 @@ def cli(parser: argparse.ArgumentParser) -> None:
 
     parser.add_argument(
         "--split",
-        type=str,
-        choices=["source", "type"],
-        default=None,
-        help="Output distinct GFFs for each analysis or type of feature."
-    )
-
-    # parser.add_argument(
-    #     "-c", "--concat",
-    #     action="store_true",
-    #     default=False,
-    #     help=(
-    #         "Output both the genes and annotations linked "
-    #         "using the 'Derives_from' attribute."
-    #     )
-    # )
-
-    parser.add_argument(
-        "--no-filter-kex2",
-        dest="filter_kex2",
-        action="store_false",
-        default=True,
-        help=(
-            "Output kex2 cutsites even if there is no signal peptide"
-        )
+        action="store_true",
+        default=False,
+        help="Output distinct GFFs for source."
     )
 
     parser.add_argument(
@@ -96,7 +74,7 @@ def make_polypeptide(
     derives_from: bool = False
 ) -> GFFRecord:
     pep = cds.copy()
-    pep.source = "Predector"
+    pep.source = "source"
     pep.type = "polypeptide"
     pep.phase = Phase.NOT_CDS
     id_ = pep.attributes.id
@@ -352,8 +330,7 @@ def split_protein_features(  # noqa: W0611
     prots: Sequence[GFFRecord],
     cdss: Sequence[GFFRecord],
     derives_from: bool = False,
-    filter_kex2: bool = True,
-    separate_peps: bool = False,
+    separate_peps: bool = True,
     regions: bool = False
 ):
     from copy import deepcopy
@@ -367,51 +344,8 @@ def split_protein_features(  # noqa: W0611
 
     prot_id = prots[0].seqid
 
-    # Kex2 functions during the conventional secretion pathway.
-    # Things missing a signal peptide are unlikely to have real kex cutsites.
-    if filter_kex2:
-        has_sp = any(p.type == "signal_peptide" for p in prots)
-        if not has_sp:
-            prots = [p for p in prots if p.type != "propeptide_cleavage_site"]
-
-    prots_tmp = []
-    for prot in prots:
-        if prot.type in (
-            "n_terminal_region",
-            "c_terminal_region",
-            "central_hydrophobic_region_of_signal_peptide"
-        ):
-            continue
-        prots_tmp.append(prot)
-    prots = prots_tmp
-    del prots_tmp
-
     out_parents = []
     out_features = []
-
-    new_prots: DefaultDict[Any, List[GFFRecord]] = defaultdict(list)
-
-    for prot in prots:
-        excl_target = (prot.type, prot.source, prot.start, prot.end)
-        big_boy = (prot.type, prot.source, prot.attributes.target,
-                   prot.start, prot.end)
-        if prot.type == "transmembrane_polypeptide_region":
-            new_prots[excl_target].append(prot)
-        elif prot.type == "polypeptide_motif":
-            new_prots[excl_target].append(prot)
-        elif prot.type == "propeptide_cleavage_site":
-            new_prots[excl_target].append(prot)
-        elif prot.type in (
-            "signal_peptide",
-            "n_terminal_region",
-            "c_terminal_region",
-            "central_hydrophobic_region_of_signal_peptide"
-        ):
-            new_prots[(prot.type, prot.source)].append(prot)
-        elif prot.type in ("protein_hmm_match", "protein_match"):
-            new_prots[big_boy].append(prot)
-        else:
-            new_prots[(prot.type, prot.source)].append(prot)
 
     index = 1
     peps = cds_to_polypeptide(cdss, derives_from=derives_from)
@@ -424,14 +358,11 @@ def split_protein_features(  # noqa: W0611
         region.type = "region"
         peps = [region]
 
-    for key, prots in new_prots.items():
-        split_prot = []
+    for prot in prots:
+        split_prot = project_to_cds(cdss, prot)
 
-        for prot in prots:
-            split_prot.extend(project_to_cds(cdss, prot))
-
-        type_ = key[0]
-        source = find_source(prots)
+        type_ = prot.type
+        source = prot.source
 
         if type_ in ("protein_hmm_match", "protein_match"):
             if len(cdss) > 1:
@@ -516,63 +447,11 @@ def write_gff(
         for child in feature.traverse_children(sort=True):
             if child in seen:
                 continue
-            elif child.type in (
-                'n_terminal_region',
-                'central_hydrophobic_region_of_signal_peptide',
-                'c_terminal_region'
-            ):
-                seen.add(child)
-                continue
 
             seen.add(child)
             child.update_parents()
             print(child, file=handle)
         print("###", file=handle)
-
-
-def split_on_type(
-    records: Iterable[GFFRecord]
-) -> DefaultDict[str, List[GFFRecord]]:
-    seen: Set[GFFRecord] = set()
-    out: DefaultDict[str, List[GFFRecord]] = defaultdict(list)
-
-    type_map = {
-        "signal_peptide": "signal_peptide",
-        "n_terminal_region": "signal_peptide",
-        "c_terminal_region": "signal_peptide",
-        "central_hydrophobic_region_of_signal_peptide": "signal_peptide",
-        "mitochondrial_targeting_signal": "peptide_localization_signal",
-        "peptide_localization_signal": "peptide_localization_signal",
-        "transmembrane_polypeptide_region": "transmembrane_polypeptide_region",
-        "propeptide_cleavage_site": "propeptide_cleavage_site",
-        "polypeptide_motif": "polypeptide_motif",
-        "protein_match": "protein_match",
-        "protein_hmm_match": "protein_match",
-        "match_part": "protein_match",
-    }
-
-    for record in records:
-        if record in seen:
-            continue
-
-        if record.type in type_map:
-            type_ = type_map[record.type]
-            out[type_].append(record)
-            seen.add(record)
-
-            for parent in record.traverse_parents():
-                if parent in seen:
-                    continue
-                out[type_].append(parent)
-                seen.add(parent)
-
-            for child in record.traverse_children():
-                if child in seen:
-                    continue
-                out[type_].append(child)
-                seen.add(child)
-
-    return out
 
 
 def split_on_source(
@@ -590,10 +469,9 @@ def inner(  # noqa: C901
     annotations: TextIO,
     outfile: str,
     id_field: str,
-    filter_kex2: bool,
-    split: Literal['source', 'type', None],
+    split: bool,
 ):
-    genes_gff = list(GFFRecord.from_file(genes))
+    genes_gff = list(GFFRecord.from_file(genes, unescape=True))
 
     cdss: DefaultDict[str, List[GFFRecord]] = defaultdict(list)
     for g in genes_gff:
@@ -609,28 +487,6 @@ def inner(  # noqa: C901
     for prot in GFFRecord.from_file(annotations):
         if prot.seqid not in cdss:
             continue
-
-        if prot.type in (
-            "n_terminal_region",
-            "c_terminal_region",
-            "central_hydrophobic_region_of_signal_peptide"
-        ):
-            continue
-        elif (
-            (prot.attributes.id is not None) and
-            (prot.type == "signal_peptide")
-        ):
-            prot.attributes.id = None
-            prot.children = []
-
-        if (
-            (prot.source == "SignalP:3.0b") and
-            ("d_decision" in prot.attributes.custom)
-        ):
-            prot.source = "SignalPNN:3.0b"
-        elif (prot.source == "SignalP:3.0b"):
-            prot.source = "SignalPHMM:3.0b"
-
         prots[prot.seqid].append(prot)
 
     mapped: List[GFFRecord] = []
@@ -640,26 +496,20 @@ def inner(  # noqa: C901
             these_prots,
             these_cdss,
             separate_peps=True,
-            filter_kex2=filter_kex2,
             regions=True
         )
         mapped.extend(feats)
 
-    if (split is None) and (outfile in ("stdout", "-")):
+    if (not split) and (outfile in ("stdout", "-")):
         write_gff(mapped, sys.stdout)
-    elif (split is None):
+    elif not split:
         with open(outfile, "w") as handle:
             write_gff(mapped, handle)
-    elif split == "type":
-        for type_, split_mapped in split_on_type(mapped).items():
-            with open(f"{outfile}{type_}.gff3", "w") as handle:
-                write_gff(split_mapped, handle)
-    elif split == "source":
+    else:
+        assert split
         for source, split_mapped in split_on_source(mapped).items():
             with open(f"{outfile}{source}.gff3", "w") as handle:
                 write_gff(split_mapped, handle)
-    else:
-        print(split, outfile)
     return
 
 
@@ -670,7 +520,6 @@ def runner(args: argparse.Namespace) -> None:
             annotations=args.annotations,
             outfile=args.outfile,
             id_field=args.id_field,
-            filter_kex2=args.filter_kex2,
             split=args.split,
         )
     except Exception as e:

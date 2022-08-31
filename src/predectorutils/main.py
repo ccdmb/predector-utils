@@ -46,6 +46,11 @@ from predectorutils.subcommands.map_to_genome import runner as mtg_runner
 from predectorutils.subcommands.scores_to_genome import cli as stg_cli
 from predectorutils.subcommands.scores_to_genome import runner as stg_runner
 
+from predectorutils.subcommands.ipr_to_gff import cli as ipr_cli
+from predectorutils.subcommands.ipr_to_gff import runner as ipr_runner
+
+from predectorutils.subcommands.prot_to_genome import cli as ptg_cli
+from predectorutils.subcommands.prot_to_genome import runner as ptg_runner
 
 from predectorutils.parsers import ParseError
 from predectorutils.exceptions import (
@@ -222,6 +227,24 @@ def cli(prog: str, args: List[str]) -> argparse.Namespace:
 
     stg_cli(stg_subparser)
 
+    ipr_subparser = subparsers.add_parser(
+        "ipr_to_gff",
+        help=(
+            "Get a protein GFF3 file from InterProscan XML results."
+        )
+    )
+
+    ipr_cli(ipr_subparser)
+
+    ptg_subparser = subparsers.add_parser(
+        "prot_to_genome",
+        help=(
+            "Get a protein GFF3 file into genomic coordinates."
+        )
+    )
+
+    ptg_cli(ptg_subparser)
+
     parsed = parser.parse_args(args)
 
     if parsed.subparser_name is None:
@@ -265,6 +288,10 @@ def main():  # noqa
             mtg_runner(args)
         elif args.subparser_name == "scores_to_genome":
             stg_runner(args)
+        elif args.subparser_name == "ipr_to_gff":
+            ipr_runner(args)
+        elif args.subparser_name == "prot_to_genome":
+            ptg_runner(args)
 
     except ParseError as e:
         if e.line is not None:
@@ -299,6 +326,13 @@ def main():  # noqa
     except KeyboardInterrupt:
         print("Received keyboard interrupt. Exiting.", file=sys.stderr)
         sys.exit(EXIT_KEYBOARD)
+
+    except IOError as e:
+        if e.errno == 32:
+            sys.exit(32)
+
+        else:
+            raise e
 
     except Exception as e:
         msg = (

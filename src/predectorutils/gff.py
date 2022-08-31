@@ -235,6 +235,10 @@ class Target(object):
         self.target_id = target_id
         self.start = start
         self.end = end
+
+        if start >= end:
+            raise ValueError(f"ERROR: while creating target object, start ({start}) is greater than end ({end}).")
+
         self.strand = strand
         return
 
@@ -253,6 +257,8 @@ class Target(object):
 
         # Recode back to 1 based (inclusive)
         start = self.start + 1
+        if start > self.end:
+            raise ValueError(f"Start greater than end, {repr(self)}")
 
         if self.strand is None:
             return "{} {} {}".format(target_id, start, self.end)
@@ -418,6 +424,9 @@ class GFFRecord(object):
         self.strand = strand
         self.phase = phase
 
+        if start >= end:
+            raise ValueError(f"ERROR: while creating target object, start ({start}) is greater than end ({end}).")
+
         if attributes is None:
             self.attributes = GFFAttributes()
         else:
@@ -444,6 +453,9 @@ class GFFRecord(object):
         return self.as_str()
 
     def as_str(self, escape: bool = True) -> str:
+        if self.start >= self.end:
+            raise ValueError(f"Start is greater than END, {repr(self)}")
+
         values = []
         for name in self.columns:
             value = getattr(self, name)

@@ -374,3 +374,57 @@ done
 ```
 
 This is useful for converting the tracks into bigwig files (which only support a single value), suitable for use with Jbrowse or Apollo.
+
+
+## `predutils ipr_to_gff`
+
+This program creates a GFF3 file in protein coordinates based on an InterProScan (5+) xml output file.
+While interproscan _can_ output a GFF3 file of it's own, it doesn't include the domain names or InterPro/GO term annotations etc.
+This program gives you a much richer output.
+
+```
+usage: predutils ipr_to_gff [-h] [-o OUTFILE] [--namespace NAMESPACE] xml
+
+positional arguments:
+  xml                   Interproscan XML file.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -o OUTFILE, --outfile OUTFILE
+                        Where to write the GFF output to. Default: stdout
+```
+
+
+## `predutils prot_to_genome`
+
+This program is like `map_to_genome` but it doesn't do anything that is specialised to handling Predector output.
+This _should_ be able to map any protein-coordinate GFF onto a genome, but it was developed to transfer interproscan results output by the `ipr_to_gff` tool.
+
+```
+usage: predutils prot_to_genome [-h] [-o OUTFILE] [--split] [--id ID_FIELD] genes annotations
+
+positional arguments:
+  genes                 Gene GFF to use.
+  annotations           Annotation GFF in protein coordinates
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -o OUTFILE, --outfile OUTFILE
+                        Where to write the output to. If using the --split parameter this becomes the prefix. Default: stdout
+  --split               Output separate GFFs for each "source" in the GFF.
+  --id ID_FIELD         What GFF attribute field corresponds to your protein feature seqids? Default uses the Parent field. Because some fields (like Parent) can have multiple values, we'll raise an error if there is more than 1 unique value. Any CDSs missing the specified
+                        field (e.g. ID) will be skipped.
+```
+
+Note that we don't sort the output.
+
+If you're using tools downstream that require a sorted file, e.g. TABIX, you can mix and match from the following.
+This just happens to create suitable inputs for the GFF3+TABIX input type for Jbrowse.
+
+```
+FNAME="mapped.gff3"
+(grep "^#" "${FNAME}"; grep -v "^#" "${FNAME}" | sort -k1,1 -k4,4n) | bgzip > "${FNAME}.gz"
+bgzip --keep --reindex "${FNAME}.gz"
+tabix -p gff "${FNAME}.gz"
+```
+
