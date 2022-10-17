@@ -123,7 +123,7 @@ def cds_to_polypeptide(
         pep = make_polypeptide(cds, derives_from=derives_from)
         peps.append(pep)
 
-    return [pep]
+    return [peps]
 
 
 def project_plus(
@@ -542,6 +542,7 @@ def split_on_type(
         "c_terminal_region": "signal_peptide",
         "central_hydrophobic_region_of_signal_peptide": "signal_peptide",
         "mitochondrial_targeting_signal": "peptide_localization_signal",
+        "transit_peptide": "peptide_localization_signal",
         "peptide_localization_signal": "peptide_localization_signal",
         "transmembrane_polypeptide_region": "transmembrane_polypeptide_region",
         "propeptide_cleavage_site": "propeptide_cleavage_site",
