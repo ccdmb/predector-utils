@@ -88,7 +88,7 @@ def process_signature(
     namespace: str = NAMESPACE,
 ) -> Signature:
     accession = start.attrib["ac"]
-    name: Optional[str] = start.attrib["name"]
+    name: Optional[str] = start.attrib.get("name")
     if name == "FAMILY NOT NAMED":
         name = None
 
@@ -129,15 +129,17 @@ def process_signature(
             n = element.attrib.get("name")
             if (n is not None) and (n != ""):
                 goterms.append(
-                    "GO:" + element.attrib["name"].replace(" ", "_")
+                    "GO:" + n.replace(" ", "_")
                 )
         event, element = next(itree)
         tag = get_tag(element, namespace)
 
     assert library is not None
     assert library_version is not None
+    acc = fmap(attr_unescape, accession)
+    assert acc is not None
     return Signature(
-        fmap(attr_unescape, accession),
+        acc,
         fmap(attr_unescape, name),
         fmap(attr_unescape, desc),
         attr_unescape(library),
@@ -198,6 +200,132 @@ def process_coils(
         attributes=GFFAttributes(note=["Coiled-coil"])
     )
     yield rec
+    return
+
+
+def process_tmhmm(
+    element: ET.Element,
+    itree: Iterator[Tuple[str, ET.Element]],
+    ips_version: Optional[str],
+    query_id: Optional[str],
+    namespace: str = NAMESPACE
+) -> Iterator[GFFRecord]:
+    assert ips_version is not None
+    assert query_id is not None
+
+    library = None
+    library_version = None
+    start = None
+    end = None
+
+    while True:
+        event, element = next(itree)
+        tag = get_tag(element, namespace)
+        if (event == "end") and (tag == "tmhmm-match"):
+            break
+
+        if (event == "start") and element.tag.endswith("signature"):
+            signature = process_signature(element, itree)
+        elif (
+            (event == "start") and
+            element.tag.endswith("tmhmm-location-fragment")
+        ):
+            start = element.attrib["start"]
+            end = element.attrib["end"]
+
+    library = signature.library
+    library_version = signature.library_version
+    assert start is not None
+    assert end is not None
+
+    source = get_source(ips_version, library, library_version)
+    type_ = "transmembrane_polypeptide_region"
+
+    rec = GFFRecord(
+        seqid=query_id,
+        source=source,
+        type=type_,
+        start=int(start) - 1,
+        end=int(end),
+        score=None,
+        phase=Phase.NOT_CDS,
+        strand=Strand.PLUS,
+        attributes=GFFAttributes()
+    )
+    yield rec
+    return
+
+
+def process_signalp(
+    element: ET.Element,
+    itree: Iterator[Tuple[str, ET.Element]],
+    ips_version: Optional[str],
+    query_id: Optional[str],
+    namespace: str = NAMESPACE
+) -> Iterator[GFFRecord]:
+    assert ips_version is not None
+    assert query_id is not None
+
+    library = None
+    library_version = None
+    start = None
+    end = None
+    score = None
+
+    while True:
+        event, element = next(itree)
+        tag = get_tag(element, namespace)
+        if (event == "end") and (tag == "signalp-match"):
+            break
+
+        if (event == "start") and element.tag.endswith("signature"):
+            signature = process_signature(element, itree)
+        elif (
+            (event == "start") and
+            element.tag.endswith("signalp-location-fragment")
+        ):
+            start = element.attrib["start"]
+            end = element.attrib["end"]
+        elif (
+            (event == "start") and
+            element.tag.endswith("signalp-location")
+        ):
+            score = element.attrib["score"]
+
+    library = signature.library
+    library_version = signature.library_version
+    assert start is not None
+    assert end is not None
+    assert score is not None
+
+    source = get_source(ips_version, library, library_version)
+    type_ = "signal_peptide"
+
+    rec = GFFRecord(
+        seqid=query_id,
+        source=source,
+        type=type_,
+        start=int(start) - 1,
+        end=int(end),
+        score=float(score),
+        phase=Phase.NOT_CDS,
+        strand=Strand.PLUS,
+        attributes=GFFAttributes(custom={"model": library})
+    )
+    yield rec
+    return
+
+
+def read_until(
+    itree: Iterator[Tuple[str, ET.Element]],
+    tag: str,
+    namespace: str = NAMESPACE
+) -> None:
+    while True:
+        event, element = next(itree)
+        tag_ = get_tag(element, namespace)
+        if (event == "end") and (tag == tag_):
+            break
     return
 
 
@@ -1257,6 +1385,15 @@ def inner(  # noqa: C901
         elif (event == "start") and (tag == "coils-match"):
             coils = process_coils(element, itree, ips_version, query_id)
             printer(coils)
+        elif (event == "start") and (tag == "tmhmm-match"):
+            tmms = process_tmhmm(element, itree, ips_version, query_id)
+            printer(tmms)
+        elif (event == "start") and (tag == "signalp-match"):
+            sps = process_signalp(element, itree, ips_version, query_id)
+            printer(sps)
+        elif (event == "start") and (tag == "phobius-match"):
+            # Currently we just ignore phobius
+            read_until(itree, "phobius-match")
         elif (event == "start") and (tag == "mobidblite-match"):
             mdb = process_mobidblite(element, itree, ips_version, query_id)
             printer(mdb)
