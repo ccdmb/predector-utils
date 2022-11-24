@@ -89,6 +89,7 @@ def runner(args: argparse.Namespace) -> None:
             fixed_seq = (
                 str(seq.seq)
                 .replace("-", "")
+                .replace(".", "")
                 .rstrip("*")
                 .upper()
                 .replace("*", "X")

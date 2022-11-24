@@ -35,7 +35,7 @@ tp_mtp = raise_it(parse_field(parse_float, "mTP"))
 
 
 pl_prediction = raise_it(parse_field(
-    is_one_of(["OTHER", "SP", "mTP", "cTP", "luTP"]),
+    is_one_of(["OTHER", "noTP", "SP", "mTP", "cTP", "luTP"]),
     "prediction"
 ))
 pl_ctp = raise_it(parse_field(parse_float, "cTP"))
@@ -50,6 +50,20 @@ cs_actual_pos = raise_it(parse_field(
     parse_regex(CS_POS_REGEX),
     "cs_pos"
 ))
+
+# CS pos luTP: 90-91. ALA-SP. Pr: 0.8378; CS pos cTP: 41-42. Pr: 0.7827
+
+PL_CS_POS_REGEX = re.compile(
+    r"CS\s+"
+    r"pos\s*(?P<kind>luTP|cTP|mTP|SP)?:\s+\d+-(?P<cs>\d+)\.?\s+"
+    r"(?P<AA>[A-Za-z]+-[A-Za-z]+)?\.?\s*"
+    r"Pr: (?P<cs_prob>[-+]?\d*\.?\d+)"
+)
+pl_cs_actual_pos = raise_it(parse_field(
+    parse_regex(PL_CS_POS_REGEX),
+    "pl_cs_pos"
+))
+
 
 
 class TargetPNonPlant(Analysis, GFFAble):
@@ -268,49 +282,65 @@ class TargetPPlant(Analysis, GFFAble):
         elif "Probable protein fragment" in self.cs_pos:
             return
 
-        # dict(cs, cs_prob)
-        cs = cs_actual_pos(self.cs_pos)
+        # luTP predictions include both a cTP and luTP cutsite.
+        # We need to parse both.
+        cutsites = [
+            pl_cs_actual_pos(c.strip())
+            for c
+            in self.cs_pos.split(";")
+        ]
 
-        # d_decision = prediction of issecreted.
-        # ymax = first aa of mature peptide
-        attr = GFFAttributes(custom={
-            "prediction": str(self.prediction),
-            "prob_signal": str(self.sp),
-            "prob_mitochondrial": str(self.mtp),
-            "prob_chloroplast": str(self.ctp),
-            "prob_lumen": str(self.lutp),
-            "prob_other": str(self.other),
-            "prob_cut_site": str(cs["cs_prob"]),
-        })
+        for cs in cutsites:
+            # d_decision = prediction of issecreted.
+            # ymax = first aa of mature peptide
+            attr = GFFAttributes(custom={
+                "prediction": str(self.prediction),
+                "prob_signal": str(self.sp),
+                "prob_mitochondrial": str(self.mtp),
+                "prob_chloroplast": str(self.ctp),
+                "prob_lumen": str(self.lutp),
+                "prob_other": str(self.other),
+                "prob_cut_site": str(cs["cs_prob"]),
+            })
+            if cs.get("kind", None) is not None:
+                attr.custom["kind"] = cs["kind"]
 
-        if self.prediction == "SP":
-            type_ = "signal_peptide"
-            prob: Optional[float] = self.sp
+            if cs.get("kind", None) is not None:
+                type_ = {
+                    "CP": "signal_peptide",
+                    "mTP": "mitochondrial_targeting_signal",
+                    "cTP": "transit_peptide",
+                    "luTP": "transit_peptide"
+                }[cs["kind"]]
+                prob: Optional[float] = cs.get("cs_prob", None)
+            elif self.prediction == "SP":
+                type_ = "signal_peptide"
+                prob = self.sp
 
-        elif self.prediction == "mTP":
-            type_ = "mitochondrial_targeting_signal"
-            prob = self.mtp
+            elif self.prediction == "mTP":
+                type_ = "mitochondrial_targeting_signal"
+                prob = self.mtp
 
-        elif self.prediction == "cTP":
-            type_ = "transit_peptide"
-            prob = self.ctp
+            elif self.prediction == "cTP":
+                type_ = "transit_peptide"
+                prob = self.ctp
 
-        elif self.prediction == "luTP":
-            type_ = "transit_peptide"
-            prob = self.lutp
+            elif self.prediction == "luTP":
+                type_ = "transit_peptide"
+                prob = self.lutp
 
-        else:
-            # Should happen
-            return
+            else:
+                # Shouldn't happen
+                return
 
-        yield GFFRecord(
-            seqid=self.name,
-            source=self.gen_source(software_version, database_version),
-            type=type_,
-            start=0,
-            end=int(cs["cs"]) - 1,
-            score=prob,
-            strand=Strand.UNSTRANDED,
-            attributes=attr
-        )
+            yield GFFRecord(
+                seqid=self.name,
+                source=self.gen_source(software_version, database_version),
+                type=type_,
+                start=0,
+                end=int(cs["cs"]) - 1,
+                score=prob,
+                strand=Strand.UNSTRANDED,
+                attributes=attr
+            )
         return
