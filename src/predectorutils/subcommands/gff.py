@@ -5,9 +5,8 @@ import argparse
 import json
 from collections import defaultdict
 
-from typing import Dict
 
-from predectorutils.analyses import Analyses, GFFAble
+from ..analyses import Analyses, GFFAble
 
 
 def cli(parser: argparse.ArgumentParser) -> None:
@@ -42,7 +41,7 @@ def get_analysis(dline):
 
 
 def runner(args: argparse.Namespace) -> None:
-    id_counter: Dict[str, int] = defaultdict(lambda: 1)
+    id_counter: dict[str, int] = defaultdict(lambda: 1)
 
     for line in args.infile:
         sline = line.strip()

@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
-from typing import Optional, Union
-from typing import Set, List, Dict
-from typing import Sequence, Mapping
-from typing import Iterable, Iterator
+from collections.abc import Sequence, Mapping
+from collections.abc import Iterable, Iterator
 from typing import TypeVar
 from typing import cast
 from typing import TextIO
@@ -11,8 +9,8 @@ from typing import TextIO
 from enum import Enum
 from collections import deque
 
-from predectorutils.higher import fmap
-from predectorutils.parsers import (
+from .higher import fmap
+from .parsers import (
     ParseError,
     LineParseError,
     FieldParseError,
@@ -28,7 +26,7 @@ from predectorutils.parsers import (
 
 T = TypeVar('T')
 
-GFF3_KEY_TO_ATTR: Dict[str, str] = {
+GFF3_KEY_TO_ATTR: dict[str, str] = {
     "ID": "id",
     "Name": "name",
     "Alias": "alias",
@@ -42,9 +40,9 @@ GFF3_KEY_TO_ATTR: Dict[str, str] = {
     "Is_circular": "is_circular",
 }
 
-GFF3_ATTR_TO_KEY: Dict[str, str] = {v: k for k, v in GFF3_KEY_TO_ATTR.items()}
+GFF3_ATTR_TO_KEY: dict[str, str] = {v: k for k, v in GFF3_KEY_TO_ATTR.items()}
 
-GFF3_WRITE_ORDER: List[str] = [
+GFF3_WRITE_ORDER: list[str] = [
     "ID",
     "Name",
     "Alias",
@@ -68,7 +66,7 @@ rec_strand = raise_it(parse_field(is_one_of(["-", "+", ".", "?"]), "strand"))
 rec_phase = raise_it(parse_field(is_one_of(["0", "1", "2", "."]), "phase"))
 
 
-def parse_attr_list(string: str) -> List[str]:
+def parse_attr_list(string: str) -> list[str]:
     return list(f.strip() for f in string.strip(", ").split(","))
 
 
@@ -139,7 +137,7 @@ class Strand(Enum):
     UNKNOWN = 3
 
     def __str__(self):
-        into_str_map: List[str] = ["+", "-", ".", "?"]
+        into_str_map: list[str] = ["+", "-", ".", "?"]
         return into_str_map[self.value]
 
     def __repr__(self):
@@ -147,7 +145,7 @@ class Strand(Enum):
 
     @classmethod
     def parse(cls, string: str) -> "Strand":
-        from_str_map: Dict[str, Strand] = {
+        from_str_map: dict[str, Strand] = {
             "+": cls.PLUS,
             "-": cls.MINUS,
             ".": cls.UNSTRANDED,
@@ -168,7 +166,7 @@ class Phase(Enum):
     NOT_CDS = 3
 
     def __str__(self):
-        into_str_map: List[str] = ["0", "1", "2", "."]
+        into_str_map: list[str] = ["0", "1", "2", "."]
         return into_str_map[self.value]
 
     def __repr__(self):
@@ -176,7 +174,7 @@ class Phase(Enum):
 
     @classmethod
     def parse(cls, string: str) -> "Phase":
-        from_str_map: Dict[str, Phase] = {
+        from_str_map: dict[str, Phase] = {
             "0": cls.FIRST,
             "1": cls.SECOND,
             "2": cls.THIRD,
@@ -230,7 +228,7 @@ class Target(object):
         target_id: str,
         start: int,
         end: int,
-        strand: Optional[TargetStrand] = None,
+        strand: TargetStrand | None = None,
     ) -> None:
         self.target_id = target_id
         self.start = start
@@ -387,7 +385,7 @@ class Gap(object):
 
 class GFFRecord(object):
 
-    columns: List[str] = [
+    columns: list[str] = [
         "seqid",
         "source",
         "type",
@@ -406,14 +404,14 @@ class GFFRecord(object):
         type: str,
         start: int,
         end: int,
-        score: Optional[float] = None,
+        score: float | None = None,
         strand: Strand = Strand.UNSTRANDED,
         phase: Phase = Phase.NOT_CDS,
-        attributes: Optional["GFFAttributes"] = None,
-        parents: Optional[Sequence["GFFRecord"]] = None,
-        children: Optional[Sequence["GFFRecord"]] = None,
-        derives_froms: Optional[Sequence["GFFRecord"]] = None,
-        derivatives: Optional[Sequence["GFFRecord"]] = None,
+        attributes: "GFFAttributes" | None = None,
+        parents: Sequence["GFFRecord"] | None = None,
+        children: Sequence["GFFRecord"] | None = None,
+        derives_froms: Sequence["GFFRecord"] | None = None,
+        derivatives: Sequence["GFFRecord"] | None = None,
     ) -> None:
         self.seqid = seqid
         self.source = source
@@ -432,19 +430,19 @@ class GFFRecord(object):
         else:
             self.attributes = attributes
 
-        self.parents: List[GFFRecord] = []
+        self.parents: list[GFFRecord] = []
         if parents is not None:
             self.add_parents(parents)
 
-        self.children: List[GFFRecord] = []
+        self.children: list[GFFRecord] = []
         if children is not None:
             self.add_children(children)
 
-        self.derives_from: List[GFFRecord] = []
+        self.derives_from: list[GFFRecord] = []
         if derives_froms is not None:
             self.add_derives_froms(derives_froms)
 
-        self.derivatives: List[GFFRecord] = []
+        self.derivatives: list[GFFRecord] = []
         if derivatives is not None:
             self.add_derivatives(derivatives)
         return
@@ -576,7 +574,7 @@ class GFFRecord(object):
 
         should_reverse = not breadth
 
-        seen: Set[GFFRecord] = set()
+        seen: set[GFFRecord] = set()
 
         to_visit = deque([self])
 
@@ -623,7 +621,7 @@ class GFFRecord(object):
 
         should_reverse = not breadth
 
-        seen: Set[GFFRecord] = set()
+        seen: set[GFFRecord] = set()
         to_visit = deque([self])
 
         while len(to_visit) > 0:
@@ -682,7 +680,7 @@ class GFFRecord(object):
                 f"Expected: {columns_len}, Encountered: {sline_len}"
             ))
 
-        fields: Dict[str, str] = dict(zip(cls.columns, sline))
+        fields: dict[str, str] = dict(zip(cls.columns, sline))
         if sline_len == columns_len - 1:
             fields["attributes"] = ""
 
@@ -732,7 +730,7 @@ class GFFRecord(object):
         self.end -= length
         return
 
-    def pad_ends(self, length: int, max_value: Optional[int] = None) -> None:
+    def pad_ends(self, length: int, max_value: int | None = None) -> None:
 
         if (self.start - length) < 0:
             self.start = 0
@@ -807,11 +805,13 @@ class GFFRecord(object):
         lonely_derivatives = set()
 
         # Children that are encountered before their parents
-        undefined_parents: Dict[str, List[GFFRecord]] = defaultdict(list)
+        undefined_parents: dict[str, list[GFFRecord]] = defaultdict(list)
 
         # derivatives encountered before their parents.
-        undefined_derives_froms: Dict[str, List[GFFRecord]] = defaultdict(list)
+        undefined_derives_froms: dict[str, list[GFFRecord]] = defaultdict(list)
 
+        # Avoid possible case of unbound i
+        i: int = 0
         for i, line in enumerate(handle):
             if line.startswith("#"):
                 continue
@@ -893,29 +893,29 @@ class GFFAttributes(object):
 
     def __init__(
         self,
-        id: Optional[str] = None,
-        name: Optional[str] = None,
-        alias: Optional[Sequence[str]] = None,
-        parent: Optional[Sequence[str]] = None,
-        target: Optional[Target] = None,
-        gap: Optional[Gap] = None,
-        derives_from: Optional[Sequence[str]] = None,
-        note: Optional[Sequence[str]] = None,
-        dbxref: Optional[Sequence[str]] = None,
-        ontology_term: Optional[Sequence[str]] = None,
+        id: str | None = None,
+        name: str | None = None,
+        alias: Sequence[str] | None = None,
+        parent: Sequence[str] | None = None,
+        target: Target | None = None,
+        gap: Gap | None = None,
+        derives_from: Sequence[str] | None = None,
+        note: Sequence[str] | None = None,
+        dbxref: Sequence[str] | None = None,
+        ontology_term: Sequence[str] | None = None,
         is_circular: bool = False,
-        custom: Optional[Mapping[str, Sequence[str]]] = None,
+        custom: Mapping[str, Sequence[str]] | None = None,
     ) -> None:
         self.id = id
         self.name = name
 
         if alias is not None:
-            self.alias: List[str] = list(alias)
+            self.alias: list[str] = list(alias)
         else:
             self.alias = []
 
         if parent is not None:
-            self.parent: List[str] = list(parent)
+            self.parent: list[str] = list(parent)
         else:
             self.parent = []
 
@@ -923,28 +923,28 @@ class GFFAttributes(object):
         self.gap = gap
 
         if derives_from is not None:
-            self.derives_from: List[str] = list(derives_from)
+            self.derives_from: list[str] = list(derives_from)
         else:
             self.derives_from = []
 
         if note is not None:
-            self.note: List[str] = list(note)
+            self.note: list[str] = list(note)
         else:
             self.note = []
 
         if dbxref is not None:
-            self.dbxref: List[str] = list(dbxref)
+            self.dbxref: list[str] = list(dbxref)
         else:
             self.dbxref = []
 
         if ontology_term is not None:
-            self.ontology_term: List[str] = list(ontology_term)
+            self.ontology_term: list[str] = list(ontology_term)
         else:
             self.ontology_term = []
 
         self.is_circular = is_circular
 
-        self.custom: Dict[str, Union[str, List[str]]] = {}
+        self.custom: dict[str, str | list[str]] = {}
         if custom is not None:
             for k, v in custom.items():
                 if isinstance(v, str):
@@ -960,7 +960,7 @@ class GFFAttributes(object):
         value: str,
         strip_quote: bool = False,
         unescape: bool = True
-    ) -> List[str]:
+    ) -> list[str]:
         """ Parses a gff attribute list of strings. """
         if value == "":
             return []
@@ -990,7 +990,7 @@ class GFFAttributes(object):
         )
 
         if strip_quote:
-            kvpairs: Dict[str, str] = {
+            kvpairs: dict[str, str] = {
                 k.strip(): v.strip(" '\"")
                 for k, v
                 in fields
@@ -1030,7 +1030,7 @@ class GFFAttributes(object):
             unescape
         )
 
-        target: Optional[Target] = fmap(
+        target: Target | None = fmap(
             lambda x: Target.parse(x, unescape),
             kvpairs.pop("Target", None)
         )
@@ -1063,7 +1063,7 @@ class GFFAttributes(object):
 
         is_circular = attr_is_circular(kvpairs.pop("Is_circular", "false"))
 
-        custom: Dict[str, Union[str, List[str]]] = dict()
+        custom: dict[str, str | list[str]] = dict()
         for k, v in kvpairs.items():
             if "," in v:
                 custom[k] = cls._parse_list_of_strings(
@@ -1182,7 +1182,7 @@ class GFFAttributes(object):
     def __getitem__(
         self,
         key: str,
-    ) -> Union[str, Sequence[str], Target, Gap, bool, None]:
+    ) -> str | Sequence[str] | Target | Gap | bool | None:
         if key in GFF3_KEY_TO_ATTR:
             return getattr(self, GFF3_KEY_TO_ATTR[key])
         else:
@@ -1191,7 +1191,7 @@ class GFFAttributes(object):
     def __setitem__(
         self,
         key: str,
-        value: Union[str, Sequence[str], Target, Gap, bool, None],
+        value: str | Sequence[str] | Target | Gap | bool | None,
     ) -> None:
         """ If the key is an attr set it, otherwise update the custom dict."""
 
@@ -1223,8 +1223,8 @@ class GFFAttributes(object):
     def get(
         self,
         key: str,
-        default: Union[str, Sequence[str], Target, Gap, bool, None] = None,
-    ) -> Union[str, Sequence[str], Target, Gap, bool, None]:
+        default: str | Sequence[str] | Target | Gap | bool | None = None,
+    ) -> str | Sequence[str] | Target | Gap | bool | None:
         """ Gets an atrribute or element from the custom dict. """
 
         if key in GFF3_KEY_TO_ATTR:
@@ -1235,8 +1235,8 @@ class GFFAttributes(object):
     def pop(
         self,
         key: str,
-        default: Union[str, Sequence[str], Target, Gap, bool, None] = None,
-    ) -> Union[str, Sequence[str], Target, Gap, bool, None]:
+        default: str | Sequence[str] | Target | Gap | bool | None = None,
+    ) -> str | Sequence[str] | Target | Gap | bool | None:
         """ Removes an item from the attributes and returns its value.
 
         If the item is one of the reserved GFF3 terms, the

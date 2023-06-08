@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 from typing import TextIO
-from typing import Iterator
+from collections.abc import Iterator
 
-from predectorutils.analyses.base import Analysis
-from predectorutils.parsers import (
+from .base import Analysis
+from ..parsers import (
     FieldParseError,
     LineParseError,
     parse_field,

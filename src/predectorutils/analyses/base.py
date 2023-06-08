@@ -4,62 +4,75 @@ import pandas as pd
 import json
 
 from typing import Callable
-from typing import List
 from typing import ClassVar
-from typing import Dict
-from typing import Union, Optional, Any
+from typing import Any
 from typing import TextIO
-from typing import Iterator
+from typing import TypeVar
+from collections.abc import Iterator
 
 from ..checksum import checksum
-from predectorutils.gff import GFFRecord
+from ..gff import GFFRecord
 
+T = TypeVar("T")
 
-def int_or_none(i: Any) -> Optional[int]:
+def int_or_none(i: Any) -> int | None:
     if i is None:
         return None
     else:
         return int(i)
 
 
-def str_or_none(i: Any) -> Optional[str]:
+def str_or_none(i: Any) -> str | None:
     if i is None:
         return None
     else:
         return str(i)
 
 
-def float_or_none(i: Any) -> Optional[float]:
+def float_or_none(i: Any) -> float | None:
     if i is None:
         return None
     else:
         return float(i)
 
 
+def list_of(fn: Callable[[Any], T]) -> Callable[[Any], list[T]]:
+    from collections.abc import Iterable
+
+    def inner(i: Any) -> list[T]:
+        assert issubclass(type(i), Iterable), "The input isn't an iterable object."
+        return [fn(i_) for i_ in i]
+
+    return inner
+
+
+list_of_str = list_of(str)
+
+
 class Analysis(object):
 
-    columns: ClassVar[List[str]] = []
-    types: ClassVar[List[Union[
-        Callable[[Any], int],
-        Callable[[Any], str],
-        Callable[[Any], float],
-        Callable[[Any], Optional[int]],
-        Callable[[Any], Optional[str]],
-        Callable[[Any], Optional[float]],
-    ]]] = []
+    columns: ClassVar[list[str]] = []
+    types: ClassVar[list[
+        Callable[[Any], int] |\
+        Callable[[Any], str] |\
+        Callable[[Any], float] |\
+        Callable[[Any], int | None] |\
+        Callable[[Any], str | None] |\
+        Callable[[Any], float | None]
+    ]] = []
 
     software: ClassVar[str] = "software"
-    database: ClassVar[Optional[str]] = None
+    database: ClassVar[str | None] = None
     analysis: ClassVar[str] = "analysis"
     name_column: ClassVar[str] = "name"
 
-    def as_dict(self) -> Dict[str, Union[str, int, float, bool, None]]:
+    def as_dict(self) -> dict[str, str | int | float | bool | None]:
         return {k: getattr(self, k) for k in self.columns}
 
     @classmethod
     def from_dict(
         cls,
-        d: Dict[str, Union[str, int, float, bool, None]]
+        d: dict[str, str | int | float | bool | None]
     ) -> "Analysis":
         fields = tuple(
             type_(d.get(cname))
@@ -82,11 +95,11 @@ class Analysis(object):
             index=self.columns
         )
 
-    def as_df(self, analysis: Optional[str] = None) -> pd.DataFrame:
+    def as_df(self, analysis: str | None = None) -> pd.DataFrame:
         if analysis is None:
             analysis = self.analysis
 
-        rows: List[pd.Series] = []
+        rows: list[pd.Series] = []
 
         header = ["name", "analysis", "parameter", "value"]
         for column in self.columns[1:]:
@@ -113,7 +126,7 @@ class Analysis(object):
         return self.checksum_dict(self.as_dict())
 
     @classmethod
-    def checksum_dict(cls, d: Dict[str, Any]) -> str:
+    def checksum_dict(cls, d: dict[str, Any]) -> str:
         data = json.dumps(d, separators=(',', ':'))
         chk = checksum(data.encode()).decode()
         return chk
@@ -129,12 +142,12 @@ class Analysis(object):
 class GFFAble(object):
 
     software: ClassVar[str] = "software"
-    database: ClassVar[Optional[str]] = None
+    database: ClassVar[str | None] = None
 
     def as_gff(
         self,
-        software_version: Optional[str] = None,
-        database_version: Optional[str] = None,
+        software_version: str | None = None,
+        database_version: str | None = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
@@ -142,8 +155,8 @@ class GFFAble(object):
 
     def gen_source(
         self,
-        software_version: Optional[str] = None,
-        database_version: Optional[str] = None,
+        software_version: str | None = None,
+        database_version: str | None = None,
     ) -> str:
         li = [self.software, software_version, self.database, database_version]
         return ":".join([s for s in li if s is not None])

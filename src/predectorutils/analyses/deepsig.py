@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 
-from typing import Optional
 from typing import TextIO
-from typing import Iterator
+from collections.abc import Iterator
 
-from predectorutils.gff import GFFRecord, GFFAttributes, Strand
-from predectorutils.analyses.base import Analysis, GFFAble
-from predectorutils.analyses.base import int_or_none
-from predectorutils.parsers import (
+from ..gff import GFFRecord, GFFAttributes, Strand
+from .base import Analysis, GFFAble
+from .base import int_or_none
+from ..parsers import (
     FieldParseError,
     LineParseError,
     raise_it,
@@ -45,7 +44,7 @@ class DeepSig(Analysis, GFFAble):
         name: str,
         prediction: str,
         prob: float,
-        cs_pos: Optional[int]
+        cs_pos: int | None
     ) -> None:
         self.name = name
         self.prediction = prediction
@@ -92,8 +91,8 @@ class DeepSig(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: Optional[str] = None,
-        database_version: Optional[str] = None,
+        software_version: str | None = None,
+        database_version: str | None = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:

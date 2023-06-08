@@ -3,27 +3,24 @@
 import sys
 import argparse
 import json
+import hashlib
 
-from typing import Dict
-from typing import Tuple
 from typing import Any
-from typing import Optional
-from typing import TextIO
 
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqUtils.CheckSum import seguid
 
 
-from predectorutils import analyses
+from ..analyses import Analysis, Analyses
 
 
 def cli(parser: argparse.ArgumentParser) -> None:
 
     parser.add_argument(
         "format",
-        type=analyses.Analyses.from_string,
-        choices=list(analyses.Analyses),
+        type=Analyses.from_string,
+        choices=list(Analyses),
         help="The file results to parse into a line delimited JSON format."
     )
 
@@ -80,19 +77,21 @@ def cli(parser: argparse.ArgumentParser) -> None:
 
 
 def get_line(
-    pipeline_version: Optional[str],
-    software_version: Optional[str],
-    database_version: Optional[str],
-    analysis_type: analyses.Analyses,
-    analysis: analyses.Analysis,
-    checksums: Dict[str, str]
-) -> Dict[Any, Any]:
+    pipeline_version: str | None,
+    software_version: str | None,
+    database_version: str | None,
+    analysis_type: Analyses,
+    analysis: Analysis,
+    checksums: dict[str, str],
+    md5sums: dict[str, str],
+) -> dict[Any, Any]:
     name = getattr(analysis, analysis.name_column)
     out = {
         "software": analysis.software,
         "database": analysis.database,
         "analysis": str(analysis_type),
         "checksum": checksums.get(name, None),
+        "md5sum": md5sums.get(name, None),
         "data": analysis.as_dict()
     }
 
@@ -108,14 +107,18 @@ def get_line(
     return out
 
 
-def get_checksum(seq: SeqRecord) -> Tuple[str, str]:
+def get_checksum(seq: SeqRecord) -> tuple[str, str]:
     checksum = seguid(str(seq.seq))
     return seq.id, checksum
 
 
-def get_checksums(handle: TextIO) -> Dict[str, str]:
-    seqs = SeqIO.parse(handle, "fasta")
-    out: Dict[str, str] = {}
+def get_md5sum(seq: SeqRecord) -> tuple[str, str]:
+    md = hashlib.md5(str(seq.seq).encode()).hexdigest()
+    return seq.id, md
+
+
+def get_checksums(seqs: list[SeqRecord]) -> dict[str, str]:
+    out: dict[str, str] = {}
 
     for seq in seqs:
         id_, checksum = get_checksum(seq)
@@ -123,8 +126,19 @@ def get_checksums(handle: TextIO) -> Dict[str, str]:
     return out
 
 
+def get_md5sums(seqs: list[SeqRecord]) -> dict[str, str]:
+    out: dict[str, str] = {}
+
+    for seq in seqs:
+        id_, checksum = get_md5sum(seq)
+        out[id_] = checksum
+    return out
+
+
 def runner(args: argparse.Namespace) -> None:
-    checksums = get_checksums(args.infasta)
+    seqs = list(SeqIO.parse(args.infasta, "fasta"))
+    checksums = get_checksums(seqs)
+    md5sums = get_md5sums(seqs)
     analysis = args.format.get_analysis()
     for line in analysis.from_file(args.infile):
         dline = get_line(
@@ -133,7 +147,8 @@ def runner(args: argparse.Namespace) -> None:
             args.database_version,
             args.format,
             line,
-            checksums
+            checksums,
+            md5sums
         )
         print(json.dumps(dline), file=args.outfile)
     return

@@ -4,16 +4,14 @@ import os
 import argparse
 import sqlite3
 
-from typing import Iterator
-from typing import Tuple
 from typing import TextIO
-from typing import List, Set, Dict
+from collections.abc import Iterator
 
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqUtils.CheckSum import seguid
 
-from predectorutils.database import load_db, TargetRow, ResultsTable, ResultRow
+from ..database import load_db, TargetRow, ResultsTable, ResultRow
 
 
 def cli(parser: argparse.ArgumentParser) -> None:
@@ -70,13 +68,13 @@ def cli(parser: argparse.ArgumentParser) -> None:
     return
 
 
-def get_checksum(seq: SeqRecord) -> Tuple[str, str]:
+def get_checksum(seq: SeqRecord) -> tuple[str, str]:
     checksum = seguid(str(seq.seq))
     return seq.id, checksum
 
 
-def get_checksum_to_ids(seqs: Dict[str, SeqRecord]) -> Dict[str, Set[str]]:
-    d: Dict[str, Set[str]] = dict()
+def get_checksum_to_ids(seqs: dict[str, SeqRecord]) -> dict[str, Set[str]]:
+    d: dict[str, Set[str]] = dict()
 
     for seq in seqs.values():
         id_, chk = get_checksum(seq)
@@ -89,10 +87,10 @@ def get_checksum_to_ids(seqs: Dict[str, SeqRecord]) -> Dict[str, Set[str]]:
 
 
 def write_remaining_seqs(
-    remaining: List[str],
-    seqs: Dict[str, SeqRecord],
+    remaining: list[str],
+    seqs: dict[str, SeqRecord],
     target: TargetRow,
-    checksum_to_ids: Dict[str, Set[str]],
+    checksum_to_ids: dict[str, Set[str]],
     template: str
 ) -> None:
     if len(remaining) == 0:
@@ -104,7 +102,7 @@ def write_remaining_seqs(
     if dname != '':
         os.makedirs(dname, exist_ok=True)
 
-    buf: List[SeqRecord] = []
+    buf: list[SeqRecord] = []
 
     with open(fname, "w") as handle:
         for checksum in remaining:
@@ -124,7 +122,7 @@ def write_results(
     results: Iterator[ResultRow],
     outfile: TextIO
 ) -> None:
-    buf: List[str] = []
+    buf: list[str] = []
     for result in results:
         buf.append(result.as_str())
 
@@ -142,7 +140,7 @@ def inner(
     cur: sqlite3.Cursor,
     args: argparse.Namespace
 ) -> None:
-    seqs: Dict[str, SeqRecord] = SeqIO.to_dict(
+    seqs: dict[str, SeqRecord] = SeqIO.to_dict(
         SeqIO.parse(args.infasta, "fasta")
     )
     checksum_to_ids = get_checksum_to_ids(seqs)

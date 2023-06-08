@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 
-from typing import Optional, Union
 from typing import TextIO
-from typing import Iterator
+from collections.abc import Iterator
 
-from predectorutils.gff import (
+from .base import Analysis, GFFAble
+from .base import str_or_none
+
+from ..gff import (
     GFFRecord,
     GFFAttributes,
     Target,
     Strand,
 )
 
-from predectorutils.analyses.base import Analysis, GFFAble
-from predectorutils.analyses.base import str_or_none
-from predectorutils.parsers import (
+from ..parsers import (
     FieldParseError,
     LineParseError,
     ValueParseError,
@@ -26,7 +26,7 @@ from predectorutils.parsers import (
 )
 
 
-def split_hmm(s: str) -> Union[ValueParseError, str]:
+def split_hmm(s: str) -> ValueParseError | str:
     s1 = parse_str(s)
     if isinstance(s1, ValueParseError):
         return s1
@@ -121,7 +121,7 @@ class DomTbl(Analysis, GFFAble):
         query_from: int,
         query_to: int,
         acc: float,
-        description: Optional[str]
+        description: str | None
     ) -> None:
         self.query = query
         self.hmm = hmm
@@ -158,7 +158,7 @@ class DomTbl(Analysis, GFFAble):
             )
 
         if len(sline) == 22:
-            description: Optional[str] = None
+            description: str | None = None
         elif sline[22] == "-" or sline[22] == "":
             description = None
         else:
@@ -223,8 +223,8 @@ class DomTbl(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: Optional[str] = None,
-        database_version: Optional[str] = None,
+        software_version: str | None = None,
+        database_version: str | None = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:

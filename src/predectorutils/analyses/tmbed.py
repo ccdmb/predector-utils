@@ -1,34 +1,33 @@
 #!/usr/bin/env python3
 
-import re
 from typing import TypeVar
 from typing import TextIO
-from typing import Callable
-from typing import Pattern
-
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 
 from ..gff import (
     GFFRecord,
-    GFFAttributes,
     Strand
 )
 
-from .base import Analysis, GFFAble
 from ..parsers import (
-    LineParseError,
+    FieldParseError,
     BlockParseError,
-    ValueParseError,
     parse_field,
     raise_it,
     parse_str,
-    parse_regex,
+    parse_sequence,
 )
 
-__all__ = ["DeepTMHMM"]
+from .base import Analysis, GFFAble
+
+__all__ = ["TMBed"]
 
 
 tm_name = raise_it(parse_field(parse_str, "name"))
+tm_topology = raise_it(parse_field(
+    parse_sequence(["S", "B", "b", "H", "h", "."]),
+    "topology"
+))
 
 
 T = TypeVar("T")
@@ -57,89 +56,82 @@ def parse_topology(s: str):
     return
 
 
-def convert_line_err(
-    lineno: int,
-    field: str,
-    parser: Callable[[str], T]
-) -> T:
-    try:
-        return parser(field)
-    except LineParseError as e:
-        raise e.as_block_error(lineno)
-
-
-def get_line(lines: Iterator[tuple[int, str]]) -> tuple[int, str]:
-    i, line = next(lines)
-
-    while line.strip() == "":
-        i, line = next(lines)
-
-    return i, line.strip()
-
-
-def parse_regex_line(
-    lines: Iterable[tuple[int, str]],
-    regex: Pattern,
-    record: dict[str, str]
-) -> None:
-    i, line = get_line(iter(lines))
-    rline = parse_regex(regex)(line)
-
-    if isinstance(rline, ValueParseError):
-        raise rline.as_block_error(i)
-    else:
-        record.update(rline)
-    return
-
-
-NAME_REGEX = re.compile(
-    r"^>(?P<name>[^\s]+)\s*\|\s*"
-    r"(?P<prediction>GLOB|SP|TM|SP+TM|TM+SP|BETA)"
-)
-
-
-class DeepTMHMM(Analysis, GFFAble):
+class TMBed(Analysis, GFFAble):
 
     """ .
     """
 
-    columns = ["name", "prediction", "topology"]
-    types = [str, str, str]
-    analysis = "deeptmhmm"
-    software = "DeepTMHMM"
+    columns = ["name", "has_sp", "has_tm", "topology"]
+    types = [str, bool, bool, str]
+    analysis = "tmbed"
+    software = "TMBed"
 
     def __init__(
         self,
         name: str,
-        prediction: str,
+        has_sp: bool,
+        has_tm: bool,
         topology: str,
     ) -> None:
         self.name = name
-        self.prediction = prediction
+        self.has_sp = has_sp
+        self.has_tm = has_tm
         self.topology = topology
         return
 
     @classmethod
-    def from_block(cls, lines: Sequence[str]) -> "DeepTMHMM":
-        """ Parse a deeptmhmm line as an object. """
+    def from_block(cls, lines: Sequence[str]) -> "TMBed":
+        """ Parse a tmbed line as an object. """
 
-        if not isinstance(lines, Iterable):
-            ilines: Iterator[tuple[int, str]] = enumerate(iter(lines))
-        else:
-            ilines = enumerate(lines)
+        ilines = list(lines)
 
-        record: dict[str, str] = dict()
-        parse_regex_line(ilines, NAME_REGEX, record)
-        next(ilines)
-        i, li = next(ilines)
-        record["topology"] = li.strip()
-        return cls(**record)
+        try:
+            name = tm_name(ilines[0])
+        except FieldParseError as e:
+            raise e.as_block_error(0)
+
+        name = name.lstrip(">")
+
+        try:
+            top = tm_topology(ilines[2].strip())
+        except FieldParseError as e:
+            raise e.as_block_error(2)
+
+        # Slice is because model doesn't seem to have proper statemodel
+        # so i think SPs could _potentially_ happen in middle of protein.
+        has_sp = top.lower()[:30].count("s") > 10
+
+        longest_run = {"B": 0, "b": 0, "H": 0, "h": 0, ".": 0, "S": 0}
+        prev = top[:1]  # Slice prevents error if empty
+        current_run = 1
+        for this in top[1:]:
+            if this == prev:
+                current_run += 1
+            elif (this != prev) and (current_run > longest_run[prev]):
+                longest_run[prev] = current_run
+                prev = this
+                current_run = 1
+            else:
+                prev = this
+                current_run = 1
+
+        if current_run > longest_run[prev]:
+            longest_run[prev] = current_run
+
+        del longest_run["."]
+        del longest_run["S"]
+
+        has_tm = any([v > 10 for v in longest_run.values()])
+
+        return cls(name, has_sp, has_tm, top)
 
     @classmethod
-    def from_file(cls, handle: TextIO) -> Iterator["DeepTMHMM"]:
+    def from_file(cls, handle: TextIO) -> Iterator["TMBed"]:
         block: list[str] = []
 
-        i: int = 0
+        # Avoid case where handle is empty and we raise BlockParseError
+        i = 0
+
         for i, line in enumerate(handle):
             sline = line.strip()
             if sline.startswith("#"):
@@ -177,25 +169,15 @@ class DeepTMHMM(Analysis, GFFAble):
         id_index: int = 1
     ) -> Iterator[GFFRecord]:
         for (type_, start, end) in parse_topology(self.topology):
-            if type_ in ("I", "O", "P"):
-                continue
-
             mapp = {
-                "M": "transmembrane_polypeptide_region",
-                "B": "transmembrane_polypeptide_region",  # TODO
+                "B": "transmembrane_polypeptide_region",
+                "b": "transmembrane_polypeptide_region",
+                "H": "transmembrane_polypeptide_region",
+                "h": "transmembrane_polypeptide_region",
                 "S": "signal_peptide",
             }
-            mapp2 = {
-                "M": "alpha_helix",
-                "B": "beta_barrel",
-            }
-
-            if type_ in "MB":
-                attr = GFFAttributes(custom={
-                    "kind": mapp2[type_],
-                })
-            else:
-                attr = None
+            if type_ == ".":
+                continue
 
             yield GFFRecord(
                 seqid=self.name,
@@ -204,6 +186,6 @@ class DeepTMHMM(Analysis, GFFAble):
                 start=start,
                 end=end,
                 strand=Strand.UNSTRANDED,
-                attributes=attr
+                attributes=None
             )
         return

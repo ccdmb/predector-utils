@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 
 import re
-from typing import Optional
 from typing import TextIO
-from typing import Iterator
+from collections.abc import Iterator
 
-from predectorutils.gff import (
+from ..gff import (
     GFFRecord,
     GFFAttributes,
     Strand,
 )
-from predectorutils.analyses.base import Analysis, GFFAble
-from predectorutils.analyses.base import float_or_none, str_or_none
-from predectorutils.parsers import (
+
+from ..parsers import (
     FieldParseError,
     LineParseError,
     parse_field,
@@ -22,6 +20,9 @@ from predectorutils.parsers import (
     parse_float,
     is_one_of
 )
+
+from .base import Analysis, GFFAble
+from .base import float_or_none, str_or_none
 
 
 tp_name = raise_it(parse_field(parse_str, "name"))
@@ -83,7 +84,7 @@ class TargetPNonPlant(Analysis, GFFAble):
         other: float,
         sp: float,
         mtp: float,
-        cs_pos: Optional[str],
+        cs_pos: str | None,
     ) -> None:
         self.name = name
         self.prediction = prediction
@@ -101,7 +102,7 @@ class TargetPNonPlant(Analysis, GFFAble):
         sline = line.strip().split("\t")
 
         if len(sline) == 6:
-            cs_pos: Optional[str] = str(sline[5])
+            cs_pos: str | None = str(sline[5])
         elif len(sline) == 5:
             cs_pos = None
         else:
@@ -143,8 +144,8 @@ class TargetPNonPlant(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: Optional[str] = None,
-        database_version: Optional[str] = None,
+        software_version: str | None = None,
+        database_version: str | None = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
@@ -213,9 +214,9 @@ class TargetPPlant(Analysis, GFFAble):
         other: float,
         sp: float,
         mtp: float,
-        ctp: Optional[float],
-        lutp: Optional[float],
-        cs_pos: Optional[str],
+        ctp: float | None,
+        lutp: float | None,
+        cs_pos: str | None,
     ) -> None:
         self.name = name
         self.prediction = prediction
@@ -235,7 +236,7 @@ class TargetPPlant(Analysis, GFFAble):
         sline = line.strip().split("\t")
 
         if len(sline) == 8:
-            cs_pos: Optional[str] = str(sline[7])
+            cs_pos: str | None = str(sline[7])
         elif len(sline) == 7:
             cs_pos = None
         else:
@@ -272,8 +273,8 @@ class TargetPPlant(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: Optional[str] = None,
-        database_version: Optional[str] = None,
+        software_version: str | None = None,
+        database_version: str | None = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
@@ -312,7 +313,7 @@ class TargetPPlant(Analysis, GFFAble):
                     "cTP": "transit_peptide",
                     "luTP": "transit_peptide"
                 }[cs["kind"]]
-                prob: Optional[float] = cs.get("cs_prob", None)
+                prob: float | None = cs.get("cs_prob", None)
             elif self.prediction == "SP":
                 type_ = "signal_peptide"
                 prob = self.sp

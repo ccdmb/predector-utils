@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 
-from typing import NamedTuple, Tuple
-from typing import Dict, Set
+from typing import NamedTuple
+from typing import Any
 from typing import TextIO
-from typing import Any, Optional
-from typing import Iterator, Iterable
+from collections.abc import Iterator, Iterable
 from math import floor
 
 import json
@@ -23,7 +22,7 @@ def text_split(text: str, sep: str) -> str:
 def load_db(
     path: str,
     mem: int = 1
-) -> Tuple[sqlite3.Connection, sqlite3.Cursor]:
+) -> tuple[sqlite3.Connection, sqlite3.Cursor]:
     sqlite3.register_converter("analyses", Analyses.from_bytes_)
     con = sqlite3.connect(path, detect_types=sqlite3.PARSE_DECLTYPES)
     con.row_factory = sqlite3.Row
@@ -43,14 +42,15 @@ def load_db(
 class ResultRow(NamedTuple):
 
     checksum: str
-    name: Optional[str]
-    filename: Optional[str]
+    md5sum: str
+    name: str | None
+    filename: str | None
     analysis: Analyses
     software: str
     software_version: str
-    database: Optional[str]
-    database_version: Optional[str]
-    pipeline_version: Optional[str]
+    database: str | None
+    database_version: str | None
+    pipeline_version: str | None
     data: str
 
     @classmethod
@@ -67,6 +67,7 @@ class ResultRow(NamedTuple):
         assert isinstance(database_version, str) or database_version is None, d
         assert isinstance(pipeline_version, str) or pipeline_version is None, d
         assert isinstance(d["checksum"], str), d
+        assert isinstance(d["md5sum"], str), d
 
         an_enum = Analyses.from_string(d["analysis"])
         # This ensures the types are all correct
@@ -89,12 +90,13 @@ class ResultRow(NamedTuple):
 
         if "filename" in data:
             assert isinstance(data["filename"], str), data
-            filename: Optional[str] = data["filename"]
+            filename: str | None = data["filename"]
         else:
             filename = None
 
         return cls(
             d["checksum"],
+            d["md5sum"],
             name,
             filename,
             an_enum,
@@ -109,6 +111,7 @@ class ResultRow(NamedTuple):
     def drop_name(self):
         return self.__class__(
             self.checksum,
+            self.md5sum,
             None,
             None,
             self.analysis,
@@ -126,7 +129,7 @@ class ResultRow(NamedTuple):
         handle: TextIO,
         drop_name: bool = False,
         drop_null_dbversion: bool = False,
-        target_analyses: Optional[Set[Analyses]] = None
+        target_analyses: set[Analyses] | None = None
     ) -> Iterator["ResultRow"]:
 
         for line in handle:
@@ -149,13 +152,14 @@ class ResultRow(NamedTuple):
             yield record
         return
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         from .higher import or_else
         d = {
             "analysis": str(self.analysis),
             "software": self.software,
             "software_version": self.software_version,
             "checksum": self.checksum,
+            "md5sum": self.md5sum,
             "data": json.loads(self.data),
         }
 
@@ -190,6 +194,7 @@ class ResultRow(NamedTuple):
         drow = dict(row)
         return cls(
             checksum=drow["checksum"],
+            md5sum=drow["md5sum"],
             name=drow.get("name", None),
             filename=(
                 None
@@ -218,7 +223,7 @@ class TargetRow(NamedTuple):
 
     analysis: Analyses
     software_version: str
-    database_version: Optional[str]
+    database_version: str | None
 
     @classmethod
     def from_string(cls, s: str) -> "TargetRow":
@@ -244,7 +249,7 @@ class TargetRow(NamedTuple):
             yield cls.from_string(sline)
         return
 
-    def as_dict(self) -> Dict[str, Optional[str]]:
+    def as_dict(self) -> dict[str, str | None]:
         return {
             "analysis": str(self.analysis),
             "software_version": self.software_version,
@@ -267,7 +272,8 @@ class TargetRow(NamedTuple):
 class DecoderRow(NamedTuple):
 
     checksum: str
-    filename: Optional[str]
+    md5sum: str
+    filename: str | None
     name: str
 
     @classmethod
@@ -277,11 +283,11 @@ class DecoderRow(NamedTuple):
             fname = None
         else:
             fname = e[1]
-        return DecoderRow(e[3], fname, e[2])
+        return DecoderRow(e[3], e[4], fname, e[2])
 
     @classmethod
     def from_file(cls, handle: TextIO) -> Iterator["DecoderRow"]:
-        header = "\t".join(["encoded", "filename", "id", "checksum"])
+        header = "\t".join(["encoded", "filename", "id", "checksum", "md5sum"])
         for line in handle:
             sline = line.strip()
             if sline == header:
@@ -318,9 +324,9 @@ class ResultsTable(object):
                 db_index = ""
 
             if an.multiple_ok():
-                unique_constraint = "checksum,data"
+                unique_constraint = "checksum,md5sum,data"
             else:
-                unique_constraint = "checksum"
+                unique_constraint = "checksum,md5sum"
 
             self.cur.execute(
                 f"""
@@ -330,6 +336,7 @@ class ResultsTable(object):
                     {db_cols}
                     pipeline_version text,
                     checksum text NOT NULL,
+                    md5sum text NOT NULL,
                     data json NOT NULL,
                     UNIQUE (
                         software_version,
@@ -359,7 +366,8 @@ class ResultsTable(object):
                 ON results_{ans} (
                     software_version,
                     {db_index}
-                    checksum
+                    checksum,
+                    md5sum
                 )
                 """
             )
@@ -382,10 +390,12 @@ class ResultsTable(object):
             """
             CREATE TABLE IF NOT EXISTS decoder (
                 checksum text NOT NULL,
+                md5sum test NOT NULL,
                 filename text NOT NULL,
                 name text NOT NULL,
                 UNIQUE (
                     checksum,
+                    md5sum,
                     filename,
                     name
                 )
@@ -403,15 +413,22 @@ class ResultsTable(object):
     def create_decoder_index(self):
         self.cur.execute(
             """
-            CREATE INDEX IF NOT EXISTS decoder_index
+            CREATE INDEX IF NOT EXISTS decoder_checksum_index
             ON decoder (checksum)
+            """
+        )
+        self.cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS decoder_md5sum_index
+            ON decoder (md5sum)
             """
         )
         self.con.commit()
         return
 
     def drop_decoder_index(self):
-        self.cur.execute("DROP INDEX IF EXISTS decoder_index")
+        self.cur.execute("DROP INDEX IF EXISTS decoder_checksum_index")
+        self.cur.execute("DROP INDEX IF EXISTS decoder_md5sum_index")
         self.con.commit()
         return
 
@@ -440,6 +457,7 @@ class ResultsTable(object):
                 {dcols}
                 :pipeline_version,
                 :checksum,
+                :md5sum,
                 json(:data)
             )
             ON CONFLICT DO NOTHING
@@ -472,6 +490,7 @@ class ResultsTable(object):
                 if row.name is not None:
                     decoder_rows.append(DecoderRow(
                         row.checksum,
+                        row.md5sum,
                         row.filename,
                         row.name
                     ))
@@ -504,7 +523,7 @@ class ResultsTable(object):
 
         self.cur.executemany(
             "INSERT INTO decoder VALUES "
-            "(:checksum, IFNULL(:filename, ''), :name) "
+            "(:checksum, :md5sum, IFNULL(:filename, ''), :name) "
             "ON CONFLICT DO NOTHING",
             rows
         )
@@ -525,7 +544,7 @@ class ResultsTable(object):
         temp = self.cur.execute(query, (table,)).fetchone() is not None
         return main or temp
 
-    def insert_checksums(self, checksums: Set[str]) -> None:
+    def insert_checksums(self, checksums: set[str]) -> None:
         self.cur.execute("DROP TABLE IF EXISTS checksums")
         self.cur.execute(
             """
@@ -571,11 +590,75 @@ class ResultsTable(object):
                 software_version,
                 {db_cols}
                 pipeline_version,
+                md5sum,
                 r.checksum as checksum,
                 data
             FROM result_{ans} r
             INNER JOIN checksums c
                 ON r.checksum = c.checksum
+            """
+            query.append(q)
+
+        qstring = "\nUNION\n".join(query)
+        result = self.cur.execute(qstring)
+
+        for r in result:
+            yield ResultRow.from_rowfactory(r)
+
+        return
+
+    def insert_md5sums(self, md5sums: set[str]) -> None:
+        self.cur.execute("DROP TABLE IF EXISTS md5sums")
+        self.cur.execute(
+            """
+            CREATE TEMP TABLE md5sums (md5sum text NOT NULL UNIQUE)
+            """
+        )
+        self.cur.executemany(
+            "INSERT INTO md5sums VALUES (?)",
+            ((c,) for c in md5sums)
+        )
+
+    def select_checksums(self) -> Iterator[ResultRow]:
+        from . import analyses
+        assert self.exists_table("md5sums"), "no md5sums table"
+
+        query = []
+        for an in analyses.Analyses:
+            ans = str(an)
+            anv = an.value
+
+            if not self.exists_table(f"results_{ans}"):
+                continue
+
+            if an.needs_database():
+                db_cols = (
+                    """
+                    database,
+                    database_version,
+                    """
+                )
+            else:
+                db_cols = (
+                    """
+                    '' as database,
+                    '' as database_version,
+                    """
+                )
+
+            q = f"""
+            SELECT DISTINCT
+                CAST({anv} AS analyses) as analysis,
+                software,
+                software_version,
+                {db_cols}
+                pipeline_version,
+                r.md5sum as md5sum,
+                checksum,
+                data
+            FROM result_{ans} r
+            INNER JOIN md5sums c
+                ON r.md5sum = c.md5sum
             """
             query.append(q)
 
@@ -631,6 +714,7 @@ class ResultsTable(object):
                 {db_cols}
                 pipeline_version,
                 checksum,
+                md5sum,
                 data
             FROM {table_name}
             WHERE software_version = :software_version
@@ -723,6 +807,7 @@ class ResultsTable(object):
                 {db_cols}
                 pipeline_version,
                 r.checksum as checksum,
+                md5sum,
                 data
             FROM results_{ans} r
             {chk_join}
@@ -737,7 +822,7 @@ class ResultsTable(object):
 
         return
 
-    def decode(self) -> Iterator[Tuple[str, Iterator[ResultRow]]]:
+    def decode(self) -> Iterator[tuple[str, Iterator[ResultRow]]]:
         from . import analyses
         assert self.exists_table("decoder"), "table decoder doesn't exist"
 
@@ -750,6 +835,7 @@ class ResultsTable(object):
         SELECT DISTINCT
             CAST({anv} AS analyses) as analysis,
             r.checksum as checksum,
+            md5sum,
             d.name as name,
             d.filename as filename,
             software,

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Dict, Type
+from typing import Type
 import enum
 import sqlite3
 
@@ -23,12 +23,12 @@ from predectorutils.analyses.targetp import TargetPNonPlant, TargetPPlant
 from predectorutils.analyses.tmhmm import TMHMM
 from predectorutils.analyses.deeptmhmm import DeepTMHMM
 from predectorutils.analyses.localizer import LOCALIZER
-from predectorutils.analyses.deeploc import DeepLoc
+from predectorutils.analyses.deeploc import DeepLoc, DeepLoc2
 from predectorutils.analyses.hmmer import DomTbl, DBCAN, EffectorDB
 from predectorutils.analyses.pfamscan import PfamScan
 from predectorutils.analyses.pepstats import PepStats
 from predectorutils.analyses.mmseqs import MMSeqs, PHIBase
-from predectorutils.analyses.hhr import HHRAlignment  # noqa
+from predectorutils.analyses.hhr import HHRAlignment
 from predectorutils.analyses.regex import (
         RegexAnalysis,
         Kex2SiteAnalysis,
@@ -41,6 +41,8 @@ from predectorutils.analyses.deepredeff import (
     DeepredeffBacteria
 )
 
+from predectorutils.analyses.tmbed import TMBed
+
 
 __all__ = [
     "Analysis", "ApoplastP", "DeepSig",
@@ -48,11 +50,11 @@ __all__ = [
     "Phobius",
     "SignalP3NN", "SignalP3HMM", "SignalP4", "SignalP5", "SignalP6",
     "TargetPNonPlant", "TargetPPlant", "TMHMM", "DeepTMHMM", "LOCALIZER",
-    "DeepLoc",
+    "DeepLoc", "DeepLoc2",
     "DomTbl", "DBCAN", "GFFAble", "PfamScan", "PepStats", "MMSeqs",
-    "PHIBase", "HHRAligmment", "EffectorDB", "RegexAnalysis",
+    "PHIBase", "HHRAlignment", "EffectorDB", "RegexAnalysis",
     "DeepredeffFungi", "DeepredeffOomycete", "DeepredeffBacteria",
-    "Kex2SiteAnalysis", "RXLRLikeAnalysis"
+    "Kex2SiteAnalysis", "RXLRLikeAnalysis", "TMBed"
 ]
 
 
@@ -86,7 +88,9 @@ class Analyses(enum.IntEnum):
     deepredeff_bacteria = 26
     kex2_cutsite = 27
     rxlr_like_motif = 28
-    deeptmhmm = 29
+    deeptmhmm = 29,
+    deeploc2 = 30,
+    tmbed = 31
 
     def __str__(self) -> str:
         return self.name
@@ -120,7 +124,7 @@ class Analyses(enum.IntEnum):
         return cls(int(b))
 
 
-NAME_TO_ANALYSIS: Dict[Analyses, Type[Analysis]] = {
+NAME_TO_ANALYSIS: dict[Analyses, Type[Analysis]] = {
     Analyses.signalp3_nn: SignalP3NN,
     Analyses.signalp3_hmm: SignalP3HMM,
     Analyses.signalp4: SignalP4,
@@ -138,6 +142,7 @@ NAME_TO_ANALYSIS: Dict[Analyses, Type[Analysis]] = {
     Analyses.apoplastp: ApoplastP,
     Analyses.localizer: LOCALIZER,
     Analyses.deeploc: DeepLoc,
+    Analyses.deeploc2: DeepLoc2,
     Analyses.dbcan: DBCAN,
     Analyses.pfamscan: PfamScan,
     Analyses.pepstats: PepStats,
@@ -150,6 +155,7 @@ NAME_TO_ANALYSIS: Dict[Analyses, Type[Analysis]] = {
     Analyses.kex2_cutsite: Kex2SiteAnalysis,
     Analyses.rxlr_like_motif: RXLRLikeAnalysis,
     Analyses.deeptmhmm: DeepTMHMM,
+    Analyses.tmbed: TMBed,
 }
 
 
@@ -171,6 +177,7 @@ MULTIPLE_ACCEPTABLE = {
     Analyses.apoplastp: False,
     Analyses.localizer: False,
     Analyses.deeploc: False,
+    Analyses.deeploc2: False,
     Analyses.dbcan: True,
     Analyses.pfamscan: True,
     Analyses.pepstats: False,
@@ -183,4 +190,5 @@ MULTIPLE_ACCEPTABLE = {
     Analyses.kex2_cutsite: True,
     Analyses.rxlr_like_motif: True,
     Analyses.deeptmhmm: False,
+    Analyses.tmbed: False,
 }

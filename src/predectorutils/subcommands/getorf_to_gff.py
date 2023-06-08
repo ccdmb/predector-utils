@@ -5,7 +5,7 @@ import sys
 import argparse
 
 from Bio import SeqIO
-from predectorutils.gff import GFFRecord, GFFAttributes, Strand, Phase
+from ..gff import GFFRecord, GFFAttributes, Strand, Phase
 
 REGEX = re.compile(
     r"^\s*(?P<seqid>\S+)\s+"
@@ -39,6 +39,7 @@ def runner(args: argparse.Namespace) -> None:
 
     for seq in seqs:
         match = REGEX.match(seq.description)
+        assert match is not None
         forward = match.group("strand") is None
         if forward:
             strand = Strand.PLUS

@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 
 import re
-from typing import Optional
 from typing import TextIO
-from typing import Iterator
+from collections.abc import Iterator
 
-from predectorutils.gff import GFFRecord, GFFAttributes, Strand, Target
-from predectorutils.analyses.base import Analysis, GFFAble
-from predectorutils.analyses.base import str_or_none
-from predectorutils.parsers import (
+from ..gff import GFFRecord, GFFAttributes, Strand, Target
+from ..parsers import (
     FieldParseError,
     LineParseError,
     parse_field,
@@ -20,6 +17,9 @@ from predectorutils.parsers import (
     parse_or_none,
     MULTISPACE_REGEX,
 )
+
+from .base import Analysis, GFFAble
+from .base import str_or_none
 
 ACT_SITE_REGEX = re.compile(r"predicted_active_site\[(?P<sites>[\d,\s]+)\]$")
 
@@ -124,8 +124,8 @@ class PfamScan(Analysis, GFFAble):
         bitscore: float,
         evalue: float,
         is_significant: bool,
-        clan: Optional[str],
-        active_sites: Optional[str]
+        clan: str | None,
+        active_sites: str | None
     ):
         self.name = name
         self.ali_start = ali_start
@@ -160,7 +160,7 @@ class PfamScan(Analysis, GFFAble):
             )
 
         if len(sline) == 15:
-            active_sites: Optional[str] = None
+            active_sites: str | None = None
         else:
             active_sites = parse_predicted_active_site(sline[15])
 
@@ -201,8 +201,8 @@ class PfamScan(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: Optional[str] = None,
-        database_version: Optional[str] = None,
+        software_version: str | None = None,
+        database_version: str | None = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:

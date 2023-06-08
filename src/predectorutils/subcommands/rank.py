@@ -6,19 +6,16 @@ import argparse
 from math import floor
 from statistics import median
 
-from typing import (Optional, Tuple, Dict, Set, List)
-
 import sqlite3
 
 import numpy as np
 import pandas as pd
 import xgboost as xgb
 
-from predectorutils.analyses import Analyses
-from predectorutils.database import ResultsTable
-from predectorutils.data import (
+from ..analyses import Analyses
+from ..database import ResultsTable
+from ..data import (
     get_interesting_dbcan_ids,
-    get_interesting_pfam_ids,
     get_ltr_model,
 )
 
@@ -53,13 +50,6 @@ def cli(parser: argparse.ArgumentParser) -> None:
         type=argparse.FileType('r'),
         default=None,
         help="The dbcan matches to parse as input. Use '-' for stdin."
-    )
-
-    parser.add_argument(
-        "--pfam",
-        type=argparse.FileType('r'),
-        default=None,
-        help="The pfam domains to parse as input. Use '-' for stdin."
     )
 
     parser.add_argument(
@@ -270,30 +260,10 @@ def cli(parser: argparse.ArgumentParser) -> None:
     return
 
 
-def create_pfam_targets(
-    con: sqlite3.Connection,
-    cur: sqlite3.Cursor,
-    targets: Set[str]
-) -> None:
-    cur.execute("DROP TABLE IF EXISTS pfam_targets")
-    cur.execute(
-        "CREATE TEMP TABLE pfam_targets (pfam_ids text NOT NULL UNIQUE)"
-    )
-    cur.executemany(
-        "INSERT INTO pfam_targets VALUES (?)",
-        ((c,) for c in targets)
-    )
-    cur.execute(
-        "CREATE UNIQUE INDEX pfam_targets_index ON pfam_targets (pfam_ids)"
-    )
-    con.commit()
-    return
-
-
 def create_dbcan_targets(
     con: sqlite3.Connection,
     cur: sqlite3.Cursor,
-    targets: Set[str]
+    targets: set[str]
 ) -> None:
     cur.execute("DROP TABLE IF EXISTS dbcan_targets")
     cur.execute(
@@ -313,24 +283,8 @@ def create_dbcan_targets(
 def agg_dbcan_vir() -> str:
     s = (  # noqa
         "IFNULL("
-            "MAX(json_extract(data, '$.hmm') IN pfam_targets"
+            "MAX(json_extract(data, '$.hmm') IN dbcan_targets"
             f") FILTER (WHERE analysis == {int(Analyses.dbcan)}), "
-            "0"
-        ")"
-    )
-    return s
-
-
-def agg_pfam_vir() -> str:
-    s = (  # noqa
-        "IFNULL("
-            "MAX("
-                "SUBSTR("
-                    "json_extract(data, '$.hmm'), "
-                    "1, "
-                    "INSTR(json_extract(data, '$.hmm') || '.', '.') - 1"
-                ") IN pfam_targets"
-            f") FILTER (WHERE analysis == {int(Analyses.pfamscan)}), "
             "0"
         ")"
     )
@@ -354,7 +308,7 @@ class AggPhobiusTMDomains(AggBase):
     sql_fname = "agg_phobius_domains"
 
     def __init__(self):
-        self.matches: List[Tuple[int, int]] = []
+        self.matches: list[tuple[int, int]] = []
         return
 
     def step(self, data: str) -> None:
@@ -374,7 +328,7 @@ class AggPhobiusTMDomains(AggBase):
             self.matches.append((gffrow.start + 1, gffrow.end))
         return
 
-    def finalize(self) -> Optional[str]:
+    def finalize(self) -> str | None:
         if len(self.matches) == 0:
             return None
 
@@ -399,7 +353,7 @@ class AggTMHMMDomains(AggBase):
     sql_fname = "agg_tmhmm_domains"
 
     def __init__(self):
-        self.matches: List[Tuple[int, int]] = []
+        self.matches: list[tuple[int, int]] = []
         return
 
     def step(self, data: str) -> None:
@@ -419,7 +373,7 @@ class AggTMHMMDomains(AggBase):
             self.matches.append((gffrow.start + 1, gffrow.end))
         return
 
-    def finalize(self) -> Optional[str]:
+    def finalize(self) -> str | None:
         if len(self.matches) == 0:
             return None
 
@@ -453,8 +407,8 @@ class AggTMSPCoverage(AggBase):
     sql_fname = "agg_tmsp_coverage"
 
     def __init__(self):
-        self.signals: List[int] = []
-        self.membranes: List[Tuple[int, int]] = []
+        self.signals: list[int] = []
+        self.membranes: list[tuple[int, int]] = []
         return
 
     def step(self, analysis: int, data: str) -> None:
@@ -494,7 +448,7 @@ class AggTMSPCoverage(AggBase):
             f"FILTER (WHERE analysis IN ({sources}))"
         )
 
-    def gff_intersection(self, sp: int, tm: Tuple[int, int]) -> int:
+    def gff_intersection(self, sp: int, tm: tuple[int, int]) -> int:
         lstart = 0
         lend = sp
 
@@ -510,7 +464,7 @@ class AggTMSPCoverage(AggBase):
         else:
             return 0
 
-    def gff_coverage(self, sp: int, tm: Tuple[int, int]) -> float:
+    def gff_coverage(self, sp: int, tm: tuple[int, int]) -> float:
         noverlap = self.gff_intersection(sp, tm)
         rstart, rend = tm
         return noverlap / (rend - rstart)
@@ -531,7 +485,7 @@ class AggSPCutsite(AggBase):
     sql_fname = "agg_sp_cutsite"
 
     def __init__(self):
-        self.matches: List[Tuple[str, int]] = []
+        self.matches: list[tuple[str, int]] = []
         return
 
     def step(self, analysis: int, data: str) -> None:
@@ -551,7 +505,7 @@ class AggSPCutsite(AggBase):
             self.matches.append((an.__class__.__name__, gffrow.end))
         return
 
-    def finalize(self) -> Optional[str]:
+    def finalize(self) -> str | None:
         if len(self.matches) == 0:
             return None
 
@@ -577,7 +531,7 @@ class AggKex2(AggBase):
     sql_fname = "agg_kex2"
 
     def __init__(self):
-        self.matches: Dict[Tuple[str, int, int], Set[str]] = dict()
+        self.matches: dict[tuple[str, int, int], set[str]] = dict()
         return
 
     def step(
@@ -595,7 +549,7 @@ class AggKex2(AggBase):
             self.matches[tup] = {pattern}
         return
 
-    def finalize(self) -> Optional[str]:
+    def finalize(self) -> str | None:
         if len(self.matches) == 0:
             return None
         else:
@@ -624,7 +578,7 @@ class AggRxLR(AggBase):
     sql_fname = "agg_rxlr"
 
     def __init__(self):
-        self.matches: List[Tuple[str, int, int]] = []
+        self.matches: list[tuple[str, int, int]] = []
         return
 
     def step(
@@ -636,7 +590,7 @@ class AggRxLR(AggBase):
         self.matches.append((match, start + 1, end))
         return
 
-    def finalize(self) -> Optional[str]:
+    def finalize(self) -> str | None:
         if len(self.matches) == 0:
             return None
         else:
@@ -663,7 +617,7 @@ class AggPHIMatches(AggBase):
     index: int
 
     def __init__(self):
-        self.matches: Dict[str, float] = dict()
+        self.matches: dict[str, float] = dict()
         return
 
     def step(self, data: str) -> None:
@@ -688,7 +642,7 @@ class AggPHIMatches(AggBase):
                     self.matches[match] = an.evalue
         return
 
-    def finalize(self) -> Optional[str]:
+    def finalize(self) -> str | None:
         if len(self.matches) == 0:
             return None
         else:
@@ -731,10 +685,10 @@ class AggPHIHasMatch(AggBase):
     nargs = 1
     analysis = Analyses.phibase
     index = 5
-    targets: Set[str]
+    targets: set[str]
 
     def __init__(self):
-        self.phenos: Set[str] = set()
+        self.phenos: set[str] = set()
         return
 
     def step(self, data: str) -> None:
@@ -793,7 +747,7 @@ class AggHMMER(AggBase):
     nargs = 1
 
     def __init__(self):
-        self.matches: Dict[str, float] = {}
+        self.matches: dict[str, float] = {}
         return
 
     def step(self, data: str) -> None:
@@ -815,7 +769,7 @@ class AggHMMER(AggBase):
 
         return
 
-    def finalize(self) -> Optional[str]:
+    def finalize(self) -> str | None:
         if len(self.matches) == 0:
             return None
 
@@ -843,108 +797,14 @@ class AggDBCAN(AggHMMER):
     sql_fname = "agg_dbcan"
 
 
-class AggPfamscanIDS(AggBase):
-    nargs = 1
-    analysis = Analyses.pfamscan
-    sql_fname = "agg_pfamscan_ids"
-
-    def __init__(self):
-        self.matches: Dict[str, float] = {}
-        return
-
-    def step(self, data: str) -> None:
-        from ..analyses import PfamScan
-        an = (
-            self.analysis
-            .get_analysis()
-            .from_json_str(data)
-        )
-
-        assert isinstance(an, PfamScan)
-        hmm = self.split_hmm(an.hmm)
-
-        if hmm in self.matches:
-            if self.matches[hmm] > an.evalue:
-                self.matches[hmm] = an.evalue
-        else:
-            self.matches[hmm] = an.evalue
-        return
-
-    def finalize(self) -> Optional[str]:
-        if len(self.matches) == 0:
-            return None
-
-        return ",".join(
-            k
-            for k, _
-            in sorted(self.matches.items(), key=lambda t: t[1])
-        )
-
-    @classmethod
-    def sql_query(cls) -> str:
-        return (
-            f"{cls.sql_fname}(data) "
-            f"FILTER (WHERE analysis = {int(cls.analysis)})"
-        )
-
-    @staticmethod
-    def split_hmm(hmm: str) -> str:
-        return hmm.strip().split(".")[0]
-
-
-class AggPfamscanNames(AggBase):
-    nargs = 1
-    analysis = Analyses.pfamscan
-    sql_fname = "agg_pfamscan_names"
-
-    def __init__(self):
-        self.matches: Dict[str, float] = {}
-        return
-
-    def step(self, data: str) -> None:
-        from ..analyses import PfamScan
-        an = (
-            self.analysis
-            .get_analysis()
-            .from_json_str(data)
-        )
-
-        assert isinstance(an, PfamScan)
-        name = an.hmm_type + ":" + an.hmm_name
-
-        if name in self.matches:
-            if self.matches[name] > an.evalue:
-                self.matches[name] = an.evalue
-        else:
-            self.matches[name] = an.evalue
-        return
-
-    def finalize(self) -> Optional[str]:
-        if len(self.matches) == 0:
-            return None
-
-        return ",".join(
-            k
-            for k, _
-            in sorted(self.matches.items(), key=lambda t: t[1])
-        )
-
-    @classmethod
-    def sql_query(cls) -> str:
-        return (
-            f"{cls.sql_fname}(data) "
-            f"FILTER (WHERE analysis = {int(cls.analysis)})"
-        )
-
-
 class AggSperProb(AggBase):
     nargs = 2
     pred_col: str
     prob_col: str
-    pos_values: List[str]
+    pos_values: list[str]
 
     def __init__(self):
-        self.prob: Optional[float] = None
+        self.prob: float | None = None
         return
 
     def step(self, prob: float, pred: str) -> None:
@@ -957,7 +817,7 @@ class AggSperProb(AggBase):
             self.prob = 1 - prob
         return
 
-    def finalize(self) -> Optional[float]:
+    def finalize(self) -> float | None:
         return self.prob
 
     @classmethod
@@ -1072,7 +932,7 @@ def agg_fkyin_gap() -> str:
 def load_db(
     path: str,
     mem: float
-) -> Tuple[sqlite3.Connection, sqlite3.Cursor]:
+) -> tuple[sqlite3.Connection, sqlite3.Cursor]:
     sqlite3.register_converter("analyses", Analyses.from_bytes_)
     con = sqlite3.connect(path, detect_types=sqlite3.PARSE_DECLTYPES)
     con.row_factory = sqlite3.Row
@@ -1081,7 +941,7 @@ def load_db(
         AggEP1, AggEP2, AggApoplastP, AggEffectorDB, AggDBCAN,
         AggPHIPhenos, AggPHIIDs, AggPHIGenes,
         AggPHIEffectorMatch, AggPHIVirulenceMatch, AggPHILethalMatch,
-        AggPfamscanIDS, AggPfamscanNames, AggKex2, AggRxLR,
+        AggKex2, AggRxLR,
         AggSPCutsite, AggTMSPCoverage, AggTMHMMDomains, AggPhobiusTMDomains
     ]:
         con.create_aggregate(c.sql_fname, c.nargs, c)  # type: ignore
@@ -1150,8 +1010,7 @@ def create_select_all_table(tab: ResultsTable) -> None:
 def create_tables(
     con: sqlite3.Connection,
     cur: sqlite3.Cursor,
-    pfam_targets: Set[str],
-    dbcan_targets: Set[str],
+    dbcan_targets: set[str],
     tmhmm_first_60_threshold: float = 10,
 ) -> pd.DataFrame:
     tab = ResultsTable(con, cur)
@@ -1171,9 +1030,6 @@ def create_tables(
             {AggPHIEffectorMatch.sql_query()} as has_phibase_effector_match,
             {AggPHIVirulenceMatch.sql_query()} as has_phibase_virulence_match,
             {AggPHILethalMatch.sql_query()} as has_phibase_lethal_match,
-            {AggPfamscanIDS.sql_query()} as pfam_ids,
-            {AggPfamscanNames.sql_query()} as pfam_names,
-            {agg_pfam_vir()} as has_pfam_virulence_match,
             {AggDBCAN.sql_query()} as dbcan_matches,
             {agg_dbcan_vir()} as has_dbcan_virulence_match,
             {AggEP1.sql_query()} as effectorp1,
@@ -1382,8 +1238,7 @@ def effector_score_it(
     has_effector_match = (
         table["has_phibase_effector_match"].fillna(0).astype(bool) |
         table["effector_matches"].notnull().astype(bool) |
-        table["has_dbcan_virulence_match"].fillna(0).astype(bool) |
-        table["has_pfam_virulence_match"].fillna(0).astype(bool)
+        table["has_dbcan_virulence_match"].fillna(0).astype(bool)
     ).astype(int)
 
     score += has_effector_match * effector
@@ -1511,22 +1366,15 @@ def inner(
     args: argparse.Namespace
 ) -> None:
     if args.dbcan is not None:
-        dbcan: Set[str] = {d.strip() for d in args.dbcan.readlines()}
+        dbcan: set[str] = {d.strip() for d in args.dbcan.readlines()}
     else:
         dbcan = set(get_interesting_dbcan_ids())
 
-    if args.pfam is not None:
-        pfam: Set[str] = {d.strip() for d in args.pfam.readlines()}
-    else:
-        pfam = set(get_interesting_pfam_ids())
-
-    create_pfam_targets(con, cur, pfam)
     create_dbcan_targets(con, cur, dbcan)
 
     df = create_tables(
         con,
         cur,
-        pfam,
         dbcan,
         args.tmhmm_first_60_threshold
     )

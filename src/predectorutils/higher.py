@@ -1,16 +1,14 @@
 """ Some higher order functions for dealing with static analysis. """
 
 from typing import TypeVar
-from typing import Optional
 from typing import Callable
-from typing import Union
 
 
 T = TypeVar("T")
 U = TypeVar("U")
 
 
-def fmap(function: Callable[[T], U], option: Optional[T]) -> Optional[U]:
+def fmap(function: Callable[[T], U], option: T | None) -> U | None:
     if option is None:
         return None
     else:
@@ -18,9 +16,9 @@ def fmap(function: Callable[[T], U], option: Optional[T]) -> Optional[U]:
 
 
 def applicative(
-    function: Callable[[T], Optional[U]],
-    option: Optional[T],
-) -> Optional[U]:
+    function: Callable[[T], U | None],
+    option: T | None,
+) -> U | None:
     """ Same as fmap except for the type signature. """
     if option is None:
         return None
@@ -29,7 +27,7 @@ def applicative(
     return
 
 
-def or_else(default: U, option: Optional[T]) -> Union[T, U]:
+def or_else(default: U, option: T | None) -> T | U:
     """ Replaces None with some default value. """
     if option is None:
         return default

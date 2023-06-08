@@ -2,17 +2,14 @@
 
 import re
 from typing import TextIO
-from typing import Iterator
-from typing import List, Tuple
-from typing import Optional
+from collections.abc import Iterator
 
-from predectorutils.gff import (
+from ..gff import (
     GFFRecord,
     GFFAttributes,
     Strand,
 )
-from predectorutils.analyses.base import Analysis, GFFAble
-from predectorutils.parsers import (
+from ..parsers import (
     FieldParseError,
     LineParseError,
     parse_field,
@@ -23,13 +20,15 @@ from predectorutils.parsers import (
     MULTISPACE_REGEX
 )
 
+from .base import Analysis, GFFAble
+
 pb_name = raise_it(parse_field(parse_str, "name"))
 pb_tm = raise_it(parse_field(parse_int, "tm"))
 pb_sp = raise_it(parse_field(parse_bool("Y", "0"), "sp"))
 pb_topology = raise_it(parse_field(parse_str, "topology"))
 
 
-def parse_topology(string: str) -> List[Tuple[str, int, int]]:
+def parse_topology(string: str) -> list[tuple[str, int, int]]:
     parts = re.findall(
         r"(?P<tag>[ncio])(?P<start>\d+)[-/](?P<end>\d+)",
         string
@@ -121,8 +120,8 @@ class Phobius(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: Optional[str] = None,
-        database_version: Optional[str] = None,
+        software_version: str | None = None,
+        database_version: str | None = None,
         keep_all: bool = False,
         id_index: int = 1
     ) -> Iterator[GFFRecord]:

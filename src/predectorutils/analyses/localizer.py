@@ -1,26 +1,25 @@
 #!/usr/bin/env python3
 
 import re
-from typing import Optional
 from typing import TextIO
-from typing import Iterator
-from typing import Tuple
+from collections.abc import Iterator
 
-from predectorutils.higher import fmap
-from predectorutils.gff import GFFRecord, GFFAttributes, Strand
-from predectorutils.analyses.base import Analysis, GFFAble
-from predectorutils.analyses.base import (
-    int_or_none,
-    float_or_none,
-    str_or_none
-)
-from predectorutils.parsers import (
+from ..higher import fmap
+from ..gff import GFFRecord, GFFAttributes, Strand
+from ..parsers import (
     FieldParseError,
     LineParseError,
     parse_field,
     raise_it,
     parse_str,
     parse_regex
+)
+
+from .base import Analysis, GFFAble
+from .base import (
+    int_or_none,
+    float_or_none,
+    str_or_none
 )
 
 # This matches strings of the form "Y (0.962| 25-49)"
@@ -34,7 +33,7 @@ HEADER_REGEX = re.compile(
 def parse_tp_field(
     field: str,
     field_name: str,
-) -> Tuple[bool, Optional[float], Optional[int], Optional[int]]:
+) -> tuple[bool, float | None, int | None, int | None]:
     field = field.strip()
 
     if field == "-":
@@ -50,7 +49,7 @@ def parse_tp_field(
 
 def parse_nuc_field(
     field: str,
-) -> Tuple[bool, Optional[str]]:
+) -> tuple[bool, str | None]:
     field = field.strip()
 
     if field == "-":
@@ -84,15 +83,15 @@ class LOCALIZER(Analysis, GFFAble):
         self,
         name: str,
         chloroplast_decision: bool,
-        chloroplast_prob: Optional[float],
-        chloroplast_start: Optional[int],
-        chloroplast_end: Optional[int],
+        chloroplast_prob: float | None,
+        chloroplast_start: int | None,
+        chloroplast_end: int | None,
         mitochondria_decision: bool,
-        mitochondria_prob: Optional[float],
-        mitochondria_start: Optional[int],
-        mitochondria_end: Optional[int],
+        mitochondria_prob: float | None,
+        mitochondria_start: int | None,
+        mitochondria_end: int | None,
         nucleus_decision: bool,
-        nucleus_signals: Optional[str],
+        nucleus_signals: str | None,
     ) -> None:
         self.name = name
         self.chloroplast_decision = chloroplast_decision
@@ -168,8 +167,8 @@ class LOCALIZER(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: Optional[str] = None,
-        database_version: Optional[str] = None,
+        software_version: str | None = None,
+        database_version: str | None = None,
         keep_all: bool = True,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:

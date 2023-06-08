@@ -2,12 +2,12 @@
 
 import re
 
-from typing import Optional
 from typing import TextIO
-from typing import Iterator
+from collections.abc import Iterator
 
-from predectorutils.analyses.base import Analysis
-from predectorutils.parsers import (
+from .base import Analysis
+from .base import float_or_none
+from ..parsers import (
     FieldParseError,
     LineParseError,
     raise_it,
@@ -17,7 +17,6 @@ from predectorutils.parsers import (
     parse_float,
     is_one_of
 )
-from predectorutils.analyses.base import float_or_none
 
 
 e1_name = raise_it(parse_field(parse_str, "name"))
@@ -179,7 +178,7 @@ e3_prediction = raise_it(parse_field(
 E3_REGEX = re.compile(r"^Y \((?P<prob>\d?\.?\d+)\)$")
 
 
-def e3_parse_field(field: str, field_name: str) -> Optional[float]:
+def e3_parse_field(field: str, field_name: str) -> float | None:
     field = field.strip()
     if field == "-":
         return None
@@ -210,9 +209,9 @@ class EffectorP3(Analysis):
         self,
         name: str,
         prediction: str,
-        cytoplasmic_prob: Optional[float],
-        apoplastic_prob: Optional[float],
-        noneffector_prob: Optional[float],
+        cytoplasmic_prob: float | None,
+        apoplastic_prob: float | None,
+        noneffector_prob: float | None,
     ) -> None:
         self.name = name
         self.prediction = prediction

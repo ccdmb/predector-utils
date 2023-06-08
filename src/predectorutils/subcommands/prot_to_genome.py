@@ -6,16 +6,12 @@ import argparse
 from collections import defaultdict
 
 from typing import TextIO
-from typing import Optional, Union
-from typing import (
-    List, Sequence,
-    Iterator, Iterable,
-    Tuple,
-    DefaultDict,
-    Set,
+from collections.abc import (
+    Sequence,
+    Iterator, Iterable
 )
 
-from predectorutils.gff import (
+from ..gff import (
     Strand,
     Phase,
     GFFRecord,
@@ -95,7 +91,7 @@ def make_polypeptide(
 def cds_to_polypeptide(
     cdss: Iterable[GFFRecord],
     derives_from: bool = False
-) -> List[GFFRecord]:
+) -> list[GFFRecord]:
     peps = []
     for cds in cdss:
         pep = make_polypeptide(cds, derives_from=derives_from)
@@ -107,7 +103,7 @@ def cds_to_polypeptide(
 def project_plus(
     cds: Sequence[GFFRecord],
     feature: GFFRecord
-) -> Iterator[Tuple[int, int]]:
+) -> Iterator[tuple[int, int]]:
     """ Projects a feature in protein space to genome coordinates
     on the forward strand.
 
@@ -140,7 +136,7 @@ def project_plus(
 def project_minus(
     cds: Sequence[GFFRecord],
     feature: GFFRecord
-) -> Iterator[Tuple[int, int]]:
+) -> Iterator[tuple[int, int]]:
     """ Projects a feature in protein space to genome coordinates
     on the reverse strand.
 
@@ -216,7 +212,7 @@ def find_seqid(cdss: Iterable[GFFRecord]) -> str:
 
 
 def split_feature_by_coords(
-    coords: Iterable[Tuple[int, int]],
+    coords: Iterable[tuple[int, int]],
     feature: GFFRecord
 ) -> Iterator[GFFRecord]:
     """ Just copies a feature for each set of new coordinates. """
@@ -258,7 +254,7 @@ def split_feature_by_coords(
 def project_to_cds(
     cdss: Sequence[GFFRecord],
     feature: GFFRecord
-) -> List[GFFRecord]:
+) -> list[GFFRecord]:
     """ This takes multiple CDS features from which the protein
     is derived and projects a single predicted protein feature
     back onto those CDSs, matching the intron structure.
@@ -287,7 +283,7 @@ def create_match(
     parts: Sequence[GFFRecord],
     type_: str,
     prot_id: str,
-    index: Union[int, str]
+    index: int | str
 ):
     """ Creates a parent feature that encapsulates all
     members of 'parts'.
@@ -410,7 +406,7 @@ def split_protein_features(  # noqa: W0611
 def get_id(
     record: GFFRecord,
     id_field: str
-) -> Optional[str]:
+) -> str | None:
 
     id_ = record.attributes.get(id_field, None)
     if id_ is None:
@@ -436,7 +432,7 @@ def write_gff(
     gff: Iterable[GFFRecord],
     handle: TextIO
 ):
-    seen: Set[GFFRecord] = set()
+    seen: set[GFFRecord] = set()
     for feature in sorted(
         gff,
         key=lambda g: (g.seqid, g.start, g.end, g.type)
@@ -456,8 +452,8 @@ def write_gff(
 
 def split_on_source(
     records: Iterable[GFFRecord]
-) -> DefaultDict[str, List[GFFRecord]]:
-    out: DefaultDict[str, List[GFFRecord]] = defaultdict(list)
+) -> defaultdict[str, list[GFFRecord]]:
+    out: defaultdict[str, list[GFFRecord]] = defaultdict(list)
     for record in records:
         out[record.source].append(record)
 
@@ -473,7 +469,7 @@ def inner(  # noqa: C901
 ):
     genes_gff = list(GFFRecord.from_file(genes, unescape=True))
 
-    cdss: DefaultDict[str, List[GFFRecord]] = defaultdict(list)
+    cdss: defaultdict[str, list[GFFRecord]] = defaultdict(list)
     for g in genes_gff:
         if g.type != "CDS":
             continue
@@ -483,13 +479,13 @@ def inner(  # noqa: C901
             continue
         cdss[id_].append(g)
 
-    prots: DefaultDict[str, List[GFFRecord]] = defaultdict(list)
+    prots: defaultdict[str, list[GFFRecord]] = defaultdict(list)
     for prot in GFFRecord.from_file(annotations):
         if prot.seqid not in cdss:
             continue
         prots[prot.seqid].append(prot)
 
-    mapped: List[GFFRecord] = []
+    mapped: list[GFFRecord] = []
     for id_, these_prots in prots.items():
         these_cdss = cdss[id_]
         feats = split_protein_features(

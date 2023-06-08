@@ -4,7 +4,6 @@ import sys
 import traceback
 import argparse
 
-from typing import List
 
 from predectorutils import __version__, __email__
 from predectorutils.subcommands.r2js import cli as r2js_cli
@@ -85,7 +84,7 @@ class MyArgumentError(Exception):
         return
 
 
-def cli(prog: str, args: List[str]) -> argparse.Namespace:
+def cli(prog: str, args: list[str]) -> argparse.Namespace:
     parser = MyArgumentParser(
         prog=prog,
         description=(
@@ -323,7 +322,6 @@ def main():  # noqa
             "We can't control these, and they're usually related to your OS.\n"
             "Try running again.\n"
         )
-        raise e
         print(msg, file=sys.stderr)
         print(e.strerror, file=sys.stderr)
         sys.exit(EXIT_SYSERR)

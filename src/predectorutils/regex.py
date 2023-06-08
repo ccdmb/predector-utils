@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
 import re
-from typing import Pattern, Iterator
+from typing import Pattern
+from collections.abc import Iterator
 from .analyses import RegexAnalysis
 
 from Bio.SeqRecord import SeqRecord

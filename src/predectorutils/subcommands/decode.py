@@ -6,9 +6,10 @@ from os.path import basename, splitext, dirname
 import argparse
 import sqlite3
 
-from typing import Iterator, TextIO
+from typing import TextIO
+from collections.abc import Iterator
 
-from predectorutils.database import (
+from ..database import (
     load_db,
     ResultsTable,
     ResultRow,

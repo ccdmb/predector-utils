@@ -7,12 +7,10 @@ for each database release. The latest version will always we the default one.
 from pkg_resources import resource_filename
 
 import json
-from typing import List
-
 import xgboost as xgb
 
 
-def get_interesting_pfam_ids(version: str = "latest") -> List[str]:
+def get_interesting_pfam_ids(version: str = "latest") -> list[str]:
     fname = resource_filename(__name__, "hmms_of_interest.json")
     with open(fname, "r") as handle:
         d = json.load(handle)
@@ -38,7 +36,7 @@ def get_interesting_pfam_ids(version: str = "latest") -> List[str]:
     return pfids
 
 
-def get_interesting_dbcan_ids(version: str = "latest") -> List[str]:
+def get_interesting_dbcan_ids(version: str = "latest") -> list[str]:
     fname = resource_filename(__name__, "hmms_of_interest.json")
     with open(fname, "r") as handle:
         d = json.load(handle)

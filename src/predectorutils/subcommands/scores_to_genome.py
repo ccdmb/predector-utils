@@ -6,16 +6,11 @@ import argparse
 from collections import defaultdict
 
 from typing import TextIO
-from typing import Optional
-from typing import (
-    List,
-    DefaultDict
-)
 
 import pandas as pd
 from intervaltree import IntervalTree, Interval
 
-from predectorutils.gff import GFFRecord
+from ..gff import GFFRecord
 
 NUMERIC_COLUMNS = [
     'effector_score',
@@ -127,7 +122,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
 def get_id(
     record: GFFRecord,
     id_field: str
-) -> Optional[str]:
+) -> str | None:
 
     id_ = record.attributes.get(id_field, None)
     if id_ is None:
@@ -154,7 +149,7 @@ def inner(  # noqa: C901
     annotations: TextIO,
     outfile: TextIO,
     id_field: str,
-    target: Optional[List[str]],
+    target: list[str] | None,
     reducer: str
 ):
     gff = list(GFFRecord.from_file(genes))
@@ -176,7 +171,7 @@ def inner(  # noqa: C901
         preds = preds[target]
 
     # Gets the intervals of CDS entries.
-    intervals: DefaultDict[str, IntervalTree] = defaultdict(IntervalTree)
+    intervals: defaultdict[str, IntervalTree] = defaultdict(IntervalTree)
     for feature in gff:
         if feature.type != "CDS":
             continue

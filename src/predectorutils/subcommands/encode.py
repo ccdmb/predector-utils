@@ -6,15 +6,14 @@ import re
 import argparse
 
 from typing import NamedTuple
-from typing import Dict
-from typing import Tuple
 
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqUtils.CheckSum import seguid
 
-from predectorutils.baseconv import IdConverter
+from ..baseconv import IdConverter
+
 
 INVALID_CHARS = re.compile(r"[^A-Z]", flags=re.ASCII | re.IGNORECASE)
 
@@ -65,7 +64,7 @@ class TableLine(NamedTuple):
     checksum: str
 
 
-def get_checksum(seq: SeqRecord) -> Tuple[str, str]:
+def get_checksum(seq: SeqRecord) -> tuple[str, str]:
     checksum = seguid(str(seq.seq))
     return seq.id, checksum
 
@@ -75,7 +74,7 @@ def format_table_line(t: TableLine) -> str:
 
 
 def runner(args: argparse.Namespace) -> None:
-    checksums: Dict[str, str] = dict()
+    checksums: dict[str, str] = dict()
     id_conv = IdConverter(prefix=args.prefix, length=args.length)
 
     i = 0

@@ -2,19 +2,13 @@
 
 import re
 from typing import TextIO
-from typing import Iterator
-from typing import Dict
 from typing import TypeVar
 from typing import Callable
-from typing import Tuple
-from typing import List, Sequence
 from typing import Pattern
-from typing import Optional
 
-from typing import Iterable
+from typing import Iterator, Iterable, Sequence
 
-from predectorutils.analyses.base import Analysis, float_or_none
-from predectorutils.parsers import (
+from ..parsers import (
     ParseError,
     ValueParseError,
     BlockParseError,
@@ -24,6 +18,7 @@ from predectorutils.parsers import (
     parse_float,
     raise_it
 )
+from .base import Analysis, float_or_none
 
 
 T = TypeVar("T")
@@ -40,7 +35,7 @@ def convert_line_err(
         raise e.as_block_error(lineno)
 
 
-def get_line(lines: Iterator[Tuple[int, str]]) -> Tuple[int, str]:
+def get_line(lines: Iterator[tuple[int, str]]) -> tuple[int, str]:
     i, line = next(lines)
 
     while line.strip() == "":
@@ -50,9 +45,9 @@ def get_line(lines: Iterator[Tuple[int, str]]) -> Tuple[int, str]:
 
 
 def parse_regex_line(
-    lines: Iterable[Tuple[int, str]],
+    lines: Iterable[tuple[int, str]],
     regex: Pattern,
-    record: Dict[str, str]
+    record: dict[str, str]
 ) -> None:
     i, line = get_line(iter(lines))
     rline = parse_regex(regex)(line)
@@ -64,8 +59,8 @@ def parse_regex_line(
     return
 
 
-def parse_residue_table(lines: Iterable[Tuple[int, str]]) -> Dict[str, str]:
-    table: Dict[str, str] = dict()
+def parse_residue_table(lines: Iterable[tuple[int, str]]) -> dict[str, str]:
+    table: dict[str, str] = dict()
 
     for i, line in lines:
         if line == "":
@@ -83,8 +78,8 @@ def parse_residue_table(lines: Iterable[Tuple[int, str]]) -> Dict[str, str]:
     return table
 
 
-def parse_property_table(lines: Iterable[Tuple[int, str]]) -> Dict[str, str]:
-    table: Dict[str, str] = dict()
+def parse_property_table(lines: Iterable[tuple[int, str]]) -> dict[str, str]:
+    table: dict[str, str] = dict()
 
     for i, line in lines:
         if line == "":
@@ -291,7 +286,7 @@ class PepStats(Analysis):
         residues: int,
         average_residue_weight: float,
         charge: float,
-        isoelectric_point: Optional[float],
+        isoelectric_point: float | None,
         a280_molar_extinction_coefficients_reduced: int,
         a280_molar_extinction_coefficients_cysteine_bridges: float,
         a280_1mgml_extinction_coefficients_reduced: float,
@@ -505,10 +500,10 @@ class PepStats(Analysis):
 
     @classmethod
     def from_block(cls, lines: Sequence[str]) -> "PepStats":
-        record: Dict[str, str] = dict()
+        record: dict[str, str] = dict()
 
         if not isinstance(lines, Iterable):
-            ilines: Iterator[Tuple[int, str]] = enumerate(iter(lines))
+            ilines: Iterator[tuple[int, str]] = enumerate(iter(lines))
         else:
             ilines = enumerate(lines)
 
@@ -561,7 +556,7 @@ class PepStats(Analysis):
 
     @classmethod  # noqa
     def from_file(cls, handle: TextIO) -> Iterator["PepStats"]:
-        block: List[str] = []
+        block: list[str] = []
 
         for i, line in enumerate(handle):
             sline = line.strip()

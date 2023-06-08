@@ -2,10 +2,9 @@
 
 import re
 from typing import TextIO
-from typing import Iterator
-from typing import Optional
+from collections.abc import Iterator
 
-from predectorutils.gff import (
+from ..gff import (
     GFFRecord,
     GFFAttributes,
     Strand,
@@ -14,8 +13,8 @@ from predectorutils.gff import (
     GapCode,
     GapElement
 )
-from predectorutils.analyses.base import Analysis, GFFAble
-from predectorutils.parsers import (
+
+from ..parsers import (
     FieldParseError,
     LineParseError,
     parse_field,
@@ -24,6 +23,8 @@ from predectorutils.parsers import (
     parse_float,
     parse_int,
 )
+
+from .base import Analysis, GFFAble
 
 
 mm_query = raise_it(parse_field(parse_str, "query"))
@@ -203,8 +204,8 @@ class MMSeqs(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: Optional[str] = None,
-        database_version: Optional[str] = None,
+        software_version: str | None = None,
+        database_version: str | None = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:

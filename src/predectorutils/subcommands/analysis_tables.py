@@ -3,14 +3,13 @@
 import os
 import argparse
 
-from typing import Iterator
-from typing import Set
+from collections.abc import Iterator
 
 import sqlite3
 
 import pandas as pd
 
-from predectorutils.database import (
+from ..database import (
     load_db,
     ResultsTable,
     ResultRow,
@@ -122,7 +121,7 @@ def inner(
     tab = ResultsTable(con, cur)
     targets = list(tab.fetch_targets())
 
-    seen: Set[Analyses] = set()
+    seen: set[Analyses] = set()
     for target in targets:
         if target.analysis in seen:
             raise ValueError(

@@ -4,7 +4,7 @@ import argparse
 import sqlite3
 import sys
 
-from predectorutils.database import load_db, ResultsTable
+from ..database import load_db, ResultsTable
 
 
 def cli(parser: argparse.ArgumentParser) -> None:

@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 
 import re
-from typing import List, Tuple
 from typing import TextIO
-from typing import Iterator
-from typing import Optional
+from collections.abc import Iterator
 
-from predectorutils.gff import (GFFRecord, Strand)
-from predectorutils.analyses.base import Analysis, GFFAble
-from predectorutils.parsers import (
+from ..gff import (GFFRecord, Strand)
+from ..parsers import (
     FieldParseError,
     LineParseError,
     parse_field,
@@ -18,6 +15,8 @@ from predectorutils.parsers import (
     parse_int,
     split_at_eq,
 )
+
+from .base import Analysis, GFFAble
 
 tm_name = raise_it(parse_field(parse_str, "name"))
 tm_length = raise_it(parse_field(split_at_eq(parse_int, "len"), "length"))
@@ -36,7 +35,7 @@ tm_topology = raise_it(parse_field(
 ))
 
 
-def parse_topology(string: str) -> List[Tuple[int, int]]:
+def parse_topology(string: str) -> list[tuple[int, int]]:
     parts = re.findall(
         r"(?P<tag>[ncio])(?P<start>\d+)-(?P<end>\d+)",
         string
@@ -123,8 +122,8 @@ class TMHMM(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: Optional[str] = None,
-        database_version: Optional[str] = None,
+        software_version: str | None = None,
+        database_version: str | None = None,
         keep_all: bool = False,
         id_index: int = 1
     ) -> Iterator[GFFRecord]:

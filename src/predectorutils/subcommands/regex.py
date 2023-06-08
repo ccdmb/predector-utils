@@ -5,8 +5,6 @@ import sys
 import argparse
 import json
 
-from typing import List
-
 from Bio import SeqIO
 
 from ..analyses import Analysis
@@ -81,7 +79,7 @@ def format_tsv(a: Analysis, first: bool) -> str:
 
 def runner(args: argparse.Namespace) -> None:
     seqs = SeqIO.parse(args.infile, "fasta")
-    output: List[str] = []
+    output: list[str] = []
 
     if args.kind == "custom":
         if args.regex is None:
