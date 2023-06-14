@@ -73,8 +73,8 @@ def get_checksum(seq: SeqRecord) -> tuple[str, str]:
     return seq.id, checksum
 
 
-def get_checksum_to_ids(seqs: dict[str, SeqRecord]) -> dict[str, Set[str]]:
-    d: dict[str, Set[str]] = dict()
+def get_checksum_to_ids(seqs: dict[str, SeqRecord]) -> dict[str, set[str]]:
+    d: dict[str, set[str]] = dict()
 
     for seq in seqs.values():
         id_, chk = get_checksum(seq)
@@ -90,7 +90,7 @@ def write_remaining_seqs(
     remaining: list[str],
     seqs: dict[str, SeqRecord],
     target: TargetRow,
-    checksum_to_ids: dict[str, Set[str]],
+    checksum_to_ids: dict[str, set[str]],
     template: str
 ) -> None:
     if len(remaining) == 0:

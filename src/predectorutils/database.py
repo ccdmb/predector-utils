@@ -619,7 +619,7 @@ class ResultsTable(object):
             ((c,) for c in md5sums)
         )
 
-    def select_checksums(self) -> Iterator[ResultRow]:
+    def select_checksums_md5(self) -> Iterator[ResultRow]:
         from . import analyses
         assert self.exists_table("md5sums"), "no md5sums table"
 
@@ -744,6 +744,7 @@ class ResultsTable(object):
 
         if an.needs_database():
             db_where = "AND database_version = IFNULL(:database_version, '')"
+            assert target.database_version is not None
             target_dict["database_version"] = target.database_version
         else:
             db_where = ""

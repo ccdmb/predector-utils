@@ -383,6 +383,369 @@ class Gap(object):
         return cls(elements)
 
 
+class GFFAttributes(object):
+
+    def __init__(
+        self,
+        id: str | None = None,
+        name: str | None = None,
+        alias: Sequence[str] | None = None,
+        parent: Sequence[str] | None = None,
+        target: Target | None = None,
+        gap: Gap | None = None,
+        derives_from: Sequence[str] | None = None,
+        note: Sequence[str] | None = None,
+        dbxref: Sequence[str] | None = None,
+        ontology_term: Sequence[str] | None = None,
+        is_circular: bool = False,
+        custom: Mapping[str, Sequence[str]] | None = None,
+    ) -> None:
+        self.id = id
+        self.name = name
+
+        if alias is not None:
+            self.alias: list[str] = list(alias)
+        else:
+            self.alias = []
+
+        if parent is not None:
+            self.parent: list[str] = list(parent)
+        else:
+            self.parent = []
+
+        self.target = target
+        self.gap = gap
+
+        if derives_from is not None:
+            self.derives_from: list[str] = list(derives_from)
+        else:
+            self.derives_from = []
+
+        if note is not None:
+            self.note: list[str] = list(note)
+        else:
+            self.note = []
+
+        if dbxref is not None:
+            self.dbxref: list[str] = list(dbxref)
+        else:
+            self.dbxref = []
+
+        if ontology_term is not None:
+            self.ontology_term: list[str] = list(ontology_term)
+        else:
+            self.ontology_term = []
+
+        self.is_circular = is_circular
+
+        self.custom: dict[str, str | list[str]] = {}
+        if custom is not None:
+            for k, v in custom.items():
+                if isinstance(v, str):
+                    self.custom[k] = v
+                else:
+                    self.custom[k] = list(v)
+
+        return
+
+    @classmethod
+    def _parse_list_of_strings(
+        cls,
+        value: str,
+        strip_quote: bool = False,
+        unescape: bool = True
+    ) -> list[str]:
+        """ Parses a gff attribute list of strings. """
+        if value == "":
+            return []
+
+        if strip_quote:
+            value = value.strip("\"' ")
+
+        if unescape:
+            return [attr_unescape(v) for v in parse_attr_list(value)]
+        else:
+            return parse_attr_list(value)
+
+    @classmethod
+    def parse(
+        cls,
+        string: str,
+        strip_quote: bool = False,
+        unescape: bool = True,
+    ) -> "GFFAttributes":
+        if string.strip() in (".", ""):
+            return cls()
+
+        fields = (
+            f.split("=", maxsplit=1)
+            for f
+            in string.strip(" ;").split(";")
+        )
+
+        if strip_quote:
+            kvpairs: dict[str, str] = {
+                k.strip(): v.strip(" '\"")
+                for k, v
+                in fields
+            }
+        else:
+            kvpairs = {
+                k.strip(): v.strip()
+                for k, v
+                in fields
+            }
+
+        if unescape:
+            id = fmap(attr_unescape, kvpairs.pop("ID", None))
+        else:
+            id = kvpairs.pop("ID", None)
+
+        if id == "":
+            id = None
+
+        if unescape:
+            name = fmap(attr_unescape, kvpairs.pop("Name", None))
+        else:
+            name = kvpairs.pop("Name", None)
+
+        if name == "":
+            name = None
+
+        alias = cls._parse_list_of_strings(
+            kvpairs.pop("Alias", ""),
+            strip_quote,
+            unescape
+        )
+
+        parent = cls._parse_list_of_strings(
+            kvpairs.pop("Parent", ""),
+            strip_quote,
+            unescape
+        )
+
+        target: Target | None = fmap(
+            lambda x: Target.parse(x, unescape),
+            kvpairs.pop("Target", None)
+        )
+
+        gap = fmap(Gap.parse, kvpairs.pop("Gap", None))
+
+        derives_from = cls._parse_list_of_strings(
+            kvpairs.pop("Derives_from", ""),
+            strip_quote,
+            unescape
+        )
+
+        note = cls._parse_list_of_strings(
+            kvpairs.pop("Note", ""),
+            strip_quote,
+            unescape
+        )
+
+        dbxref = cls._parse_list_of_strings(
+            kvpairs.pop("Dbxref", ""),
+            strip_quote,
+            unescape
+        )
+
+        ontology_term = cls._parse_list_of_strings(
+            kvpairs.pop("Ontology_term", ""),
+            strip_quote,
+            unescape
+        )
+
+        is_circular = attr_is_circular(kvpairs.pop("Is_circular", "false"))
+
+        custom: dict[str, str | list[str]] = dict()
+        for k, v in kvpairs.items():
+            if "," in v:
+                custom[k] = cls._parse_list_of_strings(
+                    v, strip_quote, unescape)
+            elif v != "":
+                custom[k] = v
+
+        return cls(
+            id,
+            name,
+            alias,
+            parent,
+            target,
+            gap,
+            derives_from,
+            note,
+            dbxref,
+            ontology_term,
+            is_circular,
+            custom
+        )
+
+    def is_empty(self) -> bool:  # noqa
+        # Yes, this could be written as single boolean comparison.
+        # But it gets so long that it's hard to understand.
+        if len(self.custom) > 0:
+            return False
+        elif self.id is not None:
+            return False
+        elif self.name is not None:
+            return False
+        elif len(self.alias) > 0:
+            return False
+        elif len(self.parent) > 0:
+            return False
+        elif self.target is not None:
+            return False
+        elif self.gap is not None:
+            return False
+        elif len(self.derives_from) > 0:
+            return False
+        elif len(self.note) > 0:
+            return False
+        elif len(self.dbxref) > 0:
+            return False
+        elif len(self.ontology_term) > 0:
+            return False
+        elif self.is_circular:
+            return False
+        else:
+            return True
+
+    def __str__(self) -> str:
+        return self.as_str()
+
+    def as_str(self, escape: bool = True) -> str:
+        # Avoid having an empty string at the end.
+        if self.is_empty():
+            return "."
+
+        keys = []
+        keys.extend(GFF3_WRITE_ORDER)
+        keys.extend(self.custom.keys())
+
+        kvpairs = []
+        for key in keys:
+            value = self[key]
+            if value is None or value == []:
+                continue
+            elif key == "Is_circular" and not value:
+                continue
+
+            if escape:
+                key = attr_escape(key)
+
+            if isinstance(value, list) and escape:
+                value = ",".join(attr_escape(str(v)) for v in value)
+
+            elif isinstance(value, list):
+                value = ",".join(str(v) for v in value)
+
+            elif isinstance(value, bool):
+                value = "true" if value else "false"
+
+            else:
+                if escape:
+                    value = attr_escape(str(value))
+                else:
+                    value = str(value)
+
+            kvpairs.append((key, value))
+
+        return ";".join(f"{k}={v}" for k, v in kvpairs)
+
+    def __repr__(self) -> str:
+        param_names = [GFF3_KEY_TO_ATTR[k] for k in GFF3_WRITE_ORDER]
+        param_names.append("custom")
+
+        parameters = []
+        for param in param_names:
+            value = getattr(self, param)
+
+            if value is None or value == []:
+                continue
+
+            if isinstance(value, list):
+                value = repr(list(value))
+            else:
+                value = repr(value)
+
+            parameters.append(f"{param}={value}")
+
+        joined_parameters = ", ".join(parameters)
+        return f"GFF3Attributes({joined_parameters})"
+
+    def __getitem__(
+        self,
+        key: str,
+    ) -> str | Sequence[str] | Target | Gap | bool | None:
+        if key in GFF3_KEY_TO_ATTR:
+            return getattr(self, GFF3_KEY_TO_ATTR[key])
+        else:
+            return self.custom[key]
+
+    def __setitem__(
+        self,
+        key: str,
+        value: str | Sequence[str] | Target | Gap | bool | None,
+    ) -> None:
+        """ If the key is an attr set it, otherwise update the custom dict."""
+
+        if key in GFF3_KEY_TO_ATTR:
+            setattr(self, GFF3_KEY_TO_ATTR[key], value)
+        else:
+            self.custom[key] = cast(str, value)  # Cast is for mypy
+        return
+
+    def __delitem__(self, key: str) -> None:
+        """ Removes an item from the custom dictionary or resets
+        attribute to default """
+
+        if key in ("ID", "Name", "Target", "Gap"):
+            setattr(self, GFF3_KEY_TO_ATTR[key], None)
+
+        elif key in ("Alias", "Parent", "Derives_from", "Note",
+                     "Dbxref", "Ontology_term"):
+            setattr(self, GFF3_KEY_TO_ATTR[key], [])
+
+        elif key == "Is_circular":
+            setattr(self, GFF3_KEY_TO_ATTR[key], False)
+
+        else:
+            del self.custom[key]
+
+        return
+
+    def get(
+        self,
+        key: str,
+        default: str | Sequence[str] | Target | Gap | bool | None = None,
+    ) -> str | Sequence[str] | Target | Gap | bool | None:
+        """ Gets an atrribute or element from the custom dict. """
+
+        if key in GFF3_KEY_TO_ATTR:
+            return getattr(self, GFF3_KEY_TO_ATTR[key])
+        else:
+            return self.custom.get(key, default)
+
+    def pop(
+        self,
+        key: str,
+        default: str | Sequence[str] | Target | Gap | bool | None = None,
+    ) -> str | Sequence[str] | Target | Gap | bool | None:
+        """ Removes an item from the attributes and returns its value.
+
+        If the item is one of the reserved GFF3 terms, the
+        value is reset to the default.
+        """
+
+        if key in GFF3_KEY_TO_ATTR:
+            value = getattr(self, GFF3_KEY_TO_ATTR[key])
+            del self[GFF3_KEY_TO_ATTR[key]]
+            return value
+
+        else:
+            return self.custom.pop(key, default)
+
+
 class GFFRecord(object):
 
     columns: list[str] = [
@@ -407,7 +770,7 @@ class GFFRecord(object):
         score: float | None = None,
         strand: Strand = Strand.UNSTRANDED,
         phase: Phase = Phase.NOT_CDS,
-        attributes: "GFFAttributes" | None = None,
+        attributes: GFFAttributes | None = None,
         parents: Sequence["GFFRecord"] | None = None,
         children: Sequence["GFFRecord"] | None = None,
         derives_froms: Sequence["GFFRecord"] | None = None,
@@ -887,366 +1250,3 @@ class GFFRecord(object):
                 .add_filename_from_handle(handle)
             )
         return
-
-
-class GFFAttributes(object):
-
-    def __init__(
-        self,
-        id: str | None = None,
-        name: str | None = None,
-        alias: Sequence[str] | None = None,
-        parent: Sequence[str] | None = None,
-        target: Target | None = None,
-        gap: Gap | None = None,
-        derives_from: Sequence[str] | None = None,
-        note: Sequence[str] | None = None,
-        dbxref: Sequence[str] | None = None,
-        ontology_term: Sequence[str] | None = None,
-        is_circular: bool = False,
-        custom: Mapping[str, Sequence[str]] | None = None,
-    ) -> None:
-        self.id = id
-        self.name = name
-
-        if alias is not None:
-            self.alias: list[str] = list(alias)
-        else:
-            self.alias = []
-
-        if parent is not None:
-            self.parent: list[str] = list(parent)
-        else:
-            self.parent = []
-
-        self.target = target
-        self.gap = gap
-
-        if derives_from is not None:
-            self.derives_from: list[str] = list(derives_from)
-        else:
-            self.derives_from = []
-
-        if note is not None:
-            self.note: list[str] = list(note)
-        else:
-            self.note = []
-
-        if dbxref is not None:
-            self.dbxref: list[str] = list(dbxref)
-        else:
-            self.dbxref = []
-
-        if ontology_term is not None:
-            self.ontology_term: list[str] = list(ontology_term)
-        else:
-            self.ontology_term = []
-
-        self.is_circular = is_circular
-
-        self.custom: dict[str, str | list[str]] = {}
-        if custom is not None:
-            for k, v in custom.items():
-                if isinstance(v, str):
-                    self.custom[k] = v
-                else:
-                    self.custom[k] = list(v)
-
-        return
-
-    @classmethod
-    def _parse_list_of_strings(
-        cls,
-        value: str,
-        strip_quote: bool = False,
-        unescape: bool = True
-    ) -> list[str]:
-        """ Parses a gff attribute list of strings. """
-        if value == "":
-            return []
-
-        if strip_quote:
-            value = value.strip("\"' ")
-
-        if unescape:
-            return [attr_unescape(v) for v in parse_attr_list(value)]
-        else:
-            return parse_attr_list(value)
-
-    @classmethod
-    def parse(
-        cls,
-        string: str,
-        strip_quote: bool = False,
-        unescape: bool = True,
-    ) -> "GFFAttributes":
-        if string.strip() in (".", ""):
-            return cls()
-
-        fields = (
-            f.split("=", maxsplit=1)
-            for f
-            in string.strip(" ;").split(";")
-        )
-
-        if strip_quote:
-            kvpairs: dict[str, str] = {
-                k.strip(): v.strip(" '\"")
-                for k, v
-                in fields
-            }
-        else:
-            kvpairs = {
-                k.strip(): v.strip()
-                for k, v
-                in fields
-            }
-
-        if unescape:
-            id = fmap(attr_unescape, kvpairs.pop("ID", None))
-        else:
-            id = kvpairs.pop("ID", None)
-
-        if id == "":
-            id = None
-
-        if unescape:
-            name = fmap(attr_unescape, kvpairs.pop("Name", None))
-        else:
-            name = kvpairs.pop("Name", None)
-
-        if name == "":
-            name = None
-
-        alias = cls._parse_list_of_strings(
-            kvpairs.pop("Alias", ""),
-            strip_quote,
-            unescape
-        )
-
-        parent = cls._parse_list_of_strings(
-            kvpairs.pop("Parent", ""),
-            strip_quote,
-            unescape
-        )
-
-        target: Target | None = fmap(
-            lambda x: Target.parse(x, unescape),
-            kvpairs.pop("Target", None)
-        )
-
-        gap = fmap(Gap.parse, kvpairs.pop("Gap", None))
-
-        derives_from = cls._parse_list_of_strings(
-            kvpairs.pop("Derives_from", ""),
-            strip_quote,
-            unescape
-        )
-
-        note = cls._parse_list_of_strings(
-            kvpairs.pop("Note", ""),
-            strip_quote,
-            unescape
-        )
-
-        dbxref = cls._parse_list_of_strings(
-            kvpairs.pop("Dbxref", ""),
-            strip_quote,
-            unescape
-        )
-
-        ontology_term = cls._parse_list_of_strings(
-            kvpairs.pop("Ontology_term", ""),
-            strip_quote,
-            unescape
-        )
-
-        is_circular = attr_is_circular(kvpairs.pop("Is_circular", "false"))
-
-        custom: dict[str, str | list[str]] = dict()
-        for k, v in kvpairs.items():
-            if "," in v:
-                custom[k] = cls._parse_list_of_strings(
-                    v, strip_quote, unescape)
-            elif v != "":
-                custom[k] = v
-
-        return cls(
-            id,
-            name,
-            alias,
-            parent,
-            target,
-            gap,
-            derives_from,
-            note,
-            dbxref,
-            ontology_term,
-            is_circular,
-            custom
-        )
-
-    def is_empty(self) -> bool:  # noqa
-        # Yes, this could be written as single boolean comparison.
-        # But it gets so long that it's hard to understand.
-        if len(self.custom) > 0:
-            return False
-        elif self.id is not None:
-            return False
-        elif self.name is not None:
-            return False
-        elif len(self.alias) > 0:
-            return False
-        elif len(self.parent) > 0:
-            return False
-        elif self.target is not None:
-            return False
-        elif self.gap is not None:
-            return False
-        elif len(self.derives_from) > 0:
-            return False
-        elif len(self.note) > 0:
-            return False
-        elif len(self.dbxref) > 0:
-            return False
-        elif len(self.ontology_term) > 0:
-            return False
-        elif self.is_circular:
-            return False
-        else:
-            return True
-
-    def __str__(self) -> str:
-        return self.as_str()
-
-    def as_str(self, escape: bool = True) -> str:
-        # Avoid having an empty string at the end.
-        if self.is_empty():
-            return "."
-
-        keys = []
-        keys.extend(GFF3_WRITE_ORDER)
-        keys.extend(self.custom.keys())
-
-        kvpairs = []
-        for key in keys:
-            value = self[key]
-            if value is None or value == []:
-                continue
-            elif key == "Is_circular" and not value:
-                continue
-
-            if escape:
-                key = attr_escape(key)
-
-            if isinstance(value, list) and escape:
-                value = ",".join(attr_escape(str(v)) for v in value)
-
-            elif isinstance(value, list):
-                value = ",".join(str(v) for v in value)
-
-            elif isinstance(value, bool):
-                value = "true" if value else "false"
-
-            else:
-                if escape:
-                    value = attr_escape(str(value))
-                else:
-                    value = str(value)
-
-            kvpairs.append((key, value))
-
-        return ";".join(f"{k}={v}" for k, v in kvpairs)
-
-    def __repr__(self) -> str:
-        param_names = [GFF3_KEY_TO_ATTR[k] for k in GFF3_WRITE_ORDER]
-        param_names.append("custom")
-
-        parameters = []
-        for param in param_names:
-            value = getattr(self, param)
-
-            if value is None or value == []:
-                continue
-
-            if isinstance(value, list):
-                value = repr(list(value))
-            else:
-                value = repr(value)
-
-            parameters.append(f"{param}={value}")
-
-        joined_parameters = ", ".join(parameters)
-        return f"GFF3Attributes({joined_parameters})"
-
-    def __getitem__(
-        self,
-        key: str,
-    ) -> str | Sequence[str] | Target | Gap | bool | None:
-        if key in GFF3_KEY_TO_ATTR:
-            return getattr(self, GFF3_KEY_TO_ATTR[key])
-        else:
-            return self.custom[key]
-
-    def __setitem__(
-        self,
-        key: str,
-        value: str | Sequence[str] | Target | Gap | bool | None,
-    ) -> None:
-        """ If the key is an attr set it, otherwise update the custom dict."""
-
-        if key in GFF3_KEY_TO_ATTR:
-            setattr(self, GFF3_KEY_TO_ATTR[key], value)
-        else:
-            self.custom[key] = cast(str, value)  # Cast is for mypy
-        return
-
-    def __delitem__(self, key: str) -> None:
-        """ Removes an item from the custom dictionary or resets
-        attribute to default """
-
-        if key in ("ID", "Name", "Target", "Gap"):
-            setattr(self, GFF3_KEY_TO_ATTR[key], None)
-
-        elif key in ("Alias", "Parent", "Derives_from", "Note",
-                     "Dbxref", "Ontology_term"):
-            setattr(self, GFF3_KEY_TO_ATTR[key], [])
-
-        elif key == "Is_circular":
-            setattr(self, GFF3_KEY_TO_ATTR[key], False)
-
-        else:
-            del self.custom[key]
-
-        return
-
-    def get(
-        self,
-        key: str,
-        default: str | Sequence[str] | Target | Gap | bool | None = None,
-    ) -> str | Sequence[str] | Target | Gap | bool | None:
-        """ Gets an atrribute or element from the custom dict. """
-
-        if key in GFF3_KEY_TO_ATTR:
-            return getattr(self, GFF3_KEY_TO_ATTR[key])
-        else:
-            return self.custom.get(key, default)
-
-    def pop(
-        self,
-        key: str,
-        default: str | Sequence[str] | Target | Gap | bool | None = None,
-    ) -> str | Sequence[str] | Target | Gap | bool | None:
-        """ Removes an item from the attributes and returns its value.
-
-        If the item is one of the reserved GFF3 terms, the
-        value is reset to the default.
-        """
-
-        if key in GFF3_KEY_TO_ATTR:
-            value = getattr(self, GFF3_KEY_TO_ATTR[key])
-            del self[GFF3_KEY_TO_ATTR[key]]
-            return value
-
-        else:
-            return self.custom.pop(key, default)
