@@ -98,7 +98,8 @@ def make_polypeptide(
     pep.type = "polypeptide"
     pep.phase = Phase.NOT_CDS
     id_ = pep.attributes.id
-    assert id_ is not None
+
+    assert id_ is not None, pep
     pep.attributes.id = "polypeptide-" + id_
 
     if derives_from:
@@ -121,7 +122,7 @@ def cds_to_polypeptide(
         pep = make_polypeptide(cds, derives_from=derives_from)
         peps.append(pep)
 
-    return [peps]
+    return peps
 
 
 def project_plus(
@@ -602,6 +603,9 @@ def inner(  # noqa: C901
         id_ = get_id(g, id_field)
         if id_ is None:
             continue
+
+        # This avoids problems later on in make_polypeptide
+        g.attributes.id = id_
         cdss[id_].append(g)
 
     prots: defaultdict[str, list[GFFRecord]] = defaultdict(list)
@@ -635,6 +639,7 @@ def inner(  # noqa: C901
     mapped: list[GFFRecord] = []
     for id_, these_prots in prots.items():
         these_cdss = cdss[id_]
+
         feats = split_protein_features(
             these_prots,
             these_cdss,

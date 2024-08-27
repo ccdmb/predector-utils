@@ -4,6 +4,8 @@ from typing import TypeVar
 from typing import TextIO
 from collections.abc import Iterator, Sequence
 
+import pandas as pd
+
 from ..gff import (
     GFFRecord,
     Strand
@@ -56,6 +58,34 @@ def parse_topology(s: str):
     return
 
 
+def find_top_string(rec):
+    import pandas as pd
+
+    sps = []
+    tms = []
+    for rec in rec.as_gff():
+        v = f"{rec.start + 1}-{rec.end}"
+        if rec.type == "signal_peptide":
+            sps.append(v)
+        elif rec.type == "transmembrane_polypeptide_region":
+            tms.append(v)
+        else:
+            raise ValueError("I wasn't expecting this")
+
+    out = ""
+    if len(sps) > 0:
+        out += f"sp:{','.join(sps)}"
+
+    if len(tms) > 0:
+        if len(sps) > 0:
+            out += "|"
+        out += f"tm:{','.join(tms)}"
+
+    if out == "":
+        return pd.NA
+    return out
+
+
 class TMBed(Analysis, GFFAble):
 
     """ .
@@ -90,7 +120,7 @@ class TMBed(Analysis, GFFAble):
         except FieldParseError as e:
             raise e.as_block_error(0)
 
-        name = name.lstrip(">")
+        name = name.lstrip(">").split(" ", maxsplit=1)[0]
 
         try:
             top = tm_topology(ilines[2].strip())
@@ -160,6 +190,19 @@ class TMBed(Analysis, GFFAble):
                 )
 
         return
+
+    def as_series(self) -> pd.Series:
+        import pandas as pd
+        return pd.Series(
+            [
+                self.name,
+                self.has_sp,
+                self.has_tm,
+                find_top_string(self)
+            ],
+            index=["name", "has_sp", "has_tm", "topology"]
+        )
+
 
     def as_gff(
         self,
