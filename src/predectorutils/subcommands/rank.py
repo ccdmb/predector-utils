@@ -1357,6 +1357,30 @@ def run_ltr(df: pd.DataFrame) -> np.ndarray:
         'targetp_secreted_prob',
     ]]
 
+    df_features = df_features.astype({
+        'molecular_weight': float,
+        'aa_c_prop': float,
+        'aa_tiny_prop': float,
+        'aa_small_prop': float,
+        'aa_nonpolar_prop': float,
+        'aa_basic_prop': float,
+        'effectorp1': float,
+        'effectorp2': float,
+        'apoplastp': float,
+        'phobius_tmcount': int,
+        'tmhmm_tmcount': int,
+        'tmhmm_first_60': float,
+        'deeploc_membrane': float,
+        'deeploc_extracellular': float,
+        'deepsig': int,
+        'phobius_sp': int,
+        'signalp3_nn_d': float,
+        'signalp3_hmm_s': float,
+        'signalp4_d': float,
+        'signalp5_prob': float,
+        'targetp_secreted_prob': float
+    })
+
     dmat = xgb.DMatrix(df_features)
     model = get_ltr_model()
     return model.predict(dmat)
