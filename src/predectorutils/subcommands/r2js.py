@@ -13,6 +13,7 @@ from Bio.SeqUtils.CheckSum import seguid
 
 
 from ..analyses import Analysis, Analyses
+from ..parsers import ParseError
 
 
 def cli(parser: argparse.ArgumentParser) -> None:
@@ -140,6 +141,7 @@ def runner(args: argparse.Namespace) -> None:
     checksums = get_checksums(seqs)
     md5sums = get_md5sums(seqs)
     analysis = args.format.get_analysis()
+    nrecords = 0
     for line in analysis.from_file(args.infile):
         dline = get_line(
             args.pipeline_version,
@@ -150,5 +152,18 @@ def runner(args: argparse.Namespace) -> None:
             checksums,
             md5sums
         )
+        nrecords += 1
         print(json.dumps(dline), file=args.outfile)
+
+    if (nrecords == 0) and (len(seqs) > 0):
+        raise ParseError(
+            filename = args.infile.name,
+            line = None,
+            message = (
+                "We could not parse any records from the input file.\n"
+                "It's possible that the input is empty, or that it is in the wrong format.\n"
+                "This can happen if an analysis fails but doesn't tell us that it failed.\n"
+                "Please check the input file indicated above and contact us for help if you need it."
+            )
+        )
     return

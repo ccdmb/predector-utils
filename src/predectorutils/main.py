@@ -3,7 +3,7 @@
 import sys
 import traceback
 import argparse
-
+from os.path import realpath
 
 from predectorutils import __version__, __email__
 from predectorutils.subcommands.r2js import cli as r2js_cli
@@ -309,9 +309,9 @@ def main():  # noqa
     except ParseError as e:
         if e.line is not None:
             header = "Failed to parse file <{}> at line {}.\n".format(
-                e.filename, e.line)
+                realpath(e.filename), e.line)
         else:
-            header = "Failed to parse file <{}>.\n".format(e.filename)
+            header = "Failed to parse file <{}>.\n".format(realpath(e.filename))
 
         print("{}\n{}".format(header, e.message), file=sys.stderr)
         sys.exit(EXIT_INPUT_FORMAT)

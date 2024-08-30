@@ -35,6 +35,10 @@ from .base import str_or_none
 __all__ = ["SignalP3NN", "SignalP3HMM", "SignalP4", "SignalP5"]
 
 
+ONLY_SPACE = re.compile(r"^\s*$")
+STARTS_COMMENT = re.compile(r"^\s*#")
+
+
 s3nn_name = raise_it(parse_field(parse_str, "name"))
 s3nn_cmax = raise_it(parse_field(parse_float, "cmax"))
 s3nn_cmax_pos = raise_it(parse_field(parse_int, "cmax_pos"))
@@ -161,15 +165,18 @@ class SignalP3NN(Analysis, GFFAble):
     def from_line(cls, line: str) -> "SignalP3NN":
         """ Parse a short-format NN line as an object. """
 
-        if line == "":
+        if ONLY_SPACE.match(line) is not None: 
             raise LineParseError("The line was empty.")
 
         sline = MULTISPACE_REGEX.split(line)
+        if sline[-1] == "":
+            sline = sline[:-1]
 
         if len(sline) != 14:
             raise LineParseError(
                 "The line had the wrong number of columns. "
-                f"Expected 14 but got {len(sline)}"
+                f"Expected 14 but got {len(sline)}",
+                problematic_line=line
             )
         return cls(
             s3nn_name(sline[0]),
@@ -191,10 +198,10 @@ class SignalP3NN(Analysis, GFFAble):
     @classmethod
     def from_file(cls, handle: TextIO) -> Iterator["SignalP3NN"]:
         for i, line in enumerate(handle):
-            sline = line.strip()
-            if sline.startswith("#"):
+            sline = line.rstrip("\n")
+            if STARTS_COMMENT.match(sline) is not None:
                 continue
-            elif sline == "":
+            elif ONLY_SPACE.match(sline) is not None: 
                 continue
 
             if sline == "error running HOW":
@@ -346,15 +353,18 @@ class SignalP3HMM(Analysis, GFFAble):
     def from_line(cls, line: str) -> "SignalP3HMM":
         """ Parse a short-format HMM line as an object. """
 
-        if line == "":
+        if ONLY_SPACE.match(line) is not None: 
             raise LineParseError("The line was empty.")
 
         sline = MULTISPACE_REGEX.split(line)
+        if sline[-1] == "":
+            sline = sline[:-1]
 
         if len(sline) != 7:
             raise LineParseError(
                 "The line had the wrong number of columns. "
-                f"Expected 7 but got {len(sline)}"
+                f"Expected 7 but got {len(sline)}",
+                problematic_line=line
             )
 
         # in column !.
@@ -372,10 +382,10 @@ class SignalP3HMM(Analysis, GFFAble):
     @classmethod
     def from_file(cls, handle: TextIO) -> Iterator["SignalP3HMM"]:
         for i, line in enumerate(handle):
-            sline = line.strip()
-            if sline.startswith("#"):
+            sline = line.strip("\n")
+            if STARTS_COMMENT.match(sline) is not None:
                 continue
-            elif sline == "":
+            elif ONLY_SPACE.match(sline) is not None: 
                 continue
 
             try:
@@ -526,7 +536,7 @@ class SignalP4(Analysis, GFFAble):
     def from_line(cls, line: str) -> "SignalP4":
         """ Parse a short-format signalp4 line as an object. """
 
-        if line == "":
+        if ONLY_SPACE.match(line) is not None: 
             raise LineParseError("The line was empty.")
 
         sline = MULTISPACE_REGEX.split(line)
@@ -534,7 +544,8 @@ class SignalP4(Analysis, GFFAble):
         if len(sline) != 12:
             raise LineParseError(
                 "The line had the wrong number of columns. "
-                f"Expected 12 but got {len(sline)}"
+                f"Expected 12 but got {len(sline)}.",
+                problematic_line=line
             )
 
         return cls(
@@ -555,10 +566,10 @@ class SignalP4(Analysis, GFFAble):
     @classmethod
     def from_file(cls, handle: TextIO) -> Iterator["SignalP4"]:
         for i, line in enumerate(handle):
-            sline = line.strip()
-            if sline.startswith("#"):
+            sline = line.rstrip("\n")
+            if STARTS_COMMENT.match(sline) is not None:
                 continue
-            elif sline == "":
+            elif ONLY_SPACE.match(sline) is not None: 
                 continue
 
             try:
@@ -672,7 +683,7 @@ class SignalP5(Analysis, GFFAble):
     def from_line(cls, line: str) -> "SignalP5":
         """ Parse a short-format signalp5 line as an object. """
 
-        if line == "":
+        if ONLY_SPACE.match(line) is not None: 
             raise LineParseError("The line was empty.")
 
         sline = line.strip().split("\t")
@@ -684,7 +695,8 @@ class SignalP5(Analysis, GFFAble):
         else:
             raise LineParseError(
                 "The line had the wrong number of columns. "
-                f"Expected 4 or 5 but got {len(sline)}"
+                f"Expected 4 or 5 but got {len(sline)}",
+                problematic_line=line
             )
 
         return cls(
@@ -698,10 +710,10 @@ class SignalP5(Analysis, GFFAble):
     @classmethod
     def from_file(cls, handle: TextIO) -> Iterator["SignalP5"]:
         for i, line in enumerate(handle):
-            sline = line.strip()
-            if sline.startswith("#"):
+            sline = line.rstrip("\n")
+            if STARTS_COMMENT.match(sline) is not None:
                 continue
-            elif sline == "":
+            elif ONLY_SPACE.match(sline) is not None: 
                 continue
 
             try:
@@ -800,7 +812,7 @@ class SignalP6(Analysis, GFFAble):
     def from_line(cls, line: str) -> "SignalP6":
         """ Parse a short-format signalp5 line as an object. """
 
-        if line == "":
+        if ONLY_SPACE.match(line) is not None: 
             raise LineParseError("The line was empty.")
 
         sline = line.strip().split("\t")
@@ -812,7 +824,8 @@ class SignalP6(Analysis, GFFAble):
         else:
             raise LineParseError(
                 "The line had the wrong number of columns. "
-                f"Expected 4 or 5 but got {len(sline)}"
+                f"Expected 4 or 5 but got {len(sline)}",
+                problematic_line=line
             )
 
         return cls(
@@ -826,10 +839,10 @@ class SignalP6(Analysis, GFFAble):
     @classmethod
     def from_file(cls, handle: TextIO) -> Iterator["SignalP6"]:
         for i, line in enumerate(handle):
-            sline = line.strip()
-            if sline.startswith("#"):
+            sline = line.rstrip("\n")
+            if STARTS_COMMENT.match(sline) is not None:
                 continue
-            elif sline == "":
+            elif ONLY_SPACE.match(sline) is not None: 
                 continue
 
             try:

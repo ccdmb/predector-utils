@@ -21,7 +21,7 @@ class ValueParseError(Exception):
         self,
         got: str,
         expected: str,
-        template: str = "Could not parse value {got} as {expected}."
+        template: str = "Could not parse value '{got}' as {expected}."
     ):
         self.got = got
         self.expected = expected
@@ -79,12 +79,17 @@ class FieldParseError(Exception):
 
 
 class LineParseError(Exception):
-    def __init__(self, message: str):
+    def __init__(self, message: str, problematic_line: Optional[str] = None):
         self.message = message
+        self.problematic_line = problematic_line
         return
 
     def __str__(self) -> str:
-        return self.message
+        if self.problematic_line is not None:
+            msg = f"{self.message}\nThe line causing the problem was: '{self.problematic_line}'"
+        else:
+            msg = self.message
+        return msg
 
     def as_block_error(self, line: Optional[int] = None) -> "BlockParseError":
         return BlockParseError(line, str(self))
