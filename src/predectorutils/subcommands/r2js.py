@@ -5,7 +5,7 @@ import argparse
 import json
 import hashlib
 
-from typing import Any
+from typing import Any, Optional
 
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
@@ -77,9 +77,9 @@ def cli(parser: argparse.ArgumentParser) -> None:
 
 
 def get_line(
-    pipeline_version: str | None,
-    software_version: str | None,
-    database_version: str | None,
+    pipeline_version: Optional[str],
+    software_version: Optional[str],
+    database_version: Optional[str],
     analysis_type: Analyses,
     analysis: Analysis,
     checksums: dict[str, str],

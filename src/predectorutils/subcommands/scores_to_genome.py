@@ -6,6 +6,7 @@ import argparse
 from collections import defaultdict
 
 from typing import TextIO
+from typing import Optional
 
 import pandas as pd
 from intervaltree import IntervalTree, Interval
@@ -122,7 +123,7 @@ def cli(parser: argparse.ArgumentParser) -> None:
 def get_id(
     record: GFFRecord,
     id_field: str
-) -> str | None:
+) -> Optional[str]:
 
     id_ = record.attributes.get(id_field, None)
     if id_ is None:
@@ -149,7 +150,7 @@ def inner(  # noqa: C901
     annotations: TextIO,
     outfile: TextIO,
     id_field: str,
-    target: list[str] | None,
+    target: Optional[list[str]],
     reducer: str
 ):
     gff = list(GFFRecord.from_file(genes))

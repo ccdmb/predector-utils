@@ -2,6 +2,7 @@
 
 import re
 from typing import TextIO
+from typing import Optional
 from collections.abc import Iterator
 
 from ..gff import (
@@ -9,6 +10,8 @@ from ..gff import (
     GFFAttributes,
     Strand,
 )
+
+from ..higher import fmap
 
 from ..parsers import (
     FieldParseError,
@@ -84,7 +87,7 @@ class TargetPNonPlant(Analysis, GFFAble):
         other: float,
         sp: float,
         mtp: float,
-        cs_pos: str | None,
+        cs_pos: Optional[str],
     ) -> None:
         self.name = name
         self.prediction = prediction
@@ -102,7 +105,7 @@ class TargetPNonPlant(Analysis, GFFAble):
         sline = line.strip().split("\t")
 
         if len(sline) == 6:
-            cs_pos: str | None = str(sline[5])
+            cs_pos: Optional[str] = str(sline[5])
         elif len(sline) == 5:
             cs_pos = None
         else:
@@ -144,8 +147,8 @@ class TargetPNonPlant(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: str | None = None,
-        database_version: str | None = None,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
@@ -214,9 +217,9 @@ class TargetPPlant(Analysis, GFFAble):
         other: float,
         sp: float,
         mtp: float,
-        ctp: float | None,
-        lutp: float | None,
-        cs_pos: str | None,
+        ctp: Optional[float],
+        lutp: Optional[float],
+        cs_pos: Optional[str],
     ) -> None:
         self.name = name
         self.prediction = prediction
@@ -236,7 +239,7 @@ class TargetPPlant(Analysis, GFFAble):
         sline = line.strip().split("\t")
 
         if len(sline) == 8:
-            cs_pos: str | None = str(sline[7])
+            cs_pos: Optional[str] = str(sline[7])
         elif len(sline) == 7:
             cs_pos = None
         else:
@@ -273,8 +276,8 @@ class TargetPPlant(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: str | None = None,
-        database_version: str | None = None,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
@@ -313,7 +316,7 @@ class TargetPPlant(Analysis, GFFAble):
                     "cTP": "transit_peptide",
                     "luTP": "transit_peptide"
                 }[cs["kind"]]
-                prob: float | None = cs.get("cs_prob", None)
+                prob: Optional[float] = fmap(float, cs.get("cs_prob", None))
             elif self.prediction == "SP":
                 type_ = "signal_peptide"
                 prob = self.sp

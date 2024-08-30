@@ -2,6 +2,7 @@
 
 import re
 from typing import TextIO
+from typing import Optional
 from collections.abc import Iterator
 
 from ..gff import (
@@ -204,8 +205,8 @@ class MMSeqs(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: str | None = None,
-        database_version: str | None = None,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:

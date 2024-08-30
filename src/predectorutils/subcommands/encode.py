@@ -4,6 +4,7 @@ from os.path import split as psplit
 
 import re
 import argparse
+import hashlib
 
 from typing import NamedTuple
 
@@ -62,6 +63,7 @@ class TableLine(NamedTuple):
     filename: str
     id: str
     checksum: str
+    md5sum: str
 
 
 def get_checksum(seq: SeqRecord) -> tuple[str, str]:
@@ -69,8 +71,13 @@ def get_checksum(seq: SeqRecord) -> tuple[str, str]:
     return seq.id, checksum
 
 
+def get_md5sum(seq: SeqRecord) -> tuple[str, str]:
+    md = hashlib.md5(str(seq.seq).encode()).hexdigest()
+    return seq.id, md
+
+
 def format_table_line(t: TableLine) -> str:
-    return f"{t.encoded}\t{t.filename}\t{t.id}\t{t.checksum}"
+    return f"{t.encoded}\t{t.filename}\t{t.id}\t{t.checksum}\t{t.md5sum}"
 
 
 def runner(args: argparse.Namespace) -> None:
@@ -116,7 +123,9 @@ def runner(args: argparse.Namespace) -> None:
                 i += 1
                 new_seq = True
 
-            line = TableLine(encoded, psplit(infile)[1], id_, checksum)
+            _, md5sum = get_md5sum(seq)
+
+            line = TableLine(encoded, psplit(infile)[1], id_, checksum, md5sum)
             tab_chunk.append(format_table_line(line))
 
             if new_seq:

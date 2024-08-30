@@ -8,6 +8,8 @@ from statistics import median
 
 import sqlite3
 
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 import xgboost as xgb
@@ -307,7 +309,7 @@ class AggPhobiusTMDomains(AggBase):
     analysis = Analyses.phobius
     sql_fname = "agg_phobius_domains"
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.matches: list[tuple[int, int]] = []
         return
 
@@ -328,7 +330,7 @@ class AggPhobiusTMDomains(AggBase):
             self.matches.append((gffrow.start + 1, gffrow.end))
         return
 
-    def finalize(self) -> str | None:
+    def finalize(self) -> Optional[str]:
         if len(self.matches) == 0:
             return None
 
@@ -352,7 +354,7 @@ class AggTMHMMDomains(AggBase):
     analysis = Analyses.tmhmm
     sql_fname = "agg_tmhmm_domains"
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.matches: list[tuple[int, int]] = []
         return
 
@@ -373,7 +375,7 @@ class AggTMHMMDomains(AggBase):
             self.matches.append((gffrow.start + 1, gffrow.end))
         return
 
-    def finalize(self) -> str | None:
+    def finalize(self) -> Optional[str]:
         if len(self.matches) == 0:
             return None
 
@@ -406,7 +408,7 @@ class AggTMSPCoverage(AggBase):
     ]
     sql_fname = "agg_tmsp_coverage"
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.signals: list[int] = []
         self.membranes: list[tuple[int, int]] = []
         return
@@ -484,7 +486,7 @@ class AggSPCutsite(AggBase):
     ]
     sql_fname = "agg_sp_cutsite"
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.matches: list[tuple[str, int]] = []
         return
 
@@ -505,7 +507,7 @@ class AggSPCutsite(AggBase):
             self.matches.append((an.__class__.__name__, gffrow.end))
         return
 
-    def finalize(self) -> str | None:
+    def finalize(self) -> Optional[str]:
         if len(self.matches) == 0:
             return None
 
@@ -530,7 +532,7 @@ class AggKex2(AggBase):
     analysis = Analyses.kex2_cutsite
     sql_fname = "agg_kex2"
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.matches: dict[tuple[str, int, int], set[str]] = dict()
         return
 
@@ -549,7 +551,7 @@ class AggKex2(AggBase):
             self.matches[tup] = {pattern}
         return
 
-    def finalize(self) -> str | None:
+    def finalize(self) -> Optional[str]:
         if len(self.matches) == 0:
             return None
         else:
@@ -577,7 +579,7 @@ class AggRxLR(AggBase):
     analysis = Analyses.rxlr_like_motif
     sql_fname = "agg_rxlr"
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.matches: list[tuple[str, int, int]] = []
         return
 
@@ -590,7 +592,7 @@ class AggRxLR(AggBase):
         self.matches.append((match, start + 1, end))
         return
 
-    def finalize(self) -> str | None:
+    def finalize(self) -> Optional[str]:
         if len(self.matches) == 0:
             return None
         else:
@@ -616,7 +618,7 @@ class AggPHIMatches(AggBase):
     nargs = 1
     index: int
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.matches: dict[str, float] = dict()
         return
 
@@ -642,7 +644,7 @@ class AggPHIMatches(AggBase):
                     self.matches[match] = an.evalue
         return
 
-    def finalize(self) -> str | None:
+    def finalize(self) -> Optional[str]:
         if len(self.matches) == 0:
             return None
         else:
@@ -687,7 +689,7 @@ class AggPHIHasMatch(AggBase):
     index = 5
     targets: set[str]
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.phenos: set[str] = set()
         return
 
@@ -746,7 +748,7 @@ class AggPHILethalMatch(AggPHIHasMatch):
 class AggHMMER(AggBase):
     nargs = 1
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.matches: dict[str, float] = {}
         return
 
@@ -769,7 +771,7 @@ class AggHMMER(AggBase):
 
         return
 
-    def finalize(self) -> str | None:
+    def finalize(self) -> Optional[str]:
         if len(self.matches) == 0:
             return None
 
@@ -803,8 +805,8 @@ class AggSperProb(AggBase):
     prob_col: str
     pos_values: list[str]
 
-    def __init__(self):
-        self.prob: float | None = None
+    def __init__(self) -> None:
+        self.prob: Optional[float] = None
         return
 
     def step(self, prob: float, pred: str) -> None:
@@ -817,7 +819,7 @@ class AggSperProb(AggBase):
             self.prob = 1 - prob
         return
 
-    def finalize(self) -> float | None:
+    def finalize(self) -> Optional[float]:
         return self.prob
 
     @classmethod

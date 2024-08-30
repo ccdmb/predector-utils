@@ -2,6 +2,7 @@
 
 import re
 from typing import TextIO
+from typing import Optional
 from collections.abc import Iterator
 
 from ..gff import GFFRecord, GFFAttributes, Strand, Target
@@ -124,8 +125,8 @@ class PfamScan(Analysis, GFFAble):
         bitscore: float,
         evalue: float,
         is_significant: bool,
-        clan: str | None,
-        active_sites: str | None
+        clan: Optional[str],
+        active_sites: Optional[str]
     ):
         self.name = name
         self.ali_start = ali_start
@@ -160,7 +161,7 @@ class PfamScan(Analysis, GFFAble):
             )
 
         if len(sline) == 15:
-            active_sites: str | None = None
+            active_sites: Optional[str] = None
         else:
             active_sites = parse_predicted_active_site(sline[15])
 
@@ -201,8 +202,8 @@ class PfamScan(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: str | None = None,
-        database_version: str | None = None,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:

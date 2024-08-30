@@ -3,6 +3,7 @@
 import re
 
 from typing import TextIO
+from typing import Optional
 from collections.abc import Iterator
 
 from .base import Analysis
@@ -178,7 +179,7 @@ e3_prediction = raise_it(parse_field(
 E3_REGEX = re.compile(r"^Y \((?P<prob>\d?\.?\d+)\)$")
 
 
-def e3_parse_field(field: str, field_name: str) -> float | None:
+def e3_parse_field(field: str, field_name: str) -> Optional[float]:
     field = field.strip()
     if field == "-":
         return None
@@ -209,9 +210,9 @@ class EffectorP3(Analysis):
         self,
         name: str,
         prediction: str,
-        cytoplasmic_prob: float | None,
-        apoplastic_prob: float | None,
-        noneffector_prob: float | None,
+        cytoplasmic_prob: Optional[float],
+        apoplastic_prob: Optional[float],
+        noneffector_prob: Optional[float],
     ) -> None:
         self.name = name
         self.prediction = prediction

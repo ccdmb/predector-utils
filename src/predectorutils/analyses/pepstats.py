@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
 import re
+from typing import Any
 from typing import TextIO
 from typing import TypeVar
 from typing import Callable
 from typing import Pattern
+from typing import Optional
 
 from typing import Iterator, Iterable, Sequence
 
@@ -23,6 +25,26 @@ from .base import Analysis, float_or_none
 
 T = TypeVar("T")
 
+def assert_type(val: Any, type_: type[T]) -> T:
+    assert isinstance(val, type_), f"ERROR: {val} is not an instance of {type_}."
+    return val
+
+
+def try_type(val: Any, type_: Callable[[T], T]) -> T:
+    try:
+        return type_(val)
+    except Exception:
+        raise ValueError(f"{val} cannot be converted to type {type_}.")
+
+
+def try_int(val: Any) -> int:
+    return try_type(val, int)
+
+def try_float(val: Any) -> float:
+    return try_type(val, float)
+
+def try_str(val: Any) -> str:
+    return try_type(val, str)
 
 def convert_line_err(
     lineno: int,
@@ -286,7 +308,7 @@ class PepStats(Analysis):
         residues: int,
         average_residue_weight: float,
         charge: float,
-        isoelectric_point: float | None,
+        isoelectric_point: Optional[float],
         a280_molar_extinction_coefficients_reduced: int,
         a280_molar_extinction_coefficients_cysteine_bridges: float,
         a280_1mgml_extinction_coefficients_reduced: float,
@@ -536,23 +558,134 @@ class PepStats(Analysis):
 
         record.update(parse_property_table(ilines))
 
-        type_converters_ = tuple(cls.types)
+        # Unfortunately the fancy thing doesn't pass the type checker, so we need to do a bunch of boilerplate.
+        #type_converters_ = tuple(cls.types)
 
         # 5 is Isoelectric point
-        type_converters = (
-            type_converters_[:5] +
-            (parse_isoelec_regex, ) +
-            type_converters_[6:]
-        )
-        del type_converters_
+        #type_converters = (
+        #    type_converters_[:5] +
+        #    (parse_isoelec_regex, ) +
+        #    type_converters_[6:]
+        #)
+        #del type_converters_
 
-        fields = tuple(
-            type_(record.get(cname))
-            for cname, type_
-            in zip(cls.columns, type_converters)
-        )
+        #fields = tuple(
+        #    type_(record.get(cname))
+        #    for cname, type_
+        #    in zip(cls.columns, type_converters)
+        #)
 
-        return cls(*fields)
+        #return cls(*fields)
+
+        return cls(
+            name = try_str(record.get("name")),
+            molecular_weight = try_float(record.get("molecular_weight")),
+            residues = try_int(record.get("residues")),
+            average_residue_weight = try_float(record.get("average_residue_weight")),
+            charge = try_float(record.get("charge")),
+            isoelectric_point = parse_isoelec_regex(assert_type(record.get("isoelectric_point"), str)),
+            a280_molar_extinction_coefficients_reduced = try_int(record.get("a280_molar_extinction_coefficients_reduced")),
+            a280_molar_extinction_coefficients_cysteine_bridges = try_float(record.get("a280_molar_extinction_coefficients_cysteine_bridges")),
+            a280_1mgml_extinction_coefficients_reduced = try_float(record.get("a280_1mgml_extinction_coefficients_reduced")),
+            a280_1mgml_extinction_coefficients_cysteine_bridges = try_float(record.get("a280_1mgml_extinction_coefficients_cysteine_bridges")),
+            improbability_expression_inclusion_bodies = try_float(record.get("improbability_expression_inclusion_bodies")),
+            residue_a_number = try_int(record.get("residue_a_number")),
+            residue_b_number = try_int(record.get("residue_b_number")),
+            residue_c_number = try_int(record.get("residue_c_number")),
+            residue_d_number = try_int(record.get("residue_d_number")),
+            residue_e_number = try_int(record.get("residue_e_number")),
+            residue_f_number = try_int(record.get("residue_f_number")),
+            residue_g_number = try_int(record.get("residue_g_number")),
+            residue_h_number = try_int(record.get("residue_h_number")),
+            residue_i_number = try_int(record.get("residue_i_number")),
+            residue_j_number = try_int(record.get("residue_j_number")),
+            residue_k_number = try_int(record.get("residue_k_number")),
+            residue_l_number = try_int(record.get("residue_l_number")),
+            residue_m_number = try_int(record.get("residue_m_number")),
+            residue_n_number = try_int(record.get("residue_n_number")),
+            residue_o_number = try_int(record.get("residue_o_number")),
+            residue_p_number = try_int(record.get("residue_p_number")),
+            residue_q_number = try_int(record.get("residue_q_number")),
+            residue_r_number = try_int(record.get("residue_r_number")),
+            residue_s_number = try_int(record.get("residue_s_number")),
+            residue_t_number = try_int(record.get("residue_t_number")),
+            residue_u_number = try_int(record.get("residue_u_number")),
+            residue_v_number = try_int(record.get("residue_v_number")),
+            residue_w_number = try_int(record.get("residue_w_number")),
+            residue_x_number = try_int(record.get("residue_x_number")),
+            residue_y_number = try_int(record.get("residue_y_number")),
+            residue_z_number = try_int(record.get("residue_z_number")),
+            residue_a_mole = try_float(record.get("residue_a_mole")),
+            residue_b_mole = try_float(record.get("residue_b_mole")),
+            residue_c_mole = try_float(record.get("residue_c_mole")),
+            residue_d_mole = try_float(record.get("residue_d_mole")),
+            residue_e_mole = try_float(record.get("residue_e_mole")),
+            residue_f_mole = try_float(record.get("residue_f_mole")),
+            residue_g_mole = try_float(record.get("residue_g_mole")),
+            residue_h_mole = try_float(record.get("residue_h_mole")),
+            residue_i_mole = try_float(record.get("residue_i_mole")),
+            residue_j_mole = try_float(record.get("residue_j_mole")),
+            residue_k_mole = try_float(record.get("residue_k_mole")),
+            residue_l_mole = try_float(record.get("residue_l_mole")),
+            residue_m_mole = try_float(record.get("residue_m_mole")),
+            residue_n_mole = try_float(record.get("residue_n_mole")),
+            residue_o_mole = try_float(record.get("residue_o_mole")),
+            residue_p_mole = try_float(record.get("residue_p_mole")),
+            residue_q_mole = try_float(record.get("residue_q_mole")),
+            residue_r_mole = try_float(record.get("residue_r_mole")),
+            residue_s_mole = try_float(record.get("residue_s_mole")),
+            residue_t_mole = try_float(record.get("residue_t_mole")),
+            residue_u_mole = try_float(record.get("residue_u_mole")),
+            residue_v_mole = try_float(record.get("residue_v_mole")),
+            residue_w_mole = try_float(record.get("residue_w_mole")),
+            residue_x_mole = try_float(record.get("residue_x_mole")),
+            residue_y_mole = try_float(record.get("residue_y_mole")),
+            residue_z_mole = try_float(record.get("residue_z_mole")),
+            residue_a_dayhoff = try_float(record.get("residue_a_dayhoff")),
+            residue_b_dayhoff = try_float(record.get("residue_b_dayhoff")),
+            residue_c_dayhoff = try_float(record.get("residue_c_dayhoff")),
+            residue_d_dayhoff = try_float(record.get("residue_d_dayhoff")),
+            residue_e_dayhoff = try_float(record.get("residue_e_dayhoff")),
+            residue_f_dayhoff = try_float(record.get("residue_f_dayhoff")),
+            residue_g_dayhoff = try_float(record.get("residue_g_dayhoff")),
+            residue_h_dayhoff = try_float(record.get("residue_h_dayhoff")),
+            residue_i_dayhoff = try_float(record.get("residue_i_dayhoff")),
+            residue_j_dayhoff = try_float(record.get("residue_j_dayhoff")),
+            residue_k_dayhoff = try_float(record.get("residue_k_dayhoff")),
+            residue_l_dayhoff = try_float(record.get("residue_l_dayhoff")),
+            residue_m_dayhoff = try_float(record.get("residue_m_dayhoff")),
+            residue_n_dayhoff = try_float(record.get("residue_n_dayhoff")),
+            residue_o_dayhoff = try_float(record.get("residue_o_dayhoff")),
+            residue_p_dayhoff = try_float(record.get("residue_p_dayhoff")),
+            residue_q_dayhoff = try_float(record.get("residue_q_dayhoff")),
+            residue_r_dayhoff = try_float(record.get("residue_r_dayhoff")),
+            residue_s_dayhoff = try_float(record.get("residue_s_dayhoff")),
+            residue_t_dayhoff = try_float(record.get("residue_t_dayhoff")),
+            residue_u_dayhoff = try_float(record.get("residue_u_dayhoff")),
+            residue_v_dayhoff = try_float(record.get("residue_v_dayhoff")),
+            residue_w_dayhoff = try_float(record.get("residue_w_dayhoff")),
+            residue_x_dayhoff = try_float(record.get("residue_x_dayhoff")),
+            residue_y_dayhoff = try_float(record.get("residue_y_dayhoff")),
+            residue_z_dayhoff = try_float(record.get("residue_z_dayhoff")),
+            property_tiny_number = try_int(record.get("property_tiny_number")),
+            property_small_number = try_int(record.get("property_small_number")),
+            property_aliphatic_number = try_int(record.get("property_aliphatic_number")),
+            property_aromatic_number = try_int(record.get("property_aromatic_number")),
+            property_nonpolar_number = try_int(record.get("property_nonpolar_number")),
+            property_polar_number = try_int(record.get("property_polar_number")),
+            property_charged_number = try_int(record.get("property_charged_number")),
+            property_basic_number = try_int(record.get("property_basic_number")),
+            property_acidic_number = try_int(record.get("property_acidic_number")),
+            property_tiny_mole = try_float(record.get("property_tiny_mole")),
+            property_small_mole = try_float(record.get("property_small_mole")),
+            property_aliphatic_mole = try_float(record.get("property_aliphatic_mole")),
+            property_aromatic_mole = try_float(record.get("property_aromatic_mole")),
+            property_nonpolar_mole = try_float(record.get("property_nonpolar_mole")),
+            property_polar_mole = try_float(record.get("property_polar_mole")),
+            property_charged_mole = try_float(record.get("property_charged_mole")),
+            property_basic_mole = try_float(record.get("property_basic_mole")),
+            property_acidic_mole = try_float(record.get("property_acidic_mole"))
+        )
 
     @classmethod  # noqa
     def from_file(cls, handle: TextIO) -> Iterator["PepStats"]:

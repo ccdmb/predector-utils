@@ -2,13 +2,14 @@
 
 from typing import TypeVar
 from typing import Callable
+from typing import Optional, Union
 
 
 T = TypeVar("T")
 U = TypeVar("U")
 
 
-def fmap(function: Callable[[T], U], option: T | None) -> U | None:
+def fmap(function: Callable[[T], U], option: Optional[T]) -> Optional[U]:
     if option is None:
         return None
     else:
@@ -16,9 +17,9 @@ def fmap(function: Callable[[T], U], option: T | None) -> U | None:
 
 
 def applicative(
-    function: Callable[[T], U | None],
-    option: T | None,
-) -> U | None:
+    function: Callable[[T], Optional[U]],
+    option: Optional[T],
+) -> Optional[U]:
     """ Same as fmap except for the type signature. """
     if option is None:
         return None
@@ -27,7 +28,7 @@ def applicative(
     return
 
 
-def or_else(default: U, option: T | None) -> T | U:
+def or_else(default: U, option: Optional[T]) -> Union[T, U]:
     """ Replaces None with some default value. """
     if option is None:
         return default

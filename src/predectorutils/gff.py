@@ -5,6 +5,7 @@ from collections.abc import Iterable, Iterator
 from typing import TypeVar
 from typing import cast
 from typing import TextIO
+from typing import Union, Optional
 
 from enum import Enum
 from collections import deque
@@ -136,11 +137,11 @@ class Strand(Enum):
     UNSTRANDED = 2
     UNKNOWN = 3
 
-    def __str__(self):
+    def __str__(self) -> str:
         into_str_map: list[str] = ["+", "-", ".", "?"]
         return into_str_map[self.value]
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Strand.{self.name}"
 
     @classmethod
@@ -165,11 +166,11 @@ class Phase(Enum):
     THIRD = 2
     NOT_CDS = 3
 
-    def __str__(self):
+    def __str__(self) -> str:
         into_str_map: list[str] = ["0", "1", "2", "."]
         return into_str_map[self.value]
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Phase.{self.name}"
 
     @classmethod
@@ -228,7 +229,7 @@ class Target(object):
         target_id: str,
         start: int,
         end: int,
-        strand: TargetStrand | None = None,
+        strand: Optional[TargetStrand] = None,
     ) -> None:
         self.target_id = target_id
         self.start = start
@@ -387,18 +388,18 @@ class GFFAttributes(object):
 
     def __init__(
         self,
-        id: str | None = None,
-        name: str | None = None,
-        alias: Sequence[str] | None = None,
-        parent: Sequence[str] | None = None,
-        target: Target | None = None,
-        gap: Gap | None = None,
-        derives_from: Sequence[str] | None = None,
-        note: Sequence[str] | None = None,
-        dbxref: Sequence[str] | None = None,
-        ontology_term: Sequence[str] | None = None,
+        id: Optional[str] = None,
+        name: Optional[str] = None,
+        alias: Optional[Sequence[str]] = None,
+        parent: Optional[Sequence[str]] = None,
+        target: Optional[Target] = None,
+        gap: Optional[Gap] = None,
+        derives_from: Optional[Sequence[str]] = None,
+        note: Optional[Sequence[str]] = None,
+        dbxref: Optional[Sequence[str]] = None,
+        ontology_term: Optional[Sequence[str]] = None,
         is_circular: bool = False,
-        custom: Mapping[str, Sequence[str]] | None = None,
+        custom: Optional[Mapping[str, Sequence[str]]] = None,
     ) -> None:
         self.id = id
         self.name = name
@@ -438,7 +439,7 @@ class GFFAttributes(object):
 
         self.is_circular = is_circular
 
-        self.custom: dict[str, str | list[str]] = {}
+        self.custom: dict[str, Union[str, list[str]]] = {}
         if custom is not None:
             for k, v in custom.items():
                 if isinstance(v, str):
@@ -524,7 +525,7 @@ class GFFAttributes(object):
             unescape
         )
 
-        target: Target | None = fmap(
+        target: Optional[Target] = fmap(
             lambda x: Target.parse(x, unescape),
             kvpairs.pop("Target", None)
         )
@@ -557,7 +558,7 @@ class GFFAttributes(object):
 
         is_circular = attr_is_circular(kvpairs.pop("Is_circular", "false"))
 
-        custom: dict[str, str | list[str]] = dict()
+        custom: dict[str, Union[str, list[str]]] = dict()
         for k, v in kvpairs.items():
             if "," in v:
                 custom[k] = cls._parse_list_of_strings(
@@ -676,7 +677,7 @@ class GFFAttributes(object):
     def __getitem__(
         self,
         key: str,
-    ) -> str | Sequence[str] | Target | Gap | bool | None:
+    ) -> Union[str, Sequence[str], Target, Gap, bool, None]:
         if key in GFF3_KEY_TO_ATTR:
             return getattr(self, GFF3_KEY_TO_ATTR[key])
         else:
@@ -685,7 +686,7 @@ class GFFAttributes(object):
     def __setitem__(
         self,
         key: str,
-        value: str | Sequence[str] | Target | Gap | bool | None,
+        value: Union[str, Sequence[str], Target, Gap, bool, None],
     ) -> None:
         """ If the key is an attr set it, otherwise update the custom dict."""
 
@@ -717,8 +718,8 @@ class GFFAttributes(object):
     def get(
         self,
         key: str,
-        default: str | Sequence[str] | Target | Gap | bool | None = None,
-    ) -> str | Sequence[str] | Target | Gap | bool | None:
+        default: Union[str, Sequence[str], Target, Gap, bool, None] = None,
+    ) -> Union[str, Sequence[str], Target, Gap, bool, None]:
         """ Gets an atrribute or element from the custom dict. """
 
         if key in GFF3_KEY_TO_ATTR:
@@ -729,8 +730,8 @@ class GFFAttributes(object):
     def pop(
         self,
         key: str,
-        default: str | Sequence[str] | Target | Gap | bool | None = None,
-    ) -> str | Sequence[str] | Target | Gap | bool | None:
+        default: Union[str, Sequence[str], Target, Gap, bool, None] = None,
+    ) -> Union[str, Sequence[str], Target, Gap, bool, None]:
         """ Removes an item from the attributes and returns its value.
 
         If the item is one of the reserved GFF3 terms, the
@@ -767,14 +768,14 @@ class GFFRecord(object):
         type: str,
         start: int,
         end: int,
-        score: float | None = None,
+        score: Optional[float] = None,
         strand: Strand = Strand.UNSTRANDED,
         phase: Phase = Phase.NOT_CDS,
-        attributes: GFFAttributes | None = None,
-        parents: Sequence["GFFRecord"] | None = None,
-        children: Sequence["GFFRecord"] | None = None,
-        derives_froms: Sequence["GFFRecord"] | None = None,
-        derivatives: Sequence["GFFRecord"] | None = None,
+        attributes: Optional[GFFAttributes] = None,
+        parents: Optional[Sequence["GFFRecord"]] = None,
+        children: Optional[Sequence["GFFRecord"]] = None,
+        derives_froms: Optional[Sequence["GFFRecord"]] = None,
+        derivatives: Optional[Sequence["GFFRecord"]] = None,
     ) -> None:
         self.seqid = seqid
         self.source = source
@@ -1093,7 +1094,7 @@ class GFFRecord(object):
         self.end -= length
         return
 
-    def pad_ends(self, length: int, max_value: int | None = None) -> None:
+    def pad_ends(self, length: int, max_value: Optional[int] = None) -> None:
 
         if (self.start - length) < 0:
             self.start = 0

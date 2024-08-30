@@ -95,6 +95,7 @@ def select_target(
             {db_cols}
             a.pipeline_version,
             a.checksum,
+            a.md5sum,
             a.data
         FROM {table_name} a
         INNER JOIN decoder d ON a.checksum = d.checksum

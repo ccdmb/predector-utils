@@ -7,6 +7,7 @@ from collections import defaultdict
 
 from typing import TextIO
 from typing import Any, Literal
+from typing import Optional, Union
 
 from collections.abc import (
     Sequence,
@@ -308,7 +309,7 @@ def create_match(
     parts: Sequence[GFFRecord],
     type_: str,
     prot_id: str,
-    index: int | str
+    index: Union[int, str]
 ):
     """ Creates a parent feature that encapsulates all
     members of 'parts'.
@@ -478,7 +479,7 @@ def split_protein_features(  # noqa: W0611
 def get_id(
     record: GFFRecord,
     id_field: str
-) -> str | None:
+) -> Optional[str]:
 
     id_ = record.attributes.get(id_field, None)
     if id_ is None:

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from typing import TextIO
+from typing import Optional
 from collections.abc import Iterator
 
 from ..gff import GFFRecord, GFFAttributes, Strand
@@ -44,7 +45,7 @@ class DeepSig(Analysis, GFFAble):
         name: str,
         prediction: str,
         prob: float,
-        cs_pos: int | None
+        cs_pos: Optional[int]
     ) -> None:
         self.name = name
         self.prediction = prediction
@@ -91,8 +92,8 @@ class DeepSig(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: str | None = None,
-        database_version: str | None = None,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:

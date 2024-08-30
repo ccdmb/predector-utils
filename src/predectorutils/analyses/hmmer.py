@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from typing import TextIO
+from typing import Optional, Union
 from collections.abc import Iterator
 
 from .base import Analysis, GFFAble
@@ -26,7 +27,7 @@ from ..parsers import (
 )
 
 
-def split_hmm(s: str) -> ValueParseError | str:
+def split_hmm(s: str) -> Union[ValueParseError, str]:
     s1 = parse_str(s)
     if isinstance(s1, ValueParseError):
         return s1
@@ -121,7 +122,7 @@ class DomTbl(Analysis, GFFAble):
         query_from: int,
         query_to: int,
         acc: float,
-        description: str | None
+        description: Optional[str]
     ) -> None:
         self.query = query
         self.hmm = hmm
@@ -158,7 +159,7 @@ class DomTbl(Analysis, GFFAble):
             )
 
         if len(sline) == 22:
-            description: str | None = None
+            description: Optional[str] = None
         elif sline[22] == "-" or sline[22] == "":
             description = None
         else:
@@ -223,8 +224,8 @@ class DomTbl(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: str | None = None,
-        database_version: str | None = None,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:

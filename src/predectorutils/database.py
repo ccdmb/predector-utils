@@ -3,6 +3,7 @@
 from typing import NamedTuple
 from typing import Any
 from typing import TextIO
+from typing import Optional
 from collections.abc import Iterator, Iterable
 from math import floor
 
@@ -43,14 +44,14 @@ class ResultRow(NamedTuple):
 
     checksum: str
     md5sum: str
-    name: str | None
-    filename: str | None
+    name: Optional[str]
+    filename: Optional[str]
     analysis: Analyses
     software: str
     software_version: str
-    database: str | None
-    database_version: str | None
-    pipeline_version: str | None
+    database: Optional[str]
+    database_version: Optional[str]
+    pipeline_version: Optional[str]
     data: str
 
     @classmethod
@@ -90,7 +91,7 @@ class ResultRow(NamedTuple):
 
         if "filename" in data:
             assert isinstance(data["filename"], str), data
-            filename: str | None = data["filename"]
+            filename: Optional[str] = data["filename"]
         else:
             filename = None
 
@@ -129,7 +130,7 @@ class ResultRow(NamedTuple):
         handle: TextIO,
         drop_name: bool = False,
         drop_null_dbversion: bool = False,
-        target_analyses: set[Analyses] | None = None
+        target_analyses: Optional[set[Analyses]] = None
     ) -> Iterator["ResultRow"]:
 
         for line in handle:
@@ -223,7 +224,7 @@ class TargetRow(NamedTuple):
 
     analysis: Analyses
     software_version: str
-    database_version: str | None
+    database_version: Optional[str]
 
     @classmethod
     def from_string(cls, s: str) -> "TargetRow":
@@ -249,7 +250,7 @@ class TargetRow(NamedTuple):
             yield cls.from_string(sline)
         return
 
-    def as_dict(self) -> dict[str, str | None]:
+    def as_dict(self) -> dict[str, Optional[str]]:
         return {
             "analysis": str(self.analysis),
             "software_version": self.software_version,
@@ -273,7 +274,7 @@ class DecoderRow(NamedTuple):
 
     checksum: str
     md5sum: str
-    filename: str | None
+    filename: Optional[str]
     name: str
 
     @classmethod
@@ -283,6 +284,7 @@ class DecoderRow(NamedTuple):
             fname = None
         else:
             fname = e[1]
+        print(e)
         return DecoderRow(e[3], e[4], fname, e[2])
 
     @classmethod
@@ -390,7 +392,7 @@ class ResultsTable(object):
             """
             CREATE TABLE IF NOT EXISTS decoder (
                 checksum text NOT NULL,
-                md5sum test NOT NULL,
+                md5sum text NOT NULL,
                 filename text NOT NULL,
                 name text NOT NULL,
                 UNIQUE (
@@ -435,7 +437,7 @@ class ResultsTable(object):
     def _insert_results(self, an: Analyses, rows: Iterable[ResultRow]) -> None:
         ans = str(an)
         keys = ["software", "software_version",
-                "pipeline_version", "checksum", "data"]
+                "pipeline_version", "checksum", "md5sum", "data"]
 
         if an.needs_database():
             dcols = (
@@ -836,7 +838,7 @@ class ResultsTable(object):
         SELECT DISTINCT
             CAST({anv} AS analyses) as analysis,
             r.checksum as checksum,
-            md5sum,
+            d.md5sum,
             d.name as name,
             d.filename as filename,
             software,

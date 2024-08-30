@@ -6,6 +6,7 @@ import argparse
 from typing import NamedTuple
 from typing import TextIO
 from typing import Callable
+from typing import Optional
 from collections.abc import Iterable, Iterator
 
 import xml.etree.ElementTree as ET
@@ -51,8 +52,8 @@ def cli(parser: argparse.ArgumentParser) -> None:
 
 def get_source(
     ips_version: str,
-    db: str | None,
-    db_version: str | None
+    db: Optional[str],
+    db_version: Optional[str]
 ) -> str:
     assert db is not None
     assert db_version is not None
@@ -71,13 +72,13 @@ def get_tag(
 class Signature(NamedTuple):
 
     accession: str
-    name: str | None
-    desc: str | None
+    name: Optional[str]
+    desc: Optional[str]
     library: str
     library_version: str
     dbxrefs: list[str]
     goterms: list[str]
-    kind: str | None
+    kind: Optional[str]
 
 
 def process_signature(
@@ -86,7 +87,7 @@ def process_signature(
     namespace: str = NAMESPACE,
 ) -> Signature:
     accession = start.attrib["ac"]
-    name: str | None = start.attrib.get("name")
+    name: Optional[str] = start.attrib.get("name")
     if name == "FAMILY NOT NAMED":
         name = None
 
@@ -151,8 +152,8 @@ def process_signature(
 def process_coils(
     element: ET.Element,
     itree: Iterator[tuple[str, ET.Element]],
-    ips_version: str | None,
-    query_id: str | None,
+    ips_version: Optional[str],
+    query_id: Optional[str],
     namespace: str = NAMESPACE
 ) -> Iterator[GFFRecord]:
     assert ips_version is not None
@@ -204,8 +205,8 @@ def process_coils(
 def process_tmhmm(
     element: ET.Element,
     itree: Iterator[tuple[str, ET.Element]],
-    ips_version: str | None,
-    query_id: str | None,
+    ips_version: Optional[str],
+    query_id: Optional[str],
     namespace: str = NAMESPACE
 ) -> Iterator[GFFRecord]:
     assert ips_version is not None
@@ -257,8 +258,8 @@ def process_tmhmm(
 def process_signalp(
     element: ET.Element,
     itree: Iterator[tuple[str, ET.Element]],
-    ips_version: str | None,
-    query_id: str | None,
+    ips_version: Optional[str],
+    query_id: Optional[str],
     namespace: str = NAMESPACE
 ) -> Iterator[GFFRecord]:
     assert ips_version is not None
@@ -330,8 +331,8 @@ def read_until(
 def process_hmmer3(
     element: ET.Element,
     itree: Iterator[tuple[str, ET.Element]],
-    ips_version: str | None,
-    query_id: str | None,
+    ips_version: Optional[str],
+    query_id: Optional[str],
     namespace: str = NAMESPACE
 ) -> Iterator[GFFRecord]:
     assert ips_version is not None
@@ -432,8 +433,8 @@ def process_hmmer3(
 def process_mobidblite(
     element: ET.Element,
     itree: Iterator[tuple[str, ET.Element]],
-    ips_version: str | None,
-    query_id: str | None,
+    ips_version: Optional[str],
+    query_id: Optional[str],
     namespace: str = NAMESPACE
 ) -> Iterator[GFFRecord]:
     assert ips_version is not None
@@ -488,8 +489,8 @@ def process_mobidblite(
 def process_panther(
     element: ET.Element,
     itree: Iterator[tuple[str, ET.Element]],
-    ips_version: str | None,
-    query_id: str | None,
+    ips_version: Optional[str],
+    query_id: Optional[str],
     namespace: str = NAMESPACE
 ) -> Iterator[GFFRecord]:
     assert ips_version is not None
@@ -594,8 +595,8 @@ def process_panther(
 def process_hmmer2(
     element: ET.Element,
     itree: Iterator[tuple[str, ET.Element]],
-    ips_version: str | None,
-    query_id: str | None,
+    ips_version: Optional[str],
+    query_id: Optional[str],
     namespace: str = NAMESPACE
 ) -> Iterator[GFFRecord]:
     assert ips_version is not None
@@ -688,8 +689,8 @@ def process_hmmer2(
 def process_profilescan(
     element: ET.Element,
     itree: Iterator[tuple[str, ET.Element]],
-    ips_version: str | None,
-    query_id: str | None,
+    ips_version: Optional[str],
+    query_id: Optional[str],
     namespace: str = NAMESPACE
 ) -> Iterator[GFFRecord]:
     assert ips_version is not None
@@ -772,10 +773,10 @@ def process_profilescan(
 
 class RPSBlastSite(NamedTuple):
 
-    desc: str | None
-    start: str | None
-    end: str | None
-    residue: str | None
+    desc: Optional[str]
+    start: Optional[str]
+    end: Optional[str]
+    residue: Optional[str]
 
 
 def process_rpsblast_sites(
@@ -803,8 +804,8 @@ def process_rpsblast_sites(
 def process_rpsblast(  # noqa: C901
     element: ET.Element,
     itree: Iterator[tuple[str, ET.Element]],
-    ips_version: str | None,
-    query_id: str | None,
+    ips_version: Optional[str],
+    query_id: Optional[str],
     namespace: str = NAMESPACE
 ) -> Iterator[GFFRecord]:
     assert ips_version is not None
@@ -920,8 +921,8 @@ def process_rpsblast(  # noqa: C901
 def process_superfamilyhmmer3(
     element: ET.Element,
     itree: Iterator[tuple[str, ET.Element]],
-    ips_version: str | None,
-    query_id: str | None,
+    ips_version: Optional[str],
+    query_id: Optional[str],
     namespace: str = NAMESPACE
 ) -> Iterator[GFFRecord]:
     assert ips_version is not None
@@ -996,8 +997,8 @@ def process_superfamilyhmmer3(
 def process_fingerprints(
     element: ET.Element,
     itree: Iterator[tuple[str, ET.Element]],
-    ips_version: str | None,
-    query_id: str | None,
+    ips_version: Optional[str],
+    query_id: Optional[str],
     namespace: str = NAMESPACE
 ) -> Iterator[GFFRecord]:
     from copy import copy
@@ -1081,12 +1082,12 @@ def process_fingerprints(
 
 class HMMER3Site(NamedTuple):
 
-    desc: str | None
-    start: str | None
-    end: str | None
-    hmm_start: str | None
-    hmm_end: str | None
-    residue: str | None
+    desc: Optional[str]
+    start: Optional[str]
+    end: Optional[str]
+    hmm_start: Optional[str]
+    hmm_end: Optional[str]
+    residue: Optional[str]
 
 
 def process_hmmer3_sites(
@@ -1119,8 +1120,8 @@ def process_hmmer3_sites(
 def process_hmmer3_with_sites(  # noqa: C901
     element: ET.Element,
     itree: Iterator[tuple[str, ET.Element]],
-    ips_version: str | None,
-    query_id: str | None,
+    ips_version: Optional[str],
+    query_id: Optional[str],
     namespace: str = NAMESPACE
 ) -> Iterator[GFFRecord]:
     assert ips_version is not None
@@ -1263,8 +1264,8 @@ def process_hmmer3_with_sites(  # noqa: C901
 def process_patternscan(
     element: ET.Element,
     itree: Iterator[tuple[str, ET.Element]],
-    ips_version: str | None,
-    query_id: str | None,
+    ips_version: Optional[str],
+    query_id: Optional[str],
     namespace: str = NAMESPACE
 ) -> Iterator[GFFRecord]:
     from copy import copy

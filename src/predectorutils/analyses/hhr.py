@@ -4,6 +4,7 @@ import re
 
 from typing import TextIO
 from typing import TypeVar, Callable
+from typing import Union, Optional
 from collections.abc import Iterator, Sequence, Mapping
 
 from .base import Analysis
@@ -34,7 +35,7 @@ ALI_REGEX = re.compile(r"[QT]\s+[^\s]+\s+\d+\s+")
 def get_and_parse(
     key: str,
     field_name: str,
-    pfn: Callable[[str], ValueParseError | T]
+    pfn: Callable[[str], Union[ValueParseError, T]]
 ) -> Callable[[Mapping[str, str]], T]:
     vfn = get_from_dict_or_err(key)
 
@@ -115,7 +116,7 @@ class HHRAlignment(Analysis):
         template_id: str,
         template_length: int,
         template_info: str,
-        template_neff: float | None,
+        template_neff: Optional[float],
         query_ali: str,
         template_ali: str,
         confidence: str,
@@ -159,9 +160,9 @@ class HHRAlignment(Analysis):
         if len(lines) == 0:
             raise BlockParseError(0, "The block was empty.")
 
-        query: str | None = None
-        query_length: int | None = None
-        query_neff: float | None = None
+        query: Optional[str] = None
+        query_length: Optional[int] = None
+        query_neff: Optional[float] = None
 
         is_alignment = False
         alignment_block: list[str] = []
@@ -242,7 +243,7 @@ class HHRAlignment(Analysis):
         return
 
     @staticmethod
-    def _is_not_none(val: T | None, field_name: str) -> T:
+    def _is_not_none(val: Optional[T], field_name: str) -> T:
         if val is None:
             raise LineParseError(
                 f"Did not encounter {field_name} in alignment."
@@ -261,9 +262,9 @@ class HHRAlignment(Analysis):
     def _parse_alignment(
         cls,
         block: Sequence[str],
-        query_id: str | None,
-        query_length: int | None,
-        query_neff: float | None,
+        query_id: Optional[str],
+        query_length: Optional[int],
+        query_neff: Optional[float],
     ) -> "HHRAlignment":
         if ((query_id is None) or
                 (query_length is None) or
@@ -275,26 +276,26 @@ class HHRAlignment(Analysis):
 
         skip_ali_tags = ("ss_dssp", "ss_pred", "Consensus")
 
-        template_id: str | None = None
-        template_info: str | None = None
+        template_id: Optional[str] = None
+        template_info: Optional[str] = None
         query_starts: list[int] = []
         query_ends: list[int] = []
         query_sequence: list[str] = []
         template_starts: list[int] = []
         template_ends: list[int] = []
         template_sequence: list[str] = []
-        template_length: int | None = None
+        template_length: Optional[int] = None
         confidence_sequence: list[str] = []
-        seq_begin_col: int | None = None
+        seq_begin_col: Optional[int] = None
 
-        probability: float | None = None
-        evalue: float | None = None
-        score: float | None = None
-        identity: float | None = None
-        similarity: float | None = None
-        template_neff: float | None = None
-        sum_probs: float | None = None
-        aligned_cols: int | None = None
+        probability: Optional[float] = None
+        evalue: Optional[float] = None
+        score: Optional[float] = None
+        identity: Optional[float] = None
+        similarity: Optional[float] = None
+        template_neff: Optional[float] = None
+        sum_probs: Optional[float] = None
+        aligned_cols: Optional[int] = None
 
         for i, line in enumerate(block):
             if line.startswith(">"):
@@ -429,7 +430,7 @@ class HHRAlignment(Analysis):
     @staticmethod
     def _parse_probab_line(
         field: str
-    ) -> tuple[float, float, float, int, float, float, float, float | None]:
+    ) -> tuple[float, float, float, int, float, float, float, Optional[float]]:
         sline = (s for s in MULTISPACE_REGEX.split(field.strip()))
         columns = [
             "Probab",
@@ -449,7 +450,7 @@ class HHRAlignment(Analysis):
         }
 
         if "Template_Neff" in dline:
-            template_neff: float | None = raise_it(parse_field(
+            template_neff: Optional[float] = raise_it(parse_field(
                 parse_float,
                 "template_neff"
             ))(dline["Template_Neff"])
@@ -479,7 +480,7 @@ class HHRAlignment(Analysis):
     @staticmethod
     def _parse_alignment_line(
         line: str
-    ) -> tuple[str, str, int, str, int, int, int | None]:
+    ) -> tuple[str, str, int, str, int, int, Optional[int]]:
         sline = MULTISPACE_REGEX.split(line.strip(), maxsplit=5)
 
         columns = ["type", "id", "ali_start", "sequence", "ali_end", "length"]
@@ -496,7 +497,7 @@ class HHRAlignment(Analysis):
 
         seq_begin_match = ALI_REGEX.match(line)
         if seq_begin_match is None:
-            seq_begin: int | None = None
+            seq_begin: Optional[int] = None
         else:
             seq_begin = seq_begin_match.end()
 

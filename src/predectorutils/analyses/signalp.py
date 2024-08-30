@@ -4,6 +4,7 @@ import re
 import sys
 
 from typing import TextIO
+from typing import Optional
 from collections.abc import Iterator
 
 from ..gff import (
@@ -212,8 +213,8 @@ class SignalP3NN(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: str | None = None,
-        database_version: str | None = None,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
@@ -386,8 +387,8 @@ class SignalP3HMM(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: str | None = None,
-        database_version: str | None = None,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
@@ -569,8 +570,8 @@ class SignalP4(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: str | None = None,
-        database_version: str | None = None,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
@@ -645,7 +646,7 @@ class SignalP5(Analysis, GFFAble):
     prediction: str
     prob_signal: float
     prob_other: float
-    cs_pos: str | None
+    cs_pos: Optional[str]
 
     columns = ["name", "prediction", "prob_signal", "prob_other", "cs_pos"]
     types = [str, str, float, float, str_or_none]
@@ -658,7 +659,7 @@ class SignalP5(Analysis, GFFAble):
         prediction: str,
         prob_signal: float,
         prob_other: float,
-        cs_pos: str | None,
+        cs_pos: Optional[str],
     ) -> None:
         self.name = name
         self.prediction = prediction
@@ -677,7 +678,7 @@ class SignalP5(Analysis, GFFAble):
         sline = line.strip().split("\t")
 
         if len(sline) == 5:
-            cs_pos: str | None = s5_cs_pos(sline[4])
+            cs_pos: Optional[str] = s5_cs_pos(sline[4])
         elif len(sline) == 4:
             cs_pos = None
         else:
@@ -712,8 +713,8 @@ class SignalP5(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: str | None = None,
-        database_version: str | None = None,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
@@ -773,7 +774,7 @@ class SignalP6(Analysis, GFFAble):
     prediction: str
     prob_signal: float
     prob_other: float
-    cs_pos: str | None
+    cs_pos: Optional[str]
 
     columns = ["name", "prediction", "prob_signal", "prob_other", "cs_pos"]
     types = [str, str, float, float, str_or_none]
@@ -786,7 +787,7 @@ class SignalP6(Analysis, GFFAble):
         prediction: str,
         prob_signal: float,
         prob_other: float,
-        cs_pos: str | None,
+        cs_pos: Optional[str],
     ) -> None:
         self.name = name
         self.prediction = prediction
@@ -805,7 +806,7 @@ class SignalP6(Analysis, GFFAble):
         sline = line.strip().split("\t")
 
         if len(sline) == 5:
-            cs_pos: str | None = s6_cs_pos(sline[4])
+            cs_pos: Optional[str] = s6_cs_pos(sline[4])
         elif len(sline) == 4:
             cs_pos = None
         else:
@@ -840,8 +841,8 @@ class SignalP6(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: str | None = None,
-        database_version: str | None = None,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:

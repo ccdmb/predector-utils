@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import TextIO
+from typing import TextIO, Callable, Union
 from collections.abc import Iterator
 
 from .base import Analysis, list_of_str
@@ -191,8 +191,8 @@ class DeepLoc2(Analysis):
     def __init__(
         self,
         name: str,
-        localisations: str,
-        signals: str,
+        localisations: list[str],
+        signals: list[str],
         cytoplasm: float,
         nucleus: float,
         extracellular: float,

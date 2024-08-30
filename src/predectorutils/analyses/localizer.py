@@ -2,6 +2,7 @@
 
 import re
 from typing import TextIO
+from typing import Optional
 from collections.abc import Iterator
 
 from ..higher import fmap
@@ -33,7 +34,7 @@ HEADER_REGEX = re.compile(
 def parse_tp_field(
     field: str,
     field_name: str,
-) -> tuple[bool, float | None, int | None, int | None]:
+) -> tuple[bool, Optional[float], Optional[int], Optional[int]]:
     field = field.strip()
 
     if field == "-":
@@ -49,7 +50,7 @@ def parse_tp_field(
 
 def parse_nuc_field(
     field: str,
-) -> tuple[bool, str | None]:
+) -> tuple[bool, Optional[str]]:
     field = field.strip()
 
     if field == "-":
@@ -83,15 +84,15 @@ class LOCALIZER(Analysis, GFFAble):
         self,
         name: str,
         chloroplast_decision: bool,
-        chloroplast_prob: float | None,
-        chloroplast_start: int | None,
-        chloroplast_end: int | None,
+        chloroplast_prob: Optional[float],
+        chloroplast_start: Optional[int],
+        chloroplast_end: Optional[int],
         mitochondria_decision: bool,
-        mitochondria_prob: float | None,
-        mitochondria_start: int | None,
-        mitochondria_end: int | None,
+        mitochondria_prob: Optional[float],
+        mitochondria_start: Optional[int],
+        mitochondria_end: Optional[int],
         nucleus_decision: bool,
-        nucleus_signals: str | None,
+        nucleus_signals: Optional[str],
     ) -> None:
         self.name = name
         self.chloroplast_decision = chloroplast_decision
@@ -167,8 +168,8 @@ class LOCALIZER(Analysis, GFFAble):
 
     def as_gff(
         self,
-        software_version: str | None = None,
-        database_version: str | None = None,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = True,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:

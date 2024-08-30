@@ -7,6 +7,7 @@ from typing import TypeVar
 from typing import TextIO
 from typing import Pattern
 from typing import Callable
+from typing import Union, Optional
 
 from .higher import or_else
 
@@ -41,13 +42,13 @@ class ValueParseError(Exception):
     ) -> "LineParseError":
         return LineParseError(str(self))
 
-    def as_block_error(self, line: int | None = None) -> "BlockParseError":
+    def as_block_error(self, line: Optional[int] = None) -> "BlockParseError":
         return BlockParseError(line, str(self))
 
     def as_parse_error(
         self,
-        filename: str | None = None,
-        line: int | None = None
+        filename: Optional[str] = None,
+        line: Optional[int] = None
     ) -> "ParseError":
         return ParseError(filename, line, str(self))
 
@@ -66,13 +67,13 @@ class FieldParseError(Exception):
     def as_line_error(self) -> "LineParseError":
         return LineParseError(str(self))
 
-    def as_block_error(self, line: int | None = None) -> "BlockParseError":
+    def as_block_error(self, line: Optional[int] = None) -> "BlockParseError":
         return BlockParseError(line, str(self))
 
     def as_parse_error(
         self,
-        filename: str | None = None,
-        line: int | None = None,
+        filename: Optional[str] = None,
+        line: Optional[int] = None,
     ) -> "ParseError":
         return ParseError(filename, line, str(self))
 
@@ -85,25 +86,25 @@ class LineParseError(Exception):
     def __str__(self) -> str:
         return self.message
 
-    def as_block_error(self, line: int | None = None) -> "BlockParseError":
+    def as_block_error(self, line: Optional[int] = None) -> "BlockParseError":
         return BlockParseError(line, str(self))
 
     def as_parse_error(
         self,
-        filename: str | None = None,
-        line: int | None = None,
+        filename: Optional[str] = None,
+        line: Optional[int] = None,
     ) -> "ParseError":
         return ParseError(filename, line, str(self))
 
 
 class BlockParseError(Exception):
 
-    def __init__(self, line: int | None, message: str):
+    def __init__(self, line: Optional[int], message: str):
         self.line = line
         self.message = message
         return
 
-    def as_block_error(self, line: int | None = None) -> "BlockParseError":
+    def as_block_error(self, line: Optional[int] = None) -> "BlockParseError":
         if (line is None) and (self.line is None):
             nline = None
         else:
@@ -116,8 +117,8 @@ class BlockParseError(Exception):
 
     def as_parse_error(
         self,
-        filename: str | None = None,
-        line: int | None = None,
+        filename: Optional[str] = None,
+        line: Optional[int] = None,
     ) -> "ParseError":
         if (line is None) and (self.line is None):
             line = None
@@ -136,8 +137,8 @@ class ParseError(Exception):
 
     def __init__(
         self,
-        filename: str | None,
-        line: int | None,
+        filename: Optional[str],
+        line: Optional[int],
         message: str
     ):
         self.filename = filename
@@ -168,9 +169,9 @@ def convert_line_err(
 def split_at_eq(
     fn: Callable[[str], T],
     expected_lhs: str
-) -> Callable[[str], T | ValueParseError]:
+) -> Callable[[str], Union[T, ValueParseError]]:
 
-    def inner(value: str) -> T | ValueParseError:
+    def inner(value: str) -> Union[T, ValueParseError]:
         """ Parse a field of a "key value" type, returning the value. """
         sfield = value.split("=", maxsplit=1)
         if len(sfield) != 2:
@@ -194,9 +195,9 @@ def split_at_eq(
 def split_at_multispace(
     fn: Callable[[str], T],
     expected_lhs: str
-) -> Callable[[str], T | ValueParseError]:
+) -> Callable[[str], Union[T, ValueParseError]]:
 
-    def inner(value: str) -> T | ValueParseError:
+    def inner(value: str) -> Union[T, ValueParseError]:
         """ Parse a field of a "key value" type, returning the value. """
         sfield = MULTISPACE_REGEX.split(value, maxsplit=1)
         if len(sfield) != 2:
@@ -235,9 +236,9 @@ def is_not_empty_string(value: str) -> str:
 
 def is_one_of(
     options: Sequence[str]
-) -> Callable[[str], ValueParseError | str]:
+) -> Callable[[str], Union[ValueParseError, str]]:
 
-    def inner(value: str) -> ValueParseError | str:
+    def inner(value: str) -> Union[ValueParseError, str]:
         if value in options:
             return value
         else:
@@ -253,10 +254,10 @@ def is_one_of(
 def parse_bool(
     true_value: str,
     false_value: str
-) -> Callable[[str], ValueParseError | bool]:
+) -> Callable[[str], Union[ValueParseError, bool]]:
     """ """
 
-    def inner(value: str) -> ValueParseError | bool:
+    def inner(value: str) -> Union[ValueParseError, bool]:
         if value == true_value:
             return True
         elif value == false_value:
@@ -274,12 +275,12 @@ def parse_bool(
 def parse_bool_options(
     true_values: Sequence[str],
     false_values: Sequence[str]
-) -> Callable[[str], ValueParseError | bool]:
+) -> Callable[[str], Union[ValueParseError, bool]]:
     """ """
     trues = set(true_values)
     falses = set(false_values)
 
-    def inner(value: str) -> ValueParseError | bool:
+    def inner(value: str) -> Union[ValueParseError, bool]:
         if value in trues:
             return True
         elif value in falses:
@@ -296,9 +297,9 @@ def parse_bool_options(
 
 def parse_regex(
     regex: Pattern
-) -> Callable[[str], ValueParseError | dict[str, str]]:
+) -> Callable[[str], Union[ValueParseError, dict[str, str]]]:
 
-    def inner(value: str) -> ValueParseError | dict[str, str]:
+    def inner(value: str) -> Union[ValueParseError, dict[str, str]]:
         matches = regex.match(value)
         if matches is None:
             return ValueParseError(
@@ -314,15 +315,15 @@ def parse_regex(
 
 
 def parse_or_none(
-    fn: Callable[[str], ValueParseError | T],
+    fn: Callable[[str], Union[ValueParseError, T]],
     none_value: str,
-) -> Callable[[str], ValueParseError | T | None]:
+) -> Callable[[str], Union[ValueParseError, T, None]]:
     """ If the value is the same as the none value, will return None.
     Otherwise will attempt to run the fn with field and field name as the
     first and 2nd arguments.
     """
 
-    def inner(value: str) -> ValueParseError | T | None:
+    def inner(value: str) -> Union[ValueParseError, T, None]:
         if value == none_value:
             return None
 
@@ -340,15 +341,15 @@ def parse_or_none(
 
 def parse_delim(
     delim: str,
-    fn: Callable[[str], ValueParseError | T],
+    fn: Callable[[str], Union[ValueParseError, T]],
     ignore_empty: bool = True,
-) -> Callable[[str], ValueParseError | list[T]]:
+) -> Callable[[str], Union[ValueParseError, list[T]]]:
     """ Split the string and apply a function to each element.
     """
     import re
     splitter = re.compile(delim)
 
-    def inner(value: str) -> ValueParseError | list[T]:
+    def inner(value: str) -> Union[ValueParseError, list[T]]:
         svalue = splitter.split(value)
         out: list[T] = []
         errors: list[ValueParseError] = []
@@ -378,13 +379,13 @@ def parse_delim(
 
 def parse_sequence(
     options: Sequence[str],
-) -> Callable[[str], ValueParseError | str]:
+) -> Callable[[str], Union[ValueParseError, str]]:
     """ Convenience method to check that all characters in a string are valid.
     """
 
     checker = is_one_of(options)
 
-    def inner(value: str) -> ValueParseError | str:
+    def inner(value: str) -> Union[ValueParseError, str]:
         errors: list[ValueParseError] = []
         for char in value:
 
@@ -410,9 +411,9 @@ def parse_sequence(
 
 def get_from_dict_or_err(
     key: str
-) -> Callable[[Mapping[str, T]], ValueParseError | T]:
+) -> Callable[[Mapping[str, T]], Union[ValueParseError, T]]:
 
-    def inner(d: Mapping[str, T]) -> ValueParseError | T:
+    def inner(d: Mapping[str, T]) -> Union[ValueParseError, T]:
         if key in d:
             return d[key]
         else:
@@ -424,10 +425,10 @@ def get_from_dict_or_err(
 def parse_value(
     fn: Callable[[str], T],
     expected: str,
-    etemplate: str | None = None,
-) -> Callable[[str], ValueParseError | T]:
+    etemplate: Optional[str] = None,
+) -> Callable[[str], Union[ValueParseError, T]]:
 
-    def inner(value: str) -> ValueParseError | T:
+    def inner(value: str) -> Union[ValueParseError, T]:
         try:
             return fn(value)
         except ValueParseError as e:
@@ -449,12 +450,12 @@ parse_str = parse_value(is_not_empty_string, "a non-empty string")
 
 
 def parse_field(
-    fn: Callable[[str], ValueParseError | T],
+    fn: Callable[[str], Union[ValueParseError, T]],
     field: str,
     kind: str = "field",
-) -> Callable[[str], FieldParseError | T]:
+) -> Callable[[str], Union[FieldParseError, T]]:
 
-    def inner(value: str) -> FieldParseError | T:
+    def inner(value: str) -> Union[FieldParseError, T]:
         result = fn(value)
         if isinstance(result, ValueParseError):
             return result.as_field_error(field, kind=kind)
@@ -464,7 +465,7 @@ def parse_field(
     return inner
 
 
-def raise_it(fn: Callable[[str], Exception | T]) -> Callable[[str], T]:
+def raise_it(fn: Callable[[str], Union[Exception, T]]) -> Callable[[str], T]:
 
     def inner(value: str) -> T:
         fval = fn(value)

@@ -8,6 +8,7 @@ from typing import ClassVar
 from typing import Any
 from typing import TextIO
 from typing import TypeVar
+from typing import Optional, Union
 from collections.abc import Iterator
 
 from ..checksum import checksum
@@ -15,21 +16,21 @@ from ..gff import GFFRecord
 
 T = TypeVar("T")
 
-def int_or_none(i: Any) -> int | None:
+def int_or_none(i: Any) -> Optional[int]:
     if i is None:
         return None
     else:
         return int(i)
 
 
-def str_or_none(i: Any) -> str | None:
+def str_or_none(i: Any) -> Optional[str]:
     if i is None:
         return None
     else:
         return str(i)
 
 
-def float_or_none(i: Any) -> float | None:
+def float_or_none(i: Any) -> Optional[float]:
     if i is None:
         return None
     else:
@@ -52,27 +53,29 @@ list_of_str = list_of(str)
 class Analysis(object):
 
     columns: ClassVar[list[str]] = []
-    types: ClassVar[list[
-        Callable[[Any], int] |\
-        Callable[[Any], str] |\
-        Callable[[Any], float] |\
-        Callable[[Any], int | None] |\
-        Callable[[Any], str | None] |\
-        Callable[[Any], float | None]
+    types: ClassVar[list[Union[
+        Callable[[Any], int],\
+        Callable[[Any], str],\
+        Callable[[Any], list[str]],\
+        Callable[[Any], float],\
+        Callable[[Any], Optional[int]],\
+        Callable[[Any], Optional[str]],\
+        Callable[[Any], Optional[list[str]]],\
+        Callable[[Any], Optional[float]]]
     ]] = []
 
     software: ClassVar[str] = "software"
-    database: ClassVar[str | None] = None
+    database: ClassVar[Optional[str]] = None
     analysis: ClassVar[str] = "analysis"
     name_column: ClassVar[str] = "name"
 
-    def as_dict(self) -> dict[str, str | int | float | bool | None]:
+    def as_dict(self) -> dict[str, Union[str, int, float, bool, None]]:
         return {k: getattr(self, k) for k in self.columns}
 
     @classmethod
     def from_dict(
         cls,
-        d: dict[str, str | int | float | bool | None]
+        d: dict[str, Union[str, int, float, bool, None]]
     ) -> "Analysis":
         fields = tuple(
             type_(d.get(cname))
@@ -95,7 +98,7 @@ class Analysis(object):
             index=self.columns
         )
 
-    def as_df(self, analysis: str | None = None) -> pd.DataFrame:
+    def as_df(self, analysis: Optional[str] = None) -> pd.DataFrame:
         if analysis is None:
             analysis = self.analysis
 
@@ -142,12 +145,12 @@ class Analysis(object):
 class GFFAble(object):
 
     software: ClassVar[str] = "software"
-    database: ClassVar[str | None] = None
+    database: ClassVar[Optional[str]] = None
 
     def as_gff(
         self,
-        software_version: str | None = None,
-        database_version: str | None = None,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
         keep_all: bool = False,
         id_index: int = 1,
     ) -> Iterator[GFFRecord]:
@@ -155,8 +158,8 @@ class GFFAble(object):
 
     def gen_source(
         self,
-        software_version: str | None = None,
-        database_version: str | None = None,
+        software_version: Optional[str] = None,
+        database_version: Optional[str] = None,
     ) -> str:
         li = [self.software, software_version, self.database, database_version]
         return ":".join([s for s in li if s is not None])
