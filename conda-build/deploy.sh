@@ -5,3 +5,5 @@ set -eu
 CONDA_OUTPUT=$(conda build -c conda-forge --output-folder conda-build/build conda-build)
 CREATED_FILE=$(echo "${CONDA_OUTPUT}" | sed -n '/^anaconda upload/s/anaconda upload //p')
 echo "${CREATED_FILE}"
+
+anaconda  upload -u predector -d "Predector utility scripts" --skip-existing "${CREATED_FILE}"
